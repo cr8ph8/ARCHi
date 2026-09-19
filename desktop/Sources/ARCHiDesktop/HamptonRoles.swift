@@ -55,6 +55,7 @@ struct LocalRoleRequest: Sendable {
             \(AssistantPreferenceGuidance.text)
             Keep answer under 1200 characters and uncertainty under 320 characters. You cannot see the desktop or a camera; a placement revision is not visual observation. Do not claim external actions or persistent learning. Return the final answer and a short uncertainty statement, never hidden reasoning.
             \(AssistantInstructions.structuredAnswerText)
+            \(AssistantInstructions.documentReadingText)
             """
         }
     }

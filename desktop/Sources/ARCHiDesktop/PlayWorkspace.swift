@@ -74,6 +74,6 @@ struct PlayWorkspace: View {
             expressionPNG: store.reactorReferenceMatchesCurrentAppearance ? store.reactor.framePNG : nil,
             expressionRevision: store.reactor.frameRevision,
             recipe: store.presentationRecipe, naturalVariation: store.presentationNaturalVariation,
-            equipment: store.preferences.equipment)
+            equipment: store.preferences.equipment, seedColor: store.preferences.seedColor)
     }
 }

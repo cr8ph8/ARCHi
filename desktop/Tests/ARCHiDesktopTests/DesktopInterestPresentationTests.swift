@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import SwiftUI
 import XCTest
 @testable import ARCHiDesktop
@@ -29,7 +30,26 @@ final class DesktopInterestPresentationTests: XCTestCase {
         window.contentView = host
         window.makeKeyAndOrderFront(nil); app.activate(ignoringOtherApps: true)
         defer { window.contentView = nil; window.close() }
-        try await Task.sleep(for: .milliseconds(180))
+        // SwiftUI accessibility proxies can arrive after the first visible
+        // frame. Wait for the real control rather than treating 180 ms as a
+        // guarantee; the same assertion still fails if readiness never arrives.
+        host.layoutSubtreeIfNeeded()
+        try await initializeFixtureAccessibility()
+        try await waitForControl("interest.begin", root: window)
+        if let path = ProcessInfo.processInfo.environment["ARCHI_INTEREST_RENDER_DIR"],
+           let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            try bitmap.representation(using: .png, properties: [:])?.write(to:
+                URL(fileURLWithPath: path).appendingPathComponent("native-target-idle.png"))
+            let hierarchy = nodes(window).map { node in
+                ["accessibilityIdentifier", "accessibilityLabel", "accessibilityRole"].map { name in
+                    let selector = NSSelectorFromString(name)
+                    return node.responds(to: selector) ? String(describing: node.perform(selector)?.takeUnretainedValue()) : "unavailable"
+                }.joined(separator: " | ")
+            }.joined(separator: "\n")
+            try hierarchy.write(to: URL(fileURLWithPath: path).appendingPathComponent("native-target-idle-ax.txt"), atomically: true, encoding: .utf8)
+            try renderOutlineStates(target: reader.selected, directory: URL(fileURLWithPath: path))
+        }
         try press("interest.begin", root: window)
         XCTAssertEqual(store.desktopInterest.phase, .aiming)
         store.desktopInterest.hover(at: CGPoint(x: 120, y: 120))
@@ -37,6 +57,7 @@ final class DesktopInterestPresentationTests: XCTestCase {
         try press("interest.choose", root: window)
         XCTAssertEqual(reader.reads, 0)
         try await Task.sleep(for: .milliseconds(100))
+        assertScope("Window selected. No content read", root: window)
         try press("interest.read", root: window)
         for _ in 0..<100 where store.desktopInterest.phase != .review {
             try await Task.sleep(for: .milliseconds(5))
@@ -44,6 +65,8 @@ final class DesktopInterestPresentationTests: XCTestCase {
         XCTAssertEqual(store.desktopInterest.phase, .review)
         XCTAssertEqual(reader.reads, 1)
         XCTAssertNil(store.sourceName)
+        try await Task.sleep(for: .milliseconds(60))
+        assertScope("Snapshot ready. Captured copy · no live access", root: window)
         host.layoutSubtreeIfNeeded()
         if let path = ProcessInfo.processInfo.environment["ARCHI_INTEREST_RENDER_DIR"],
            let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
@@ -83,6 +106,67 @@ final class DesktopInterestPresentationTests: XCTestCase {
         await play.shutdown()
     }
 
+    /// Exercise the public client path against this test process only. SwiftUI
+    /// does not always instantiate its AX proxies until a client requests them.
+    /// No permissions are requested and no foreign window is read.
+    @MainActor private func initializeFixtureAccessibility() async throws {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let status = await Task.detached {
+            let application = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(application, 1)
+            var windows: CFTypeRef?
+            let status = AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &windows)
+            if status == .success, let windows = windows as? [AXUIElement] {
+                for window in windows.prefix(2) {
+                    var children: CFTypeRef?
+                    AXUIElementCopyAttributeValue(window, kAXChildrenAttribute as CFString, &children)
+                }
+            }
+            return status.rawValue
+        }.value
+        print("Fixture AX client initialization: \(status)")
+    }
+
+    @MainActor private func waitForControl(_ identifier: String, root: NSObject) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(8))
+        while clock.now < deadline {
+            if control(identifier, root: root) != nil { return }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        _ = try XCTUnwrap(control(identifier, root: root), "Native control did not become ready: \(identifier)")
+    }
+
+    @MainActor private func assertScope(_ expected: String, root: NSObject) {
+        let selector = NSSelectorFromString("accessibilityLabel")
+        XCTAssertTrue(nodes(root).contains {
+            $0.responds(to: selector) && ($0.perform(selector)?.takeUnretainedValue() as? String) == expected
+        }, "Missing native scope label: \(expected)")
+    }
+
+    @MainActor private func renderOutlineStates(target: DesktopInterestTarget, directory: URL) throws {
+        for phase in [DesktopInterestPhase.aiming, .targeted, .reading] {
+            let cue = DesktopInterestCue(phase: phase, target: target)
+            let view = ZStack(alignment: .topLeading) {
+                Color(red: 0.075, green: 0.085, blue: 0.085)
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Workshop notes").font(.system(size: 22, weight: .semibold))
+                    Text("Friday · 3 PM").font(.system(size: 15))
+                    Text("Bring the revised outline.\n\nConfirm the agenda with the team.")
+                        .font(.system(size: 14)).lineSpacing(6)
+                }.foregroundStyle(.white.opacity(0.85)).padding(.horizontal, 35).padding(.top, 100)
+                DesktopInterestOutlineView(cue: cue, animated: false)
+            }.frame(width: 600, height: 420)
+            let host = NSHostingView(rootView: view)
+            host.frame = CGRect(x: 0, y: 0, width: 600, height: 420)
+            host.layoutSubtreeIfNeeded()
+            let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            let data = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            try data.write(to: directory.appendingPathComponent("outline-" + phase.rawValue + "-static.png"))
+        }
+    }
+
     @MainActor private func nodes(_ root: NSObject) -> [NSObject] {
         var found: [NSObject] = [], seen = Set<ObjectIdentifier>()
         func visit(_ node: NSObject, depth: Int) {
@@ -100,13 +184,16 @@ final class DesktopInterestPresentationTests: XCTestCase {
         }
         visit(root, depth: 0); return found
     }
-    @MainActor private func press(_ identifier: String, root: NSObject) throws {
-        let node = try XCTUnwrap(nodes(root).first {
+    @MainActor private func control(_ identifier: String, root: NSObject) -> NSObject? {
+        nodes(root).first {
             let selector = NSSelectorFromString("accessibilityIdentifier")
             return ($0.responds(to: selector) ? $0.perform(selector)?.takeUnretainedValue() as? String : nil) == identifier
                 || ($0.accessibilityAttributeNames().contains(.identifier)
                     && $0.accessibilityAttributeValue(.identifier) as? String == identifier)
-        }, "Missing native control \(identifier)")
+        }
+    }
+    @MainActor private func press(_ identifier: String, root: NSObject) throws {
+        let node = try XCTUnwrap(control(identifier, root: root), "Missing native control \(identifier)")
         let selector = NSSelectorFromString("accessibilityPerformPress")
         XCTAssertTrue(node.responds(to: selector))
         guard node.responds(to: selector) else { return }

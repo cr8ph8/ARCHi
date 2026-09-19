@@ -1,74 +1,104 @@
 import SwiftUI
 
-/// Local design exchange through the existing companion, renderer and profile.
+/// Creator catalog and local installation share one native design workspace.
 @MainActor
 struct MarketplaceWorkspace: View {
     @ObservedObject var store: CompanionStore
+    @ObservedObject private var service: MarketplaceCatalogStore
+
+    init(store: CompanionStore) {
+        self.store = store
+        service = store.marketplaceCatalog
+    }
     private enum Page: String, CaseIterable, Identifiable {
-        case discover = "Discover", collection = "My items", create = "Create"
+        case discover = "Discover", collection = "On this Mac", accountLibrary = "Account library", create = "Create"
         var id: String { rawValue }
     }
     @State private var page: Page = .discover
     @State private var query = ""
     @State private var selected: CompanionItemPackage? = CompanionItemCatalog.designs.first
-    @State private var draft = CompanionItemPackage.creatorDefault
     @State private var removal: CompanionItemPackage?
+    @State private var reviewOriginIsCatalog = false
     private enum ImportHandoff {
         case variation(CompanionItemPackage), workTogether(CompanionItemPackage)
     }
     @State private var importHandoff: ImportHandoff?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header
-                outfit
-                Picker("Marketplace section", selection: $page) {
-                    ForEach(Page.allCases) { Text($0.rawValue).tag($0) }
-                }.pickerStyle(.segmented).accessibilityIdentifier("marketplace.sections")
-                if page == .create { creator }
-                else {
-                    HStack {
-                        TextField("Find a design or creator", text: $query)
-                            .textFieldStyle(.roundedBorder).accessibilityIdentifier("marketplace.search")
-                        Button("Import recipe", systemImage: "square.and.arrow.down") { store.importMarketItem() }
-                            .accessibilityIdentifier("marketplace.import")
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    header
+                    MarketplaceCompanionCard(store: store)
+                    MarketplaceConnectionBar(catalog: service)
+                    Picker("Marketplace section", selection: $page) {
+                        ForEach(Page.allCases) { Text($0.rawValue).tag($0) }
                     }
-                    if filteredItems.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(page == .collection && query.isEmpty ? "Room for your first item." : "No matching designs.").font(.headline)
-                            Text("Choose a design in Discover, or make a staff in Create. Adding keeps a local recipe; equipping is your next choice.")
-                                .foregroundStyle(.secondary)
-                        }.padding(20)
-                    }
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
-                        ForEach(filteredItems) { item in
-                            Button { selected = item } label: { tile(item) }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Preview \(item.title), \(CompanionItemCatalog.registeredDesign(for: item).label)")
-                                .accessibilityIdentifier("marketplace.design.\(item.id.prefix(12))")
+                    .pickerStyle(.segmented).labelsHidden()
+                    .accessibilityIdentifier("marketplace.sections")
+                    if page == .accountLibrary {
+                        MarketplaceAccountLibrary(catalog: service, store: store)
+                    } else if page == .create {
+                        MarketplaceCreatorListings(catalog: service)
+                        if geometry.size.width >= 1000 {
+                            HStack(alignment: .top, spacing: 18) {
+                                MarketplaceCreatorForm(draft: $service.draft).disabled(service.isBusy || service.hasPendingMutation).frame(maxWidth: .infinity)
+                                creatorReview.frame(width: 380)
+                            }
+                        } else {
+                            MarketplaceCreatorForm(draft: $service.draft).disabled(service.isBusy || service.hasPendingMutation)
+                            creatorReview
+                        }
+                    } else {
+                        if page == .discover, service.connected {
+                            MarketplaceCatalogBrowser(catalog: service)
+                            Divider().padding(.vertical, 4)
+                        }
+                        browseToolbar
+                        if geometry.size.width >= 1000 {
+                            HStack(alignment: .top, spacing: 18) {
+                                catalog.frame(maxWidth: .infinity)
+                                if let visibleSelection {
+                                    detail(visibleSelection).frame(width: 380)
+                                }
+                            }
+                        } else {
+                            catalog
+                            if let visibleSelection { detail(visibleSelection) }
                         }
                     }
-                    if let selected { detail(selected) }
+                    Label(store.marketplaceMessage, systemImage: "internaldrive")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("marketplace.status")
+                    if service.connected {
+                        Text(service.message).font(.system(size: 11)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("marketplace.catalog.status")
+                    }
+                    rules
                 }
-                Text(store.marketplaceMessage)
-                    .font(.callout).foregroundStyle(.secondary)
-                    .accessibilityIdentifier("marketplace.status")
-                rules
-            }.padding(24).frame(maxWidth: 980, alignment: .leading).frame(maxWidth: .infinity)
+                .padding(geometry.size.width < 800 ? 20 : 28)
+                .frame(maxWidth: 1190, alignment: .leading).frame(maxWidth: .infinity)
+            }
         }
-        .onChange(of: page) { _, newPage in
-            if newPage == .collection { selected = store.itemLibrary.first }
-            if newPage == .discover { selected = CompanionItemCatalog.designs.first }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("marketplace.workspace")
+        .onChange(of: page) { _, _ in
+            query = ""
+            selected = nil
         }
-        .onChange(of: store.itemLibrary) { _, items in
-            if page == .collection, let selected, !items.contains(selected) { self.selected = items.first }
+        .onChange(of: service.downloadedRecipe, initial: true) { _, recipe in
+            guard let recipe else { return }
+            reviewOriginIsCatalog = true
+            store.importedMarketItem = recipe
+            service.downloadedRecipe = nil
         }
         .sheet(item: $store.importedMarketItem, onDismiss: completeImportHandoff) { item in
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Review imported recipe").font(.title2)
-                    Text("Creator and license are declarations in the file. Registration is checked against this app’s local Alpha registry.")
+                    Text(reviewOriginIsCatalog ? "Review downloaded recipe" : "Review imported recipe").font(.title2)
+                    Text("Review this design before adding it to your collection.")
                         .foregroundStyle(.secondary)
                     detail(item, allowsRemoval: false)
                     Text(store.marketplaceMessage).font(.callout).foregroundStyle(.secondary)
@@ -78,7 +108,7 @@ struct MarketplaceWorkspace: View {
                 }.padding(24)
             }.frame(width: 560, height: 570)
         }
-        .confirmationDialog("Remove this local design?", isPresented: Binding(
+        .confirmationDialog("Remove this design from this Mac?", isPresented: Binding(
             get: { removal != nil }, set: { if !$0 { removal = nil } }), titleVisibility: .visible) {
             if let removal {
                 Button("Remove \(removal.title)", role: .destructive) {
@@ -93,51 +123,146 @@ struct MarketplaceWorkspace: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text("MARKETPLACE · LOCAL ALPHA").font(.caption.weight(.semibold)).tracking(2).foregroundStyle(ArchiPalette.violet)
-            Text("Small things. Your kind of magic.").font(.system(size: 27, weight: .semibold, design: .rounded))
-            Text("Discover something useful, make it your own, and wear it with ARCHi.").foregroundStyle(.secondary)
-            Text("\(store.itemLibrary.count) of 8 local designs · No checkout or wallet")
-                .font(.caption).foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 20) {
+            VStack(alignment: .leading, spacing: 5) {
+                WorkspaceEyebrow(text: "Marketplace")
+                Text("Designs for your companion.").font(.system(size: 24, weight: .medium))
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "bag")
+                .font(.system(size: 27, weight: .ultraLight)).foregroundStyle(WorkspaceTheme.accent)
+                .padding(.top, 5).accessibilityHidden(true)
         }
     }
 
     private var filteredItems: [CompanionItemPackage] {
         let items = page == .collection ? store.itemLibrary : CompanionItemCatalog.designs
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let needle = showsLocalSearch ? query.trimmingCharacters(in: .whitespacesAndNewlines) : ""
         return needle.isEmpty ? items : items.filter { ($0.title + " " + $0.creator).localizedCaseInsensitiveContains(needle) }
     }
 
-    private var outfit: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Wearing now: \(store.preferences.equipment.item?.title ?? "No item")")
-                .font(.callout.weight(.medium)).accessibilityIdentifier("marketplace.outfit.current")
-            Text(nextVisitOutfit).accessibilityIdentifier("marketplace.outfit.saved")
-            if store.marketplaceOutfitReadable, store.preferences.equipment != store.savedMarketplaceEquipment {
-                Text("Equipping changes this visit. Save your choices in What I remember to keep them for next time.")
-            }
-            Button("Review saved choices") { store.open(.memory) }
-                .accessibilityIdentifier("marketplace.outfit.review")
-        }.font(.caption).foregroundStyle(.secondary)
+    /// Search and library changes can remove a selected recipe from the visible
+    /// list. Never show actions for a hidden result, and select the first item
+    /// when a previously empty collection receives its first local recipe.
+    private var visibleSelection: CompanionItemPackage? {
+        filteredItems.first { $0.id == selected?.id } ?? filteredItems.first
     }
 
-    private var nextVisitOutfit: String {
-        guard store.marketplaceOutfitReadable else { return "Next visit: saved outfit unavailable. Review profile recovery in What I remember." }
-        guard let saved = store.savedMarketplaceEquipment else { return "Next visit: no saved outfit" }
-        return "Next visit: \(saved.item?.title ?? "No item") · saved"
+    private var showsLocalSearch: Bool { page != .discover || !service.connected }
+
+    private var browseToolbar: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                if showsLocalSearch {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                        TextField("Find a design or creator", text: $query)
+                            .textFieldStyle(.plain).accessibilityIdentifier("marketplace.search")
+                        if !query.isEmpty {
+                            Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }
+                                .buttonStyle(.plain).foregroundStyle(.secondary)
+                                .accessibilityLabel("Clear design search")
+                                .accessibilityIdentifier("marketplace.search.clear")
+                        }
+                    }
+                    .padding(10).modifier(WorkspaceSurface())
+                } else {
+                    Text("Included designs").font(.system(size: 14, weight: .medium))
+                    Spacer(minLength: 8)
+                }
+                Button("Import recipe", systemImage: "square.and.arrow.down") {
+                    reviewOriginIsCatalog = false
+                    store.importMarketItem()
+                }
+                    .buttonStyle(WorkspaceActionStyle())
+                    .accessibilityIdentifier("marketplace.import")
+            }
+            if showsLocalSearch {
+                HStack {
+                    Text(page == .collection ? "Installed on this Mac" : "Included designs")
+                        .font(.system(size: 14, weight: .medium))
+                    Spacer(minLength: 8)
+                    Text(page == .collection
+                         ? "\(store.itemLibrary.count) / \(CompanionItemPackage.maximumLibraryCount) saved here"
+                         : "\(filteredItems.count) \(filteredItems.count == 1 ? "design" : "designs")")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var catalog: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if filteredItems.isEmpty {
+                emptyState
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
+                    ForEach(filteredItems) { item in
+                        Button { selected = item } label: { tile(item) }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Preview \(item.title), \(CompanionItemCatalog.registeredDesign(for: item).label)")
+                            .accessibilityAddTraits(visibleSelection?.id == item.id ? .isSelected : [])
+                            .accessibilityIdentifier("marketplace.design.\(item.id.prefix(12))")
+                    }
+                }
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        WorkspaceCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Image(systemName: query.isEmpty ? "square.stack.3d.up" : "magnifyingglass")
+                    .font(.system(size: 27, weight: .light)).foregroundStyle(WorkspaceTheme.accent)
+                Text(query.isEmpty ? "Room for your first item." : "No matching designs.")
+                    .font(.system(size: 18, weight: .medium))
+                Text(query.isEmpty
+                     ? "Add a design from Discover or create a staff of your own. Your recipes stay on this Mac."
+                     : "Try an item name or creator. Clear your search to see the whole collection.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                HStack {
+                    if query.isEmpty {
+                        Button("Explore designs") { page = .discover }
+                            .buttonStyle(WorkspaceActionStyle(prominent: true))
+                        Button("Create a design") { page = .create }
+                            .buttonStyle(WorkspaceActionStyle())
+                    } else {
+                        Button("Clear search") { query = "" }
+                            .buttonStyle(WorkspaceActionStyle())
+                    }
+                }
+            }
+            .padding(.vertical, 10)
+            .accessibilityIdentifier("marketplace.empty-state")
+        }
     }
 
     private func tile(_ item: CompanionItemPackage) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            CompanionEquipmentArt(equipment: .init(hand: .focusStaff, design: item), size: 88, activated: false, reduceMotion: true)
-                .frame(maxWidth: .infinity).padding(.vertical, 8)
-            Text(item.title).font(.headline).lineLimit(2)
-            Text(item.creator).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            Text(item.action == .decoration ? "Wearable" : "Point to a passage").font(.caption)
-            Text(store.itemLibrary.contains(item) ? "In My items" : "Included recipe").font(.caption).foregroundStyle(ArchiPalette.violet)
+        VStack(alignment: .leading, spacing: 9) {
+            MarketplaceItemPreview(item: item, size: 72)
+                .frame(maxWidth: .infinity).padding(.vertical, 6)
+                .background {
+                    RadialGradient(colors: [WorkspaceTheme.accent.opacity(0.10), .clear],
+                        center: .center, startRadius: 12, endRadius: 96)
+                }
+            Text(item.title).font(.system(size: 14, weight: .medium)).lineLimit(2)
+            Text(item.creator).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+            Divider().overlay(WorkspaceTheme.line)
+            Label(item.action == .decoration ? "Wearable" : "Point to a passage",
+                  systemImage: item.action == .decoration ? "sparkles" : "text.cursor")
+                .font(.system(size: 10)).foregroundStyle(.secondary)
+            HStack(spacing: 5) {
+                if store.preferences.equipment.design?.id == item.id {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("Wearing now")
+                } else { Text(store.itemLibrary.contains(item) ? "On this Mac" : "Included design") }
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.up.right").font(.system(size: 9))
+            }.font(.system(size: 10, weight: .medium)).foregroundStyle(WorkspaceTheme.accent)
         }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
-            .background(.background.opacity(0.85), in: RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(selected?.id == item.id ? ArchiPalette.violet : Color.secondary.opacity(0.18), lineWidth: selected?.id == item.id ? 2 : 1))
+            .modifier(WorkspaceSurface(emphasis: visibleSelection?.id == item.id))
+            .overlay(RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(WorkspaceTheme.accent.opacity(visibleSelection?.id == item.id ? 0.65 : 0), lineWidth: 1))
             .contentShape(RoundedRectangle(cornerRadius: 16))
     }
 
@@ -145,23 +270,23 @@ struct MarketplaceWorkspace: View {
         WorkspaceCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 16) {
-                    CompanionEquipmentArt(equipment: .init(hand: .focusStaff, design: item), size: 96, activated: false, reduceMotion: true)
+                    MarketplaceItemPreview(item: item, size: 76)
                     VStack(alignment: .leading, spacing: 5) {
                         Text(item.title).font(.title3.weight(.semibold))
-                        Text("\(item.creator) · Design revision \(item.revision)").font(.caption).foregroundStyle(.secondary)
-                        Text(CompanionItemCatalog.registeredDesign(for: item).label).font(.caption.weight(.semibold)).foregroundStyle(ArchiPalette.violet)
+                            .accessibilityIdentifier("marketplace.detail.title")
+                        Text(item.creator).font(.caption).foregroundStyle(.secondary)
+                        Text(CompanionItemCatalog.registeredDesign(for: item).isRegistered ? "Included design" : "Creator design").font(.caption.weight(.semibold)).foregroundStyle(WorkspaceTheme.accent)
                         Text(item.summary).font(.callout).fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 0)
                 }
                 Text(item.action == .pointSelection
-                     ? "Local utility: point to a passage you select in Work together. \(item.defaultGesture.summary) Your kept gesture takes precedence."
-                     : "Decorative wearable. It cannot point, read a document or run a command.")
+                     ? "Point to a passage in Work together."
+                     : "A decorative wearable for your companion.")
                     .font(.callout).foregroundStyle(.secondary)
-                Text("Recipe license: \(item.license.rawValue) · Canonical Arena effects: none")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text("Arena stats stay unchanged.").font(.caption).foregroundStyle(.secondary)
                 if collectionIsFull(for: item) {
-                    Text("Your collection is full. Remove a design in My items before adding this one. You can still edit or export this recipe.")
+                    Text("Your collection is full. Remove a design from On this Mac before adding this one. You can still edit or export this recipe.")
                         .font(.callout).foregroundStyle(.secondary)
                         .accessibilityIdentifier("marketplace.collection-full")
                 }
@@ -174,9 +299,25 @@ struct MarketplaceWorkspace: View {
                         .accessibilityHint("Opens your working copy. Select a passage there to point to it.")
                         .accessibilityIdentifier("marketplace.use-work-together")
                 }
-                Text("Design fingerprint · \(item.id)")
-                    .font(.system(size: 10, design: .monospaced)).textSelection(.enabled).foregroundStyle(.secondary)
-                    .lineLimit(2)
+                DisclosureGroup("Recipe details") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Design revision \(item.revision)").font(.caption)
+                        Text(CompanionItemCatalog.registeredDesign(for: item).label).font(.caption.weight(.medium))
+                        Text("Recipe license: \(item.license.rawValue)").font(.caption)
+                        if item.action == .pointSelection {
+                            Text("\(item.defaultGesture.summary) Your saved gesture takes precedence.").font(.caption)
+                        }
+                        Text("The recipe uses supported local choices. Creator and license are declarations; this check does not verify them.")
+                            .font(.caption).accessibilityIdentifier("marketplace.recipe-review")
+                        if !CompanionItemCatalog.registeredDesign(for: item).isRegistered {
+                            Text("This variation can be added locally. It does not exactly match a bundled registered design.")
+                                .font(.caption).accessibilityIdentifier("marketplace.registration-explanation")
+                        }
+                        Text(item.id)
+                            .font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }.padding(.top, 7)
+                }.font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
     }
@@ -186,14 +327,18 @@ struct MarketplaceWorkspace: View {
             Button(store.preferences.equipment.design?.id == item.id ? "Equipped · Unequip" : "Equip") {
                 if store.preferences.equipment.design?.id == item.id { _ = store.unequipMarketItem(item) }
                 else { _ = store.equipMarketItem(item) }
-            }.buttonStyle(.borderedProminent).accessibilityIdentifier("marketplace.equip")
-            if allowsRemoval { Button("Remove", role: .destructive) { removal = item } }
+            }.buttonStyle(WorkspaceActionStyle(prominent: true)).accessibilityIdentifier("marketplace.equip")
+            if allowsRemoval {
+                Button("Remove", role: .destructive) { removal = item }
+                    .accessibilityIdentifier("marketplace.remove")
+            }
         } else {
-            Button("Add to My items", systemImage: "plus") { _ = store.collectMarketItem(item) }
-                .buttonStyle(.borderedProminent).disabled(!item.isValid || collectionIsFull(for: item))
+            Button("Add on this Mac", systemImage: "plus") { _ = store.collectMarketItem(item) }
+                .buttonStyle(WorkspaceActionStyle(prominent: true)).disabled(!item.isValid || collectionIsFull(for: item))
                 .accessibilityIdentifier("marketplace.collect")
         }
         Button("Export recipe") { store.exportMarketItem(item) }.disabled(!item.isValid)
+            .accessibilityIdentifier("marketplace.export")
         Button("Make a variation") { handoff(.variation(item)) }
             .accessibilityIdentifier("marketplace.variation")
     }
@@ -212,6 +357,7 @@ struct MarketplaceWorkspace: View {
     }
 
     private func completeImportHandoff() {
+        reviewOriginIsCatalog = false
         guard let action = importHandoff else { return }
         importHandoff = nil
         perform(action)
@@ -220,54 +366,52 @@ struct MarketplaceWorkspace: View {
     private func perform(_ action: ImportHandoff) {
         switch action {
         case .variation(let item):
-            draft = item
-            draft.creator = "Local creator"
+            service.makeVariation(item)
             page = .create
         case .workTogether(let item):
             _ = store.useMarketItemInWorkTogether(item)
         }
     }
 
-    private var creator: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Make your Focus Staff").font(.title3.weight(.semibold))
-            Text("Choose a bounded local design. Changing any registered recipe creates an unregistered variation. It adds no canon game power.")
-                .foregroundStyle(.secondary).font(.callout)
-            VStack(alignment: .leading, spacing: 12) {
-                TextField("Item name (24 characters)", text: $draft.title).accessibilityIdentifier("marketplace.create.title")
-                TextField("Creator (48 characters)", text: $draft.creator)
-                TextField("Description (160 characters)", text: $draft.summary, axis: .vertical).lineLimit(2...3)
-                Picker("Color", selection: $draft.palette) { ForEach(CompanionItemPackage.Palette.allCases) { Text($0.rawValue.capitalized).tag($0) } }
-                Picker("Crown", selection: $draft.crown) { ForEach(CompanionItemPackage.Crown.allCases) { Text($0.rawValue.capitalized).tag($0) } }
-                Picker("Local action", selection: $draft.action) {
-                    Text("Wear only").tag(CompanionItemPackage.Action.decoration)
-                    Text("Point to selected passage").tag(CompanionItemPackage.Action.pointSelection)
+    private var creatorReview: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            WorkspaceEyebrow(text: "Review your design")
+            if service.draft.isValid { detail(service.draft) }
+            else {
+                WorkspaceCard {
+                    VStack(alignment: .leading, spacing: 9) {
+                        Text("A few details to finish").font(.headline)
+                        ForEach(service.draft.review.issues) { check in
+                            Label(check.message, systemImage: "exclamationmark.circle")
+                                .accessibilityIdentifier("marketplace.create.review.\(check.field.rawValue)")
+                        }
+                    }
+                    .foregroundStyle(.red).font(.callout)
                 }
-                if draft.action == .pointSelection {
-                    Picker("Pace", selection: $draft.defaultGesture.pace) { ForEach(FocusGestureConfiguration.Pace.allCases) { Text($0.title).tag($0) } }
-                    Picker("Sparkle", selection: $draft.defaultGesture.sparkle) { ForEach(FocusGestureConfiguration.Sparkle.allCases) { Text($0.title).tag($0) } }
-                    Picker("Hold", selection: $draft.defaultGesture.hold) { ForEach(FocusGestureConfiguration.Hold.allCases) { Text($0.title).tag($0) } }
-                }
-                Picker("Recipe license", selection: $draft.license) { ForEach(CompanionItemPackage.License.allCases) { Text($0.rawValue).tag($0) } }
-                Stepper("Design revision \(draft.revision)", value: $draft.revision, in: 1...999)
-            }.textFieldStyle(.roundedBorder)
-            if draft.isValid { detail(draft) }
-            else { Text("Enter a name and creator within the displayed limits. Shorten the description if needed. Line breaks and control characters are not accepted.").foregroundStyle(.red).font(.callout) }
-            Text("Share only a recipe you have rights to distribute under your chosen license. Creator names are self-declared; they do not confer a Hampton seal.")
-                .font(.caption).foregroundStyle(.secondary)
+            }
+            MarketplacePublishingView(catalog: service)
         }
     }
 
     private var rules: some View {
         VStack(alignment: .leading, spacing: 9) {
             Divider()
-            Text("One companion. Clear item rules.").font(.headline)
-            Text("Registered means an exact design matches the approved local Alpha catalog and its ruleset. Unregistered recipes are for local looks and explicitly chosen desktop utilities; they cannot affect canon battle stats, rewards or progression. No Arena effects are approved in this release.")
-            Text("A design fingerprint identifies content. It is not proof of ownership, scarcity or NFT issuance. Future editions and Arena eligibility require separate verification.")
-            HStack {
-                Button("Review saved choices") { store.open(.memory) }
-                Link("Open-source foundation", destination: URL(string: "https://github.com/cr8ph8/ARCHi")!)
+            HStack(alignment: .firstTextBaseline) {
+                Text("Your collection").font(.system(size: 12, weight: .medium))
+                Spacer(minLength: 8)
+                Text("Free recipe access").font(.system(size: 10))
             }
-        }.font(.callout).foregroundStyle(.secondary)
+            Text("Add a design to this Mac, then Equip it. Save choices keeps your outfit for next time.")
+                .font(.system(size: 11))
+            DisclosureGroup("About designs & sharing") {
+                VStack(alignment: .leading, spacing: 9) {
+                    Text("Your account library keeps saved designs in the local catalog. Download and review a design before adding it to this Mac.")
+                    Text("Registered means every field matches the approved local Alpha catalog. Creator names and licenses remain declarations. No Arena effects are approved in this release.")
+                    Text("A recipe fingerprint identifies content. It does not establish ownership, scarcity, or an issued edition. Export includes the design, never your private memory or companion identity.")
+                    Link("Open-source foundation", destination: URL(string: "https://github.com/cr8ph8/ARCHi")!)
+                }.font(.system(size: 11)).padding(.top, 7)
+            }
+            .font(.system(size: 11))
+        }.foregroundStyle(.secondary)
     }
 }

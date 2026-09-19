@@ -1,10 +1,8 @@
-# Third-party dependency notices
+# Third-party dependency notices draft
 
-Npm dependencies are resolved by the pinned lockfile; their licenses are not replaced by the project MIT license. Installed npm packages contain their complete notices and are not vendored here. No model weights are distributed in this source release.
+The existing ARCHi MIT code license is carried forward. It does not replace dependency licenses. No installed dependencies, engine binaries, model weights or provider runtimes are included in this source packet.
 
-The Unity project includes the optional **Coplay MCP for Unity 10.0.0** Editor package in `unity/ARCHi/Packages/com.coplaydev.unity-mcp`, under its unchanged [MIT license and copyright notice](unity/ARCHi/Packages/com.coplaydev.unity-mcp/LICENSE.md). Its [package manifest](unity/ARCHi/Packages/com.coplaydev.unity-mcp/package.json) and the project's [package lock](unity/ARCHi/Packages/packages-lock.json) describe the selected dependencies. This tool is not the native assistant or a runtime memory owner.
-
-Unity 6000.5.4f1 and its declared engine/editor modules are external prerequisites governed by their own terms. The project manifests also resolve Unity Test Framework and Newtonsoft JSON dependencies; their full package notices are available in the resolved packages. The Unity installation and PackageCache are excluded from this source distribution. No project MIT statement relicenses those external tools or packages.
+The candidate uses the exact dependency versions and integrity pins from its package lock. The following entries are the 94 installed-package declarations in the current lockfile; the root package is omitted. These are declared licenses, not a new audit of every upstream file. Resolved packages retain their complete upstream notices.
 
 | Package | Version | Declared license |
 | --- | --- | --- |
@@ -103,4 +101,12 @@ Unity 6000.5.4f1 and its declared engine/editor modules are external prerequisit
 | vitest | 4.1.11 | MIT |
 | why-is-node-running | 2.3.0 | MIT |
 
-SwiftPM declares no external package dependencies. Optional Reactor installation resolves the versions in `desktop/Sources/ARCHiDesktop/Resources/ReactorBridge/requirements.txt`; those SDKs and their dependencies are installed separately and retain their own notices.
+SwiftPM declares no external package dependencies. The optional Reactor requirements are `reactor-sdk==1.4.0`, `Pillow==12.3.0` and `certifi==2026.7.22`. They and their transitive dependencies are installed separately; inspect the resolved packages and their own notices before distributing an embedded runtime. No such runtime is in this source packet.
+
+The creator marketplace service adds Python source using only the Python standard library, including SQLite and the platform's cryptographic implementation. Python, SQLite and cryptographic runtime binaries are external prerequisites, not copied into this source packet. No framework or additional pip package is introduced by the service.
+
+The optional Coplay MCP for Unity 10.0.0 source is included only in `unity/ARCHi/Packages/com.coplaydev.unity-mcp`, with its unchanged MIT copyright and license notice. Its package manifest declares additional Unity modules, Newtonsoft JSON 3.0.2 and Unity Test Framework 1.1.31. Coplay tooling does not own the companion's identity or private memory.
+
+Unity 6000.5.4f1 and the project's declared engine/editor modules are separate prerequisites governed by their own terms. The Unity installation, PackageCache and build products are excluded. The Blender installation and editable authoring originals are also excluded. A project MIT statement does not relicense external tools or packages.
+
+The source-level notice is based on the current lockfile, Swift package, Reactor requirements and embedded Coplay manifest/license. Final source or binary distribution must retain notices appropriate to the actual included bytes. See ASSET_ATTRIBUTION.md for the distinct pending review of newer FBX/Proto artwork.

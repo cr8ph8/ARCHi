@@ -4,6 +4,78 @@ import XCTest
 @testable import ARCHiDesktop
 
 final class CompanionGraphPresentationTests: XCTestCase {
+    @MainActor
+    func testARCNodeOpensTheExactNativeReceiptAtMinimumSize() async throws {
+        guard ProcessInfo.processInfo.environment["ARCHI_GRAPH_NATIVE_ACTIONS"] == "1" else {
+            throw XCTSkip("Set ARCHI_GRAPH_NATIVE_ACTIONS=1 for native ARC graph navigation.")
+        }
+        let app = NSApplication.shared, policy = app.activationPolicy()
+        _ = app.setActivationPolicy(.accessory)
+        app.finishLaunching()
+        defer { _ = app.setActivationPolicy(policy) }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("archi-arc-graph-native-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let client = GraphPresentationAssistant()
+        let store = CompanionStore(preferenceURL: directory.appendingPathComponent("preferences.json"),
+            assistant: client, assistantFactory: { _, _ in client }, allowsPlay: false)
+        let event = store.arcCapabilities.runSyntheticDemonstration()
+        store.recordARCEvaluation(event)
+        let record = try XCTUnwrap(store.arcCapabilities.records.first)
+        var otherBundle = try XCTUnwrap(JSONSerialization.jsonObject(with: ARCCapabilitiesEvaluator.syntheticBundle) as? [String: Any])
+        otherBundle["evaluations"] = []
+        store.recordARCEvaluation(store.arcCapabilities.evaluate(data: try JSONSerialization.data(withJSONObject: otherBundle)))
+        let graph = store.companionGraphSnapshot()
+        let node = try XCTUnwrap(graph.nodes.first { $0.kind == .evaluation && $0.target == .arcEvidence(proposalHash: record.id) })
+        let play = HostedPlayHost(profile: .acceptance, assetDirectory: nil)
+        store.section = .nodeLab
+        let window = WorkspaceWindow(contentRect: CGRect(x: 100, y: 100, width: 880, height: 640),
+            styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.title = "ARCHi ARC graph · synthetic native check"
+        let host = WorkspaceView.makeHostingView(store: store, playHost: play)
+        window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        window.makeKeyAndOrderFront(nil)
+        app.activate(ignoringOtherApps: true)
+        try await Task.sleep(for: .milliseconds(250))
+        WorkspaceView.applyWindowMinimum(to: window)
+        window.setContentSize(CGSize(width: 880, height: 640))
+        try await NativeAccessibilityFixture.initialize(waitingFor: "companion-graph.list-toggle") {
+            self.objects(window).contains { self.value($0, "accessibilityIdentifier") as? String == "companion-graph.list-toggle" }
+        }
+        try press("companion-graph.list-toggle", root: window)
+        try await Task.sleep(for: .milliseconds(80))
+        try press("companion-graph.list-node.\(node.id)", root: window)
+        try await Task.sleep(for: .milliseconds(100))
+        try capture("arc-node-selected", host: host)
+        try press("companion-graph.open-target", root: window)
+        try await Task.sleep(for: .milliseconds(160))
+        host.layoutSubtreeIfNeeded()
+        XCTAssertEqual(store.section, .capabilities)
+        XCTAssertEqual(store.arcCapabilities.selectedRecordID, record.id)
+        try await NativeAccessibilityFixture.initialize(waitingFor: "capabilities.selected-record") {
+            self.objects(window).contains { self.value($0, "accessibilityIdentifier") as? String == "capabilities.selected-record" }
+        }
+        XCTAssertLessThanOrEqual(host.bounds.width, 881)
+        XCTAssertLessThanOrEqual(host.bounds.height, 641)
+        try capture("arc-opened-receipt", host: host)
+        XCTAssertEqual(client.calls, 0)
+        XCTAssertTrue(store.tokenSteward.observations.isEmpty)
+        XCTAssertNil(play.webView)
+        await store.shutdownAssistant()
+        await play.shutdown()
+    }
+
+    @MainActor private func capture(_ name: String, host: NSView) throws {
+        guard let directory = ProcessInfo.processInfo.environment["ARCHI_GRAPH_RENDER_DIR"],
+              let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return }
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        try bitmap.representation(using: .png, properties: [:])?.write(to:
+            URL(fileURLWithPath: directory).appendingPathComponent(name + ".png"))
+    }
+
     func testAllLayoutsKeepNodesDistinctFiniteAndInsideTheirCanvas() {
         let graph = Self.fixture()
         for layout in CompanionGraphLayout.allCases {
@@ -94,6 +166,9 @@ final class CompanionGraphPresentationTests: XCTestCase {
         window.setContentSize(CGSize(width: 880, height: 640))
         try await Task.sleep(for: .milliseconds(200))
         host.layoutSubtreeIfNeeded()
+        try await NativeAccessibilityFixture.initialize(waitingFor: "node-lab.ask") {
+            self.objects(window).contains { self.value($0, "accessibilityIdentifier") as? String == "node-lab.ask" }
+        }
         XCTAssertEqual(window.contentMinSize, CGSize(width: 880, height: 640))
         XCTAssertLessThanOrEqual(host.bounds.width, 881)
         XCTAssertLessThanOrEqual(host.bounds.height, 641)
@@ -135,6 +210,9 @@ final class CompanionGraphPresentationTests: XCTestCase {
         app.activate(ignoringOtherApps: true)
         try await Task.sleep(for: .milliseconds(350))
         host.layoutSubtreeIfNeeded()
+        try await NativeAccessibilityFixture.initialize(waitingFor: "companion-graph.open-target") {
+            self.objects(panel).contains { self.value($0, "accessibilityIdentifier") as? String == "companion-graph.open-target" }
+        }
         if let directory = ProcessInfo.processInfo.environment["ARCHI_GRAPH_RENDER_DIR"],
            let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
             try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)

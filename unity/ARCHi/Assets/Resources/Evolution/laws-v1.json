@@ -1,0 +1,67 @@
+{
+  "schema": "archi-evolution-laws/v1",
+  "version": 1,
+  "status": "working-world-laws",
+  "laws": [
+    {
+      "id": "continuity",
+      "title": "One life, many expressions",
+      "text": "ARCHi begins as a ball of light that transforms into a being. The light, body and returning Seed are the same individual, carrying one core and continuing history. There is no egg or hatching stage."
+    },
+    {
+      "id": "cause",
+      "title": "Every change has a cause",
+      "text": "Experience, knowledge, skill, habit, character, care and tools can influence development. Record which influence caused which change."
+    },
+    {
+      "id": "evidence",
+      "title": "Experience must find meaning",
+      "text": "A victory is an event. Knowledge needs sources; skill needs demonstrated use; wisdom needs a lesson that transfers to another situation."
+    },
+    {
+      "id": "scope",
+      "title": "Growth belongs to a field",
+      "text": "Protection practice can support a protection lesson. It cannot establish unrelated expertise. A habit needs repeated contexts, not one repeated button."
+    },
+    {
+      "id": "entropy",
+      "title": "Change has two dimensions",
+      "text": "Diversity may rise or fall. Either can help or harm. Track exploration and consolidation separately from their measured consequences; missing evidence stays unknown."
+    },
+    {
+      "id": "care",
+      "title": "Care supports becoming",
+      "text": "Rest, attention, suitable tools and comfortable dress create opportunities. Absence, spending and attendance do not decide a being's worth or erase its history."
+    },
+    {
+      "id": "equipment",
+      "title": "A tool opens a possibility",
+      "text": "An item can enable an action; using it well can supply evidence. Wearing or buying it alone does not establish mastery. Current practice wardrobe is expressive."
+    },
+    {
+      "id": "counterplay",
+      "title": "Power carries a tradeoff",
+      "text": "Battle abilities have declared costs, limits and counterplay. Freeze the rules before a bout. An art revision cannot silently change battle power."
+    },
+    {
+      "id": "correction",
+      "title": "Understanding can be repaired",
+      "text": "Keep the source and version of a lesson. A correction retires an unsupported claim without erasing the individual's life or taking away an already kept body."
+    },
+    {
+      "id": "authority",
+      "title": "Becoming does not grant permission",
+      "text": "A model, artwork or animation can propose a change. Only the existing state owner can accept it. Evolution does not grant access to private data or external actions."
+    },
+    {
+      "id": "craft",
+      "title": "Build from a recoverable lineage",
+      "text": "Keep original sources. Author a bounded recipe, build in isolation, reopen the result, verify its rig and export, then review it in Unity. Promote an exact artifact; keep the last working one."
+    },
+    {
+      "id": "plurality",
+      "title": "There is more than one way to grow",
+      "text": "A useful skill, retained lesson, character feature or habit can be an evolution. Proto is one possible body, not a required stage for every being. Experience, care and the being's own expressed preferences help shape its path."
+    }
+  ]
+}

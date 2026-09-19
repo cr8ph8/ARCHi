@@ -211,7 +211,7 @@ struct CompanionGraphView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("LOCAL CONNECTIONS").font(.system(size: 9, weight: .semibold)).tracking(2)
                     .foregroundStyle(Color.teal)
-                Text("Node Lab").font(.system(size: 25, weight: .medium, design: .rounded))
+                Text("Activity map").font(.system(size: 25, weight: .medium, design: .rounded))
                 Text("\(visibleNodes.count) of \(snapshot.nodes.count) nodes · \(visibleEdges.count) connections")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .accessibilityIdentifier("companion-graph.counts")
@@ -385,7 +385,7 @@ struct CompanionGraphView: View {
     private var emptyGraph: some View {
         VStack(spacing: 10) {
             Image(systemName: "point.3.connected.trianglepath.dotted")
-                .font(.system(size: 32, weight: .light)).foregroundStyle(ArchiPalette.violet)
+                .font(.system(size: 32, weight: .light)).foregroundStyle(WorkspaceTheme.accent)
             Text(snapshot.nodes.isEmpty ? "Connections will appear here" : "No matching nodes")
                 .font(.system(size: 16, weight: .medium, design: .rounded))
             Text(snapshot.nodes.isEmpty ? "This view follows the companion’s available records." : "Try another search or show all types.")
@@ -441,7 +441,7 @@ struct CompanionGraphView: View {
             } else {
                 Label("Inspect a connection", systemImage: "scope")
                     .font(.system(size: 15, weight: .medium, design: .rounded))
-                    .foregroundStyle(ArchiPalette.violet)
+                    .foregroundStyle(WorkspaceTheme.accent)
                 Text("Select a node to see its source, status and recorded relationships.")
                     .font(.system(size: 12)).foregroundStyle(.secondary).lineSpacing(3)
                 Text("The graph reflects available records. Arrangement and distance do not measure importance or certainty.")
@@ -466,7 +466,7 @@ struct CompanionGraphView: View {
         let label = detail.label.lowercased()
         return label.hasSuffix(" id") || label.hasSuffix(" ids") || label.contains("digest")
             || label.contains("revision") || label.contains("reference") || label == "contract"
-            || label == "sha-256" || label == "utf-16 range" || label == "bound source"
+            || label.hasSuffix(" hash") || label == "sha-256" || label == "utf-16 range" || label == "bound source"
     }
 
     static func primaryDetails(_ details: [CompanionGraphDetail]) -> [CompanionGraphDetail] {
@@ -515,6 +515,11 @@ struct CompanionGraphView: View {
         case .context: "Open shared context"
         case .memory: "Open memory"
         case .advanced: "Open local receipts"
+        case .capabilities: "Open ARC"
+        case .interactiveARC: "Open ARC3 episode"
+        case .arcEvidence: "Open this ARC receipt"
+        case .steward: "Open Usage"
+        case .stewardTask: "Open this run in Usage"
         }
     }
 }
@@ -523,12 +528,14 @@ private func graphColor(_ kind: CompanionGraphKind) -> Color {
     switch kind {
     case .companion: Color.teal
     case .source: Color.blue
-    case .lesson: ArchiPalette.violet
+    case .lesson: WorkspaceTheme.accent
     case .request: Color.indigo
     case .invocation: Color.purple
     case .answer: Color.teal
     case .context: Color.cyan
     case .omission: Color.orange
+    case .evaluation: Color.mint
+    case .accounting: Color.yellow
     }
 }
 

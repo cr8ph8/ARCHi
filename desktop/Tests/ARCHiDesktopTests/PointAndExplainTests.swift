@@ -111,6 +111,9 @@ final class PointAndExplainTests: XCTestCase {
         let draft = FocusGestureConfiguration(pace: .unhurried, sparkle: .bright, hold: .lingering)
         f.store.focusGestureDraft = draft
         f.store.section = .context
+        // The lesson editor leaves Work together, retiring its spatial scope.
+        // Re-select the current passage as a native user must on return.
+        f.store.selectText(range: f.geometry.selection.range, sourceRevision: f.store.sourceRevision)
         f.store.preferences.tone = "Warm"
         f.store.preferences.replyLength = 0.8
         f.store.evolution.confirmRole(.muse)

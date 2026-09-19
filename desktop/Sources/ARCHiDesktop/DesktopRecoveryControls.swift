@@ -16,7 +16,7 @@ struct DesktopRecoveryControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Backup & restore").font(.system(size: 15, weight: .semibold))
-            Text("A backup contains saved settings, kept lessons, KIN and saved development. Changes in this visit, chats, voice and documents are not included. It contains private lesson text; keep it somewhere you trust.")
+            Text("A backup contains saved settings, personal context, kept lessons, your companion and saved development. Changes in this visit, chats, voice and documents are not included. It contains private context and lesson text; keep it somewhere you trust.")
                 .font(.system(size: 12)).foregroundStyle(.secondary).lineSpacing(3)
             HStack {
                 Button("Back up saved profile…", action: chooseBackup)
@@ -72,7 +72,7 @@ struct DesktopRecoveryControls: View {
                     .foregroundStyle(.secondary)
             }
             Text("\(store.retentionProfileLabel) · \(summary.createdAt.formatted(date: .abbreviated, time: .shortened))")
-            Text("\(summary.lessonCount) kept lessons · \(summary.hasKIN ? "KIN retained" : "No saved KIN")")
+            Text("\(summary.lessonCount) kept lessons · \(summary.companionName.map { "\($0) retained" } ?? "No saved companion")")
             Text(summary.evolutionPresent ? "Development: \(summary.bodyLabel ?? "saved choices")" : "No saved development in this backup.")
             Text("Restoring replaces the two saved files and loads those choices into this visit. A file absent from the backup will be removed from this profile. A before-restore backup is kept automatically. Your current typed draft and working document stay here; earlier answers and passage references are cleared.")
                 .foregroundStyle(.secondary).lineSpacing(3)
@@ -86,7 +86,7 @@ struct DesktopRecoveryControls: View {
             }.controlSize(.small)
         }
         .font(.system(size: 12)).padding(12)
-        .background(ArchiPalette.violet.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+        .background(WorkspaceTheme.accent.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
         .accessibilityIdentifier("desktop-recovery.preview")
     }
 
@@ -102,7 +102,7 @@ struct DesktopRecoveryControls: View {
         do {
             let result = try store.createProfileBackup(at: url)
             artifact = url
-            message = "Backup verified · \(result.lessonCount) kept lessons\(result.hasKIN ? ", KIN" : "")\(result.evolutionPresent ? ", saved development" : ""). Your current profile is unchanged."
+            message = "Backup verified · \(result.lessonCount) kept lessons\(result.companionName.map { ", \($0)" } ?? "")\(result.evolutionPresent ? ", saved development" : ""). Your current profile is unchanged."
         } catch { message = error.localizedDescription }
     }
 

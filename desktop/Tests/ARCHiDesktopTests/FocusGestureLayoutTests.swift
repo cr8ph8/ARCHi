@@ -72,6 +72,9 @@ final class FocusGestureLayoutTests: XCTestCase {
         WorkspaceView.applyWindowMinimum(to: window)
         window.setContentSize(requestedSize)
         try await settle(hosting, window: window)
+        try await NativeAccessibilityFixture.initialize(waitingFor: "work.explain") {
+            self.snapshot(hosting).contains { $0.id == "work.explain" }
+        }
         let baselineSize = window.contentLayoutRect.size
         samples.append(["stage": "minimum-before-teaching",
             "requestedContentSize": NSStringFromSize(requestedSize),
@@ -217,6 +220,9 @@ final class FocusGestureLayoutTests: XCTestCase {
         WorkspaceView.applyWindowMinimum(to: window)
         window.setContentSize(NSSize(width: 880, height: 640))
         try await settle(hosting, window: window)
+        try await NativeAccessibilityFixture.initialize(waitingFor: "assistant.prompt") {
+            self.snapshot(hosting).contains { $0.id == "assistant.prompt" }
+        }
         samples.append(["stage": "minimum-before-scroll", "requestedContentSize": "{880, 640}",
             "actualContentLayoutSize": NSStringFromSize(window.contentLayoutRect.size),
             "windowFrame": NSStringFromRect(window.frame), "windowVisible": window.isVisible,
@@ -310,6 +316,9 @@ final class FocusGestureLayoutTests: XCTestCase {
         WorkspaceView.applyWindowMinimum(to: window)
         window.setContentSize(NSSize(width: 880, height: 640))
         try await settle(hosting, window: window)
+        try await NativeAccessibilityFixture.initialize(waitingFor: "assistant.prompt") {
+            self.snapshot(hosting).contains { $0.id == "assistant.prompt" }
+        }
         XCTAssertEqual(window.contentLayoutRect.width, 880, accuracy: 1)
         XCTAssertEqual(window.contentLayoutRect.height, 640, accuracy: 1)
         let viewport = window.convertToScreen(window.contentLayoutRect)
@@ -403,6 +412,9 @@ final class FocusGestureLayoutTests: XCTestCase {
         defer { writeNativeSamples(samples, to: output) }
         let viewport = window.convertToScreen(window.contentLayoutRect)
         try await settle(hosting, window: window)
+        try await NativeAccessibilityFixture.initialize(waitingFor: "desktop-recovery.backup") {
+            self.snapshot(hosting).contains { $0.id == "desktop-recovery.backup" }
+        }
         let initial = snapshot(hosting)
         samples.append(evidence("saved-profile", nodes: initial, viewport: viewport))
         for id in ["desktop-recovery.backup", "desktop-recovery.choose"] {

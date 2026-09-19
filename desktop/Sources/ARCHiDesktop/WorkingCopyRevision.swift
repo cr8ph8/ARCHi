@@ -7,13 +7,15 @@ struct RevisionTarget: Equatable, Sendable {
     let id: String
     let sourceDigest: String
     let selection: DocumentSelection
+    let requirements: DocumentWorkRequirements
 
-    init?(text: String, sourceRevision: UInt64, selection: DocumentSelection, id: String = UUID().uuidString) {
+    init?(text: String, sourceRevision: UInt64, selection: DocumentSelection, id: String = UUID().uuidString, requirements: DocumentWorkRequirements = .init()) {
         guard UUID(uuidString: id) != nil, text.utf8.count <= WorkingCopyEditReceipt.maximumSourceBytes,
               selection.matches(text: text, sourceRevision: sourceRevision) else { return nil }
         self.id = id
         self.sourceDigest = WorkingCopyEditReceipt.digest(text)
         self.selection = selection
+        self.requirements = requirements
     }
 
     func matches(text: String, sourceRevision: UInt64) -> Bool {
@@ -23,7 +25,7 @@ struct RevisionTarget: Equatable, Sendable {
     }
 
     var input: JSONValue {
-        .object(["id": .string(id), "sourceDigest": .string(sourceDigest), "selection": selection.input])
+        .object(["id": .string(id), "sourceDigest": .string(sourceDigest), "selection": selection.input, "requirements": requirements.input])
     }
 }
 
@@ -145,6 +147,7 @@ struct WorkingCopyEditReceipt: Equatable, Sendable {
     let before: String
     let afterDigest: String
     let afterRevision: UInt64
+    var documentWorkID: String? = nil
 
     func canUndo(text: String, revision: UInt64) -> Bool {
         before.utf8.count <= Self.maximumSourceBytes && text.utf8.count <= Self.maximumSourceBytes

@@ -18,6 +18,7 @@ enum DesktopProfileBackup {
         let evolutionPresent: Bool
         let lessonCount: Int
         let hasKIN: Bool
+        let companionName: String?
         let bodyLabel: String?
         let byteCount: Int
     }
@@ -304,12 +305,14 @@ enum DesktopProfileBackup {
         }
         let body: String?
         if let kin = document.qiMon {
-            if let growth = evolution.kinGrowthRecord, growth.originDigest != kin.originDigest { body = nil }
+            if kin.character == .hampton { body = kin.stageTitle }
+            else if let growth = evolution.kinGrowthRecord, growth.originDigest != kin.originDigest { body = nil }
             else { body = evolution.kinGrowthRecord?.active == true ? "First Light" : "Core Seed" }
         } else { body = evolution.activeFamily?.title }
         return ArchiveSummary(profile: archive.profile, createdAt: archive.createdAt,
             preferencesPresent: archive.pair.preferences.present, evolutionPresent: archive.pair.evolution.present,
-            lessonCount: document.lessons.count, hasKIN: document.qiMon != nil, bodyLabel: body,
+            lessonCount: document.lessons.count, hasKIN: document.qiMon?.character == .kin,
+            companionName: document.qiMon?.name, bodyLabel: body,
             byteCount: archive.pair.preferences.byteCount + archive.pair.evolution.byteCount)
     }
     private static func replacePairSlot(_ slot: Slot, with entry: Entry, expected: Pair, preferenceURL: URL) throws {

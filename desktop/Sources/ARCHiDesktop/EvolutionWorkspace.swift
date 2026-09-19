@@ -51,6 +51,8 @@ struct EvolutionWorkspace: View {
             if store.hasPersonalQiMon {
                 QiMonCard(store: store)
                 KinGrowthCard(store: store, evolution: evolution)
+                WorkspaceRouteRow(title: "Unity Area", detail: store.unityPresentationUnavailableReason ?? "Visit your companion in 3D or enter the Arena.",
+                    icon: "cube.transparent", identifier: "evolution.unity-area") { store.open(.unity) }
                 kinBeginning
                 knowledge
                 lifeTogether
@@ -82,15 +84,17 @@ struct EvolutionWorkspace: View {
     private var kinBeginning: some View {
         WorkspaceCard {
             VStack(alignment: .leading, spacing: 14) {
-                sectionTitle("Growing together", detail: "One KIN, with the same name, core and Journey across his bodies.")
+                sectionTitle("Growing together", detail: "One \(store.activeQiMon?.name ?? "companion"), with the same name, core and Journey across forms.")
                 developmentExplanation("Motion and light", systemImage: "sparkles",
-                    detail: "Gentle movement and temporary light cues show what KIN is doing. They settle back into his existing form.")
+                    detail: "Gentle movement and temporary light cues show what \(store.activeQiMon?.name ?? "your companion") is doing. They settle back into the existing form.")
                 developmentExplanation("What you teach", systemImage: "text.bubble",
                     detail: "Your confirmed role and help style guide replies. Lessons you explicitly keep can help with matching local Qwen questions; you can correct or forget them.")
                 developmentExplanation("What helped", systemImage: "checkmark.message",
                     detail: "Mark a reply about a shared document as useful, or confirm that a kept lesson helped. Inspect or withdraw that feedback in Life together, then Save evolution to retain the changes.")
                 developmentExplanation("Growing into a form", systemImage: "leaf",
-                    detail: "First Light can follow a kept lesson you confirmed helped. Preview and Keep are your choices; Core Seed remains available. Stirring, Verse and Horizon are still design studies.")
+                    detail: store.activeQiMon?.character == .hampton
+                        ? "Liminal’s potential is a starting direction. A new Seed has no earned later body yet; shared experience and reviewed evidence must come first."
+                        : "First Light can follow a kept lesson you confirmed helped. Preview and Keep are your choices; Core Seed remains available. Stirring, Verse and Horizon are still design studies.")
                 Button("Review kept lessons") { store.open(.memory) }
                     .buttonStyle(.borderless)
                     .accessibilityIdentifier("evolution-kept-lessons")
@@ -100,7 +104,7 @@ struct EvolutionWorkspace: View {
 
     private func developmentExplanation(_ title: String, systemImage: String, detail: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: systemImage).foregroundStyle(ArchiPalette.violet).frame(width: 20)
+            Image(systemName: systemImage).foregroundStyle(WorkspaceTheme.accent).frame(width: 20)
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.system(size: 13, weight: .medium))
                 Text(detail).font(.system(size: 12)).foregroundStyle(.secondary).lineSpacing(3)
@@ -157,7 +161,7 @@ struct EvolutionWorkspace: View {
         VStack(spacing: 8) {
             CompanionPresenceArt(form: shownForm, family: shownFamily, size: 208, reduceMotion: true,
                 treatment: store.preferences.visualTreatment, recipe: shownRecipe,
-                naturalVariation: evolution.naturalVariation, equipment: store.preferences.equipment)
+                naturalVariation: evolution.naturalVariation, equipment: store.preferences.equipment, seedColor: store.preferences.seedColor)
             Text(shownName).font(.system(size: 14, weight: .medium))
             Text(evolution.previewFamily == nil ? "YOUR INDIVIDUAL" : "APPEARANCE PREVIEW")
                 .font(.system(size: 8)).tracking(1.5).foregroundStyle(.white.opacity(0.55))
@@ -259,7 +263,7 @@ struct EvolutionWorkspace: View {
 
     private func individualFact(_ title: String, value: String, detail: String, symbol: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: symbol).font(.system(size: 16)).foregroundStyle(ArchiPalette.violet).frame(width: 24)
+            Image(systemName: symbol).font(.system(size: 16)).foregroundStyle(WorkspaceTheme.accent).frame(width: 24)
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
                 Text(value).font(.system(size: 14, weight: .medium, design: .rounded))
@@ -274,7 +278,7 @@ struct EvolutionWorkspace: View {
         let kind = identifier ?? (proposed ? "proposed" : "kept")
         return VStack(alignment: .leading, spacing: 12) {
             Label(proposed ? "Proposed details" : "Kept details", systemImage: proposed ? "sparkles" : "checkmark.seal")
-                .font(.system(size: 13, weight: .medium)).foregroundStyle(ArchiPalette.violet)
+                .font(.system(size: 13, weight: .medium)).foregroundStyle(WorkspaceTheme.accent)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("evolution-recipe-\(kind)-title")
             Text("\(recipe.family.title) · \(recipe.role.title) · \(recipe.helpStyle.title)")
@@ -336,7 +340,7 @@ struct EvolutionWorkspace: View {
             VStack(alignment: .leading, spacing: 18) {
                 sectionTitle("How I help", detail: "Optional preferences for the way ARCHi answers. Confirm, change, or remove them whenever you like.")
                 HStack(alignment: .top, spacing: 18) {
-                    Image(systemName: "sparkle.magnifyingglass").foregroundStyle(ArchiPalette.violet).frame(width: 24)
+                    Image(systemName: "sparkle.magnifyingglass").foregroundStyle(WorkspaceTheme.accent).frame(width: 24)
                     VStack(alignment: .leading, spacing: 7) {
                         Text("The work we do").font(.system(size: 13, weight: .medium))
                         Picker("Work role", selection: $roleChoice) {
@@ -351,7 +355,7 @@ struct EvolutionWorkspace: View {
                 }
                 Divider()
                 HStack(alignment: .top, spacing: 18) {
-                    Image(systemName: "text.bubble").foregroundStyle(ArchiPalette.violet).frame(width: 24)
+                    Image(systemName: "text.bubble").foregroundStyle(WorkspaceTheme.accent).frame(width: 24)
                     VStack(alignment: .leading, spacing: 7) {
                         Text("How help should feel").font(.system(size: 13, weight: .medium))
                         Picker("Help style", selection: $helpChoice) {
@@ -374,7 +378,7 @@ struct EvolutionWorkspace: View {
 
     private func confirmed(_ value: String, category: EvolutionPreferenceCategory) -> some View {
         HStack {
-            Label("Confirmed · \(value)", systemImage: "checkmark.circle").font(.system(size: 11)).foregroundStyle(ArchiPalette.violet)
+            Label("Confirmed · \(value)", systemImage: "checkmark.circle").font(.system(size: 11)).foregroundStyle(WorkspaceTheme.accent)
             Spacer()
             Button("Remove") { evolution.revoke(category) }.buttonStyle(.borderless).font(.system(size: 11))
                 .accessibilityLabel("Remove confirmed \(category.rawValue) preference")
@@ -390,7 +394,7 @@ struct EvolutionWorkspace: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Button { evolution.preview(family) } label: {
                             CompanionPresenceArt(form: shownForm, family: family, size: 128, reduceMotion: true,
-                                treatment: store.preferences.visualTreatment, equipment: store.preferences.equipment)
+                                treatment: store.preferences.visualTreatment, equipment: store.preferences.equipment, seedColor: store.preferences.seedColor)
                                 .frame(maxWidth: .infinity).frame(height: 142)
                                 .background(Color(red: 0.09, green: 0.13, blue: 0.19), in: RoundedRectangle(cornerRadius: 16))
                         }.buttonStyle(.plain).accessibilityLabel("Preview \(family.title)")
@@ -398,15 +402,15 @@ struct EvolutionWorkspace: View {
                         HStack {
                             Text(family.title).font(.system(size: 15, weight: .medium, design: .rounded))
                             Spacer()
-                            if evolution.confirmedFamily == family { Image(systemName: "checkmark.circle.fill").foregroundStyle(ArchiPalette.violet) }
+                            if evolution.confirmedFamily == family { Image(systemName: "checkmark.circle.fill").foregroundStyle(WorkspaceTheme.accent) }
                         }
                         Text(family.summary).font(.system(size: 11)).foregroundStyle(.secondary).lineSpacing(3).frame(minHeight: 48, alignment: .top)
                         Button(evolution.confirmedFamily == family ? "Direction confirmed" : "Use this direction") { evolution.confirmFamily(family); evolution.preview(family) }
                             .buttonStyle(.bordered).controlSize(.small).disabled(evolution.confirmedFamily == family)
                             .accessibilityLabel("Use \(family.title) as visual direction")
                     }.padding(12)
-                        .background(ArchiPalette.lilac.opacity(0.10), in: RoundedRectangle(cornerRadius: 20))
-                        .overlay(RoundedRectangle(cornerRadius: 20).stroke(evolution.confirmedFamily == family ? ArchiPalette.violet.opacity(0.6) : .secondary.opacity(0.15)))
+                        .background(WorkspaceTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 20))
+                        .overlay(RoundedRectangle(cornerRadius: 20).stroke(evolution.confirmedFamily == family ? WorkspaceTheme.accent.opacity(0.6) : .secondary.opacity(0.15)))
                 }
             }
         }
@@ -451,7 +455,7 @@ struct EvolutionWorkspace: View {
                                     }
                                 }
                                 Spacer()
-                                Button("Withdraw") { evolution.withdrawUseful(requestID: receipt.requestID) }.buttonStyle(.borderless)
+                                Button("Withdraw") { store.withdrawLearningReview(requestID: receipt.requestID) }.buttonStyle(.borderless)
                                     .accessibilityLabel("Withdraw request \(receipt.requestID.uuidString.prefix(8))")
                                     .accessibilityIdentifier("evolution-withdraw-work-\(receipt.requestID.uuidString)")
                             }
@@ -556,7 +560,7 @@ struct EvolutionWorkspace: View {
                     }
                 }
                 Text(store.hasPersonalQiMon
-                     ? "Save and Load retain KIN’s chosen body and its learning reference for this individual. His identity, lessons and existing Journey keep their own storage."
+                     ? "Save and Load retain development records for this individual. Identity, lessons and the existing Journey keep their own storage."
                      : "Return to your starter whenever you like. The history of forms you kept remains available here.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
@@ -578,7 +582,7 @@ private struct EvolutionPrimaryButtonStyle: ButtonStyle {
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(.white.opacity(enabled ? 1 : 0.55))
             .padding(.horizontal, 14).padding(.vertical, 9)
-            .background(ArchiPalette.violet.opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.28),
+            .background(WorkspaceTheme.accent.opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.28),
                         in: RoundedRectangle(cornerRadius: 9))
     }
 }

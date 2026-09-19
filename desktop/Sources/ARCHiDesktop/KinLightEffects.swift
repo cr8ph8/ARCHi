@@ -279,7 +279,8 @@ enum KinLightEffectsGeometry {
     }
 }
 
-private struct KinLightPalette {
+/// Shared expression colors for KIN and his desktop focus boundary.
+struct KinLightPalette {
     let accent: Color
     let highlight: Color
     let shadow: Color

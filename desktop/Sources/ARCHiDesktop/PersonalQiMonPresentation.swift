@@ -16,12 +16,12 @@ extension CompanionStore {
     /// an explicitly kept body only for that same individual.
     func presentationForm(for preferences: CompanionPreferences, role: CompanionPresentationRole = .body) -> CompanionForm {
         if let kin = activeQiMon {
-            // The Seed persists as KIN's cursor even after a body is kept.
+            // The Seed persists as the individual's cursor even after a body is kept.
             // Use the same active-identity check as body presentation.
-            if role == .cursor { return .kinSeed }
-            if let growth = evolution.kinGrowthRecord,
+            if role == .cursor { return preferences.seedAppearance.personalForm }
+            if kin.character == .kin, let growth = evolution.kinGrowthRecord,
                growth.originDigest == kin.originDigest, growth.active { return .kin }
-            return kin.currentBody
+            return preferences.seedAppearance.personalForm
         }
         return preferences.form.isKin ? .companion : preferences.form
     }
@@ -31,7 +31,43 @@ extension CompanionStore {
     var presentationRecipe: CompanionAppearanceRecipe? { hasPersonalQiMon ? nil : evolution.activeAppearanceRecipe }
     var presentationNaturalVariation: CompanionNaturalVariation? { hasPersonalQiMon ? nil : evolution.naturalVariation }
     var presentationTitle: String { activeQiMon?.name ?? presentationFamily?.title ?? presentationForm.rawValue }
-    var kinBodyTitle: String { presentationForm == .kin ? "First Light" : "Core Seed" }
+    var kinBodyTitle: String {
+        switch presentationForm {
+        case .kin: "First Light"
+        case .corePearl: "Ball of Light"
+        case .hamptonSeed: "Liminal Seed"
+        default: "Particle Seed"
+        }
+    }
+
+    var requiresPersonalSeedPresentation: Bool {
+        activeQiMon != nil && (preferences.seedColor != .original || preferences.seedAppearance == .hamptonLiminal)
+    }
+
+    var unityPresentationUnavailableReason: String? {
+        unityPresentationUnavailableReason(for: unityPresentation.availablePlayer)
+    }
+
+    func unityPresentationUnavailableReason(for player: URL?) -> String? {
+        guard requiresPersonalSeedPresentation else { return nil }
+        guard let player, UnityPresentationConnection.supportsPersonalSeeds(player) else {
+            return "Update the included Arena to bring your selected Seed and color along. Your desktop appearance stays as you chose it."
+        }
+        return nil
+    }
+
+    func chooseSeedAppearance(_ appearance: CompanionSeedAppearance) {
+        guard !isShuttingDown, !hasPersonalQiMon || activeQiMon != nil else { return }
+        stopKinLightPreview()
+        preferences.seedAppearance = appearance
+        if !hasPersonalQiMon { chooseStartingForm(appearance.starterForm) }
+    }
+
+    func chooseSeedColor(_ color: CompanionSeedColor) {
+        guard !isShuttingDown, !hasPersonalQiMon || activeQiMon != nil else { return }
+        stopKinLightPreview()
+        preferences.seedColor = color
+    }
 
     /// Uses the existing saved appearance preference. A missing or mismatched
     /// personal Journey cannot select a different individual's presentation.

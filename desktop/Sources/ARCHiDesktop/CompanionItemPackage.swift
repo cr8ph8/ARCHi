@@ -58,12 +58,23 @@ struct CompanionItemPackage: Codable, Equatable, Sendable, Identifiable {
     static let creatorDefault = Self(title: "My Focus Staff", creator: "Local creator",
         summary: "A personal staff recipe for my companion.", palette: .mint)
 
-    var isValid: Bool {
-        schema == Self.currentSchema && (1...999).contains(revision)
-            && Self.validLabel(title, maximumUTF16: 24, allowsEmpty: false)
-            && Self.validLabel(creator, maximumUTF16: 48, allowsEmpty: false)
-            && Self.validLabel(summary, maximumUTF16: 160, allowsEmpty: true)
+    /// A local value check only. This does not authenticate attribution or grant
+    /// registration, ownership, permissions, or effects, and is never serialized.
+    var review: CompanionItemReview {
+        let supportedSchema = schema == Self.currentSchema
+        let supportedRevision = (1...999).contains(revision)
+        return CompanionItemReview(checks: [
+            .init(field: .schema, outcome: supportedSchema ? .pass : .fail,
+                  message: supportedSchema ? "Supported recipe version." : "Use a recipe version supported by this app."),
+            .init(field: .revision, outcome: supportedRevision ? .pass : .fail,
+                  message: supportedRevision ? "Supported design revision." : "Choose a design revision from 1 to 999."),
+            Self.reviewLabel(title, field: .title, label: "item name", maximumUTF16: 24, allowsEmpty: false),
+            Self.reviewLabel(creator, field: .creator, label: "creator name", maximumUTF16: 48, allowsEmpty: false),
+            Self.reviewLabel(summary, field: .summary, label: "description", maximumUTF16: 160, allowsEmpty: true),
+        ])
     }
+
+    var isValid: Bool { review.isValid }
 
     /// Fixed field order and UTF-8 length prefixes keep identity independent of
     /// JSON key ordering/whitespace and unambiguous across Unicode and delimiters.
@@ -113,13 +124,21 @@ struct CompanionItemPackage: Codable, Equatable, Sendable, Identifiable {
         }
     }
 
-    private static func validLabel(_ text: String, maximumUTF16: Int, allowsEmpty: Bool) -> Bool {
-        guard text.utf16.count <= maximumUTF16,
-              !text.unicodeScalars.contains(where: { scalar in
-                  scalar.value < 0x20 || (0x7f...0x9f).contains(scalar.value)
-                      || scalar.value == 0x2028 || scalar.value == 0x2029
-              }) else { return false }
-        return allowsEmpty || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private static func reviewLabel(_ text: String, field: CompanionItemReview.Field,
+                                    label: String, maximumUTF16: Int, allowsEmpty: Bool) -> CompanionItemReview.Check {
+        guard text.utf16.count <= maximumUTF16 else {
+            return .init(field: field, outcome: .fail, message: "Shorten the \(label) to fit the displayed limit. Some symbols count as more than one character.")
+        }
+        guard !text.unicodeScalars.contains(where: { scalar in
+            scalar.value < 0x20 || (0x7f...0x9f).contains(scalar.value)
+                || scalar.value == 0x2028 || scalar.value == 0x2029
+        }) else {
+            return .init(field: field, outcome: .fail, message: "Remove line breaks or control characters from the \(label).")
+        }
+        guard allowsEmpty || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .init(field: field, outcome: .missing, message: "Enter \(field == .title ? "an item name" : "a creator name").")
+        }
+        return .init(field: field, outcome: .pass, message: "The \(label) fits the supported limits.")
     }
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
@@ -167,6 +186,30 @@ struct CompanionItemPackage: Codable, Equatable, Sendable, Identifiable {
         try values.encode(action, forKey: .action)
         try values.encode(defaultGesture, forKey: .defaultGesture)
     }
+}
+
+/// Derived review information for the native editor and decoded recipe preview.
+/// The strict decoder, catalog, and profile owner retain their existing roles.
+struct CompanionItemReview: Equatable, Sendable {
+    enum Field: String, Sendable {
+        case schema, revision, title, creator, summary
+    }
+
+    enum Outcome: Equatable, Sendable {
+        case pass, missing, fail
+    }
+
+    struct Check: Equatable, Sendable, Identifiable {
+        let field: Field
+        let outcome: Outcome
+        let message: String
+        var id: Field { field }
+    }
+
+    let checks: [Check]
+    var issues: [Check] { checks.filter { $0.outcome != .pass } }
+    var isValid: Bool { checks.allSatisfy { $0.outcome == .pass } }
+    var correctionMessage: String { issues.map(\.message).joined(separator: " ") }
 }
 
 enum CompanionItemPackageError: Error, LocalizedError, Equatable {

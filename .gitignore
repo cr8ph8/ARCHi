@@ -1,17 +1,18 @@
 node_modules/
 dist/
 output/
-tmp/
-.codex/
-.agents/
+# Private research chats, supplied attachments and reference paper copies.
+docs/research/**/private-archive/
+test-results/
+playwright-report/
+desktop/.build/
+desktop/.swiftpm/
+.DS_Store
+*.log
 .env
 .env.*
 !.env.example
-.DS_Store
-*.log
-**/__pycache__/
-*.pyc
-desktop/.build/
-desktop/.swiftpm/
-test-results/
-playwright-report/
+
+# Python validation byproducts
+__pycache__/
+*.py[cod]

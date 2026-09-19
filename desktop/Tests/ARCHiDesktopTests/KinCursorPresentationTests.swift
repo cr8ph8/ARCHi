@@ -7,6 +7,48 @@ import XCTest
 /// All data, windows and completed-answer fixtures here are local and disposable.
 final class KinCursorPresentationTests: XCTestCase {
     @MainActor
+    func testLightAppearanceKeepsOneIdentityAndBodyMilestoneAcrossSaveAndReturn() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.clean() }
+        let store = fixture.store
+        _ = try keepGrowth(in: fixture)
+        let identity = store.activeQiMon, growth = store.evolution.kinGrowthRecord
+        let history = store.evolution.history, position = store.position
+        let originalBytes = try Data(contentsOf: fixture.preferenceURL)
+        store.chooseSeedAppearance(.archiLight)
+        XCTAssertEqual(store.presentationForm, .kin)
+        XCTAssertEqual(store.cursorPresentationForm, .corePearl)
+        XCTAssertEqual(store.activeQiMon, identity)
+        XCTAssertEqual(store.evolution.kinGrowthRecord, growth)
+        XCTAssertEqual(store.evolution.history, history)
+        XCTAssertEqual(store.position, position)
+        XCTAssertEqual(try Data(contentsOf: fixture.preferenceURL), originalBytes, "A look choice alone is not a save")
+        let snapshot = try XCTUnwrap(UnityPresentationSnapshot.capture(store: store, sessionID: UUID(), revision: 1,
+            active: true, now: Date(), systemReduceMotion: true))
+        XCTAssertEqual(snapshot.seedAppearance, "archiLight")
+        XCTAssertEqual(snapshot.seedAssetSHA256, CompanionVisualAsset.lightSeedDigest)
+        XCTAssertEqual(snapshot.body, "firstLight")
+        store.returnKinToSeed()
+        XCTAssertEqual(store.presentationForm, .corePearl)
+        store.rememberPreferences = true
+        store.savePreferences()
+        XCTAssertTrue(store.evolution.save())
+        let reopened = fixture.reopen()
+        XCTAssertEqual(reopened.preferences.seedAppearance, .archiLight)
+        XCTAssertEqual(reopened.presentationForm, .corePearl)
+        XCTAssertEqual(reopened.activeQiMon, identity)
+        XCTAssertTrue(reopened.evolution.load())
+        XCTAssertTrue(reopened.resumeKinFirstLight())
+        XCTAssertEqual(reopened.presentationForm, .kin)
+        XCTAssertEqual(reopened.cursorPresentationForm, .corePearl)
+        reopened.chooseSeedAppearance(.kinParticles)
+        XCTAssertEqual(reopened.cursorPresentationForm, .kinSeed)
+        XCTAssertEqual(reopened.presentationForm, .kin)
+        await reopened.shutdownAssistant()
+        await store.shutdownAssistant()
+    }
+
+    @MainActor
     func testSeedCursorSurvivesBodyKeepLoadReturnResumeAndLessonWithdrawal() async throws {
         let fixture = try makeFixture()
         defer { fixture.clean() }

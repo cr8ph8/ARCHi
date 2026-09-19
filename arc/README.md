@@ -18,7 +18,7 @@ untrusted ARC-format task
   ⛔ browser storage, network calls, or external actions
 ```
 
-Every receipt and summary carries literal false write-authority flags. The package has a separate non-DOM TypeScript configuration, and is separate from the playable application in `src/`.
+Every receipt and summary carries literal false write-authority flags. The package has a separate non-DOM TypeScript configuration, and the repository structure check rejects import edges between `arc/` and the playable application in `src/`.
 
 ## Evidence semantics
 
@@ -39,3 +39,18 @@ npm run arc:test
 ```
 
 ARC-AGI-3 uses interactive environments rather than the static exact-grid contract implemented here. It needs a separate episode/transcript evaluator and is intentionally out of scope for this slice.
+
+## Desktop evidence review
+
+`src/portable.ts` exports or inspects `archi-arc-evaluation-bundle/v1`: the
+frozen manifest, one solver identity, and raw task/prediction pairs. Portable
+bundles are bounded to 2 MiB and 64 tasks. They contain no claimed summary,
+application task ID, token totals, or billing fields. The native desktop
+capabilities workspace re-scores them locally against the same versioned
+contract; shared golden hashes check the adapter's parity.
+
+`fixtures/portable/smoke-evaluation-v1.json` is the desktop demonstration. It
+contains one correct and one incorrect fixed prediction and invokes no model.
+The desktop retains proposed evidence only. Its fresh evaluation task ID can
+be recorded in Token Steward separately from model tasks and user usefulness.
+See `docs/native-arc-capabilities.md` at the repository root for that boundary.

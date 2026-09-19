@@ -5,15 +5,19 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit && vite build && node scripts/build-pwa.mjs",
-    "test": "vitest run src",
+    "test": "vitest run --dir src",
     "arc:typecheck": "tsc --project arc/tsconfig.json",
-    "arc:test": "vitest run arc/test",
+    "arc:test": "vitest run --dir arc/test",
     "pwa:test": "node --test scripts/pwa-contract.test.mjs",
     "foundation:test": "node --test scripts/boundary-text.test.mjs scripts/episode-trace.test.mjs",
     "desktop:build": "swift build --package-path desktop",
     "desktop:test": "swift test --package-path desktop",
-    "desktop:review": "./script/build_and_run.sh --verify --review",
-    "check": "npm run test && npm run foundation:test && npm run pwa:test && npm run arc:typecheck && npm run arc:test && npm run build"
+    "unity:build": "bash script/build_unity_port.sh",
+    "source:preflight": "python3 script/source_release_preflight.py",
+    "source:preflight:test": "python3 -m unittest discover -s scripts/tests -p 'test_*source*.py' -v",
+    "check": "npm run test && npm run foundation:test && npm run pwa:test && npm run arc:typecheck && npm run arc:test && npm run arc:replay:test && npm run build",
+    "marketplace:test": "python3 -m unittest discover -s marketplace/tests -v",
+    "arc:replay:test": "node --test scripts/arc-replay.test.mjs"
   },
   "devDependencies": {
     "es-module-lexer": "2.3.2",
@@ -26,9 +30,9 @@
     "@noble/hashes": "2.3.0"
   },
   "license": "MIT",
-  "description": "Local-first ARCHi desktop companion with Habitat and QiMon practice battles",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cr8ph8/ARCHi.git"
-  }
+  },
+  "description": "Local ARCHi native companion, Unity Arena and persistent development creator marketplace source candidate"
 }

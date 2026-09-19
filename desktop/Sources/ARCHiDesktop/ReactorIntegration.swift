@@ -8,14 +8,14 @@ extension CompanionStore {
         let recipe = presentationRecipe
         let id = CompanionVisualAsset.appearanceID(form: presentationForm, family: selectedFamily,
             treatment: preferences.visualTreatment, recipe: recipe, naturalVariation: presentationNaturalVariation,
-            equipment: preferences.equipment)
+            equipment: preferences.equipment, seedColor: preferences.seedColor)
         let bytes = reactor.appearanceID == id ? reactor.referencePNG : CompanionPresenceArt.png(
             form: presentationForm, family: selectedFamily, treatment: preferences.visualTreatment,
-            recipe: recipe, naturalVariation: presentationNaturalVariation, equipment: preferences.equipment)
+            recipe: recipe, naturalVariation: presentationNaturalVariation, equipment: preferences.equipment, seedColor: preferences.seedColor)
         reactor.updateReference(id: id,
             label: CompanionVisualAsset.label(form: presentationForm, family: selectedFamily,
                 treatment: preferences.visualTreatment, recipe: recipe, naturalVariation: presentationNaturalVariation,
-                equipment: preferences.equipment),
+                equipment: preferences.equipment, seedColor: preferences.seedColor),
             png: bytes,
             motionAllowed: !preferences.quiet && !preferences.reduceMotion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
             visible: isVisible && !(NSApp?.isHidden ?? false))
@@ -26,7 +26,7 @@ extension CompanionStore {
     var reactorReferenceMatchesCurrentAppearance: Bool {
         reactor.appearanceID == CompanionVisualAsset.appearanceID(form: presentationForm, family: presentationFamily,
             treatment: preferences.visualTreatment, recipe: presentationRecipe,
-            naturalVariation: presentationNaturalVariation, equipment: preferences.equipment)
+            naturalVariation: presentationNaturalVariation, equipment: preferences.equipment, seedColor: preferences.seedColor)
     }
 }
 
@@ -50,13 +50,13 @@ struct LiveCompanionPresence: View {
                     .accessibilityLabel("ARCHi · " + CompanionVisualAsset.label(form: form,
                         family: store.presentationFamily, treatment: store.preferences.visualTreatment,
                         recipe: store.presentationRecipe, naturalVariation: store.presentationNaturalVariation,
-                        equipment: store.preferences.equipment) + " · " + store.reactor.state.title)
+                        equipment: store.preferences.equipment, seedColor: store.preferences.seedColor) + " · " + store.reactor.state.title)
             } else {
                 CompanionPresenceArt(form: form, family: store.presentationFamily,
                     size: size, reduceMotion: store.preferences.reduceMotion || systemReduceMotion || store.preferences.quiet,
                     treatment: store.preferences.visualTreatment, recipe: store.presentationRecipe,
                     naturalVariation: store.presentationNaturalVariation, equipment: store.preferences.equipment,
-                    lightExpression: store.kinLightExpression)
+                    lightExpression: store.kinLightExpression, seedColor: store.preferences.seedColor)
             }
         }.frame(width: size, height: size)
         .accessibilityValue(store.activeQiMon == nil ? "" : store.kinLightExpression.label)

@@ -27,7 +27,9 @@ extension CompanionStore {
     @discardableResult
     func markReplyUsefulForEvolution(provider: AssistantProvider, requestID: String) -> Bool {
         guard let receipt = evolutionFeedbackReceipt(provider: provider, requestID: requestID) else { return false }
-        return evolution.markUseful(receipt: receipt, sourceDigest: receipt.sourceDigest)
+        let marked = evolution.markUseful(receipt: receipt, sourceDigest: receipt.sourceDigest)
+        if marked { recordUsefulReply(requestID: requestID) }
+        return marked
     }
 
     /// A model citation is only a candidate for the user's own usefulness review.
@@ -45,7 +47,9 @@ extension CompanionStore {
     func confirmLessonHelped(provider: AssistantProvider, requestID: String, snapshot: LessonSnapshot) -> Bool {
         guard reviewableEvolutionLessons(provider: provider, requestID: requestID).contains(snapshot),
               let receipt = evolutionFeedbackReceipt(provider: provider, requestID: requestID) else { return false }
-        return evolution.markUseful(receipt: receipt, sourceDigest: receipt.sourceDigest, confirmedLesson: snapshot)
+        let marked = evolution.markUseful(receipt: receipt, sourceDigest: receipt.sourceDigest, confirmedLesson: snapshot)
+        if marked { recordUsefulReply(requestID: requestID) }
+        return marked
     }
 
     func lessonUseDescription(_ use: EvolutionLessonUse) -> String {
@@ -80,6 +84,7 @@ struct CompanionPresenceArt: View {
     var naturalVariation: CompanionNaturalVariation? = nil
     var equipment: CompanionEquipment = .empty
     var lightExpression: KinLightExpression = .resting
+    var seedColor: CompanionSeedColor = .original
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     private var effectiveRecipe: CompanionAppearanceRecipe? {
@@ -97,9 +102,9 @@ struct CompanionPresenceArt: View {
     @MainActor
     static func png(form: CompanionForm, family: EvolutionFamily?, treatment: CompanionVisualTreatment = .original,
                     recipe: CompanionAppearanceRecipe? = nil, naturalVariation: CompanionNaturalVariation? = nil,
-                    equipment: CompanionEquipment = .empty) -> Data? {
+                    equipment: CompanionEquipment = .empty, seedColor: CompanionSeedColor = .original) -> Data? {
         let renderer = ImageRenderer(content: CompanionPresenceArt(form: form, family: family, size: 256, reduceMotion: true,
-            treatment: treatment, recipe: recipe, naturalVariation: naturalVariation, equipment: equipment))
+            treatment: treatment, recipe: recipe, naturalVariation: naturalVariation, equipment: equipment, seedColor: seedColor))
         renderer.scale = 2
         guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
@@ -120,7 +125,7 @@ struct CompanionPresenceArt: View {
             .frame(width: size, height: size)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("ARCHi, " + CompanionVisualAsset.label(form: form, family: family,
-                treatment: treatment, recipe: recipe, naturalVariation: naturalVariation, equipment: equipment))
+                treatment: treatment, recipe: recipe, naturalVariation: naturalVariation, equipment: equipment, seedColor: seedColor))
         }
     }
 
@@ -157,7 +162,7 @@ struct CompanionPresenceArt: View {
                         Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
                             .frame(width: size, height: size)
                             .offset(y: sin(phase * 1.2) * size * 0.018)
-                            .accessibilityLabel("ARCHi, \(family?.title ?? form.rawValue) form, Pearl study finish")
+                            .accessibilityLabel("ARCHi, \(family?.title ?? form.rawValue) form, \(treatment.rawValue)")
                     }
                 }
             } else if let family {
@@ -166,7 +171,7 @@ struct CompanionPresenceArt: View {
             } else {
                 CompanionArt(form: form, size: size, reduceMotion: reduceMotion || systemReduceMotion,
                     naturalVariation: effectiveNaturalVariation,
-                    lightExpression: form == .kinSeed || form == .kin ? lightExpression : .resting)
+                    lightExpression: [.kinSeed, .kin, .corePearl, .particleSeed, .hamptonSeed].contains(form) ? lightExpression : .resting, treatment: treatment, seedColor: seedColor)
             }
         }.frame(width: size, height: size)
     }
@@ -254,12 +259,12 @@ struct EvolutionReplyFeedback: View {
                 Button {
                     store.markReplyUsefulForEvolution(provider: provider, requestID: id)
                 } label: {
-                    Label(record != nil ? "Added to evolution" : "This helped my work", systemImage: record != nil ? "checkmark.circle" : "sparkle")
+                    Label(record != nil ? "Usefulness recorded" : "This helped my work", systemImage: record != nil ? "checkmark.circle" : "sparkle")
                 }
                 .buttonStyle(.borderless).font(.system(size: 11))
                 .disabled(record != nil)
                 .accessibilityIdentifier("evolution-useful-\(provider.rawValue)")
-                .help("Add your usefulness feedback to Evolution. Retains only a request ID and source digest; no document or reply text.")
+                .help("Record your usefulness feedback. Retains a request ID and input/context fingerprints, a source fingerprint for shared documents, and an optional confirmed lesson-version reference. No question, document or reply text is copied into Evolution.")
 
                 if provider == .qwen, let use = record?.lessonUse {
                     Text(store.lessonUseDescription(use)).font(.system(size: 11)).foregroundStyle(.secondary)

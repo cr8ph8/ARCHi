@@ -13,7 +13,7 @@ struct HostedPlayDownloadReceipt: Equatable {
 }
 
 typealias HostedPlayAppearanceRenderer = @MainActor (CompanionForm, EvolutionFamily?, CompanionVisualTreatment,
-    CompanionAppearanceRecipe?, CompanionNaturalVariation?, CompanionEquipment) -> Data?
+    CompanionAppearanceRecipe?, CompanionNaturalVariation?, CompanionEquipment, CompanionSeedColor) -> Data?
 
 @MainActor
 final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, WKDownloadDelegate {
@@ -85,9 +85,9 @@ final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WK
     static let maximumArchiveBytes = 2 * 1024 * 1024
 
     init(profile: HostedPlayProfile = .current, assetDirectory: URL? = Bundle.main.resourceURL?.appendingPathComponent("Play"),
-         appearanceRenderer: @escaping HostedPlayAppearanceRenderer = { form, family, treatment, recipe, natural, equipment in
+         appearanceRenderer: @escaping HostedPlayAppearanceRenderer = { form, family, treatment, recipe, natural, equipment, seedColor in
              CompanionPresenceArt.png(form: form, family: family, treatment: treatment, recipe: recipe,
-                naturalVariation: natural, equipment: equipment)
+                naturalVariation: natural, equipment: equipment, seedColor: seedColor)
          }) {
         self.profile = profile; self.assetDirectory = assetDirectory; self.appearanceRenderer = appearanceRenderer
         super.init()
@@ -227,16 +227,16 @@ final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WK
                           treatment: CompanionVisualTreatment = .original,
                           expressionPNG: Data? = nil, expressionRevision: UInt64 = 0,
                           recipe: CompanionAppearanceRecipe? = nil, naturalVariation: CompanionNaturalVariation? = nil,
-                          equipment: CompanionEquipment = .empty) {
+                          equipment: CompanionEquipment = .empty, seedColor: CompanionSeedColor = .original) {
         let usingExpression = expressionPNG != nil && !reduceMotion
         let id = CompanionVisualAsset.appearanceID(form: form, family: family, treatment: treatment,
-            recipe: recipe, naturalVariation: naturalVariation, equipment: equipment)
+            recipe: recipe, naturalVariation: naturalVariation, equipment: equipment, seedColor: seedColor)
             + (usingExpression ? "-expression-\(expressionRevision)" : "")
         // A newer request, including a return to the last successfully drawn
         // appearance, retires a previous failed request's one readiness retry.
         retryAppearanceAfterReady = nil
         guard appearance?.id != id || appearance?.reduceMotion != reduceMotion else { return }
-        guard let bytes = usingExpression ? expressionPNG : appearanceRenderer(form, family, treatment, recipe, naturalVariation, equipment), bytes.count < 1_400_000 else {
+        guard let bytes = usingExpression ? expressionPNG : appearanceRenderer(form, family, treatment, recipe, naturalVariation, equipment, seedColor), bytes.count < 1_400_000 else {
             recordAppearanceDelivery("render-unavailable id=\(id)")
             // ImageRenderer may be unavailable before AppKit finishes starting.
             // Retain the latest requested inputs for one later ready transition;
@@ -244,12 +244,12 @@ final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WK
             retryAppearanceAfterReady = { [weak self] in
                 self?.updateAppearance(form: form, family: family, reduceMotion: reduceMotion,
                     treatment: treatment, expressionPNG: expressionPNG, expressionRevision: expressionRevision,
-                    recipe: recipe, naturalVariation: naturalVariation, equipment: equipment)
+                    recipe: recipe, naturalVariation: naturalVariation, equipment: equipment, seedColor: seedColor)
             }
             return
         }
         let label = CompanionVisualAsset.label(form: form, family: family, treatment: treatment,
-            recipe: recipe, naturalVariation: naturalVariation, equipment: equipment)
+            recipe: recipe, naturalVariation: naturalVariation, equipment: equipment, seedColor: seedColor)
         appearance = (id, label, "data:image/png;base64," + bytes.base64EncodedString(), reduceMotion)
         sendAppearance()
     }

@@ -88,6 +88,7 @@ struct HamptonAdmissionOutcome: Equatable, Sendable {
             case .inconsistentDecision: reason = .inconsistentDecision
             }
         } else if error is SessionContextError { reason = .staleContext }
+        else if error is LocalQwenRuntimeFailure { reason = .unavailable }
         else if let qwen = error as? QwenFailure {
             switch qwen {
             case .stopped: reason = .cancelled

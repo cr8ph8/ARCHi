@@ -2,6 +2,20 @@ import Foundation
 import CryptoKit
 import Darwin
 
+/// An explicit user-selected task scope, never inferred from lesson text.
+enum HamptonTaskScope: String, Codable, CaseIterable, Identifiable, Sendable {
+    case conversation, documentQuestion, passageRevision
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .conversation: "Chat"
+        case .documentQuestion: "Reading documents"
+        case .passageRevision: "Revising passages"
+        }
+    }
+}
+
 struct LessonSource: Codable, Equatable, Sendable {
     let name: String
     let digest: String
@@ -36,10 +50,12 @@ struct KeptLesson: Codable, Equatable, Sendable, Identifiable {
     let createdAt: Date
     var updatedAt: Date
     var expiresAt: Date?
+    var taskScope: HamptonTaskScope?
 
     init(id: String = UUID().uuidString, revision: UInt64 = 1, topic: String, text: String,
          reason: String = "", source: LessonSource? = nil, origin: LessonOrigin? = nil,
-         createdAt: Date = Date(), updatedAt: Date? = nil, expiresAt: Date? = nil) {
+         createdAt: Date = Date(), updatedAt: Date? = nil, expiresAt: Date? = nil,
+         taskScope: HamptonTaskScope? = nil) {
         self.id = id
         self.revision = revision
         self.topic = topic
@@ -50,6 +66,7 @@ struct KeptLesson: Codable, Equatable, Sendable, Identifiable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
         self.expiresAt = expiresAt
+        self.taskScope = taskScope
     }
 
     var isValid: Bool {
@@ -61,13 +78,15 @@ struct KeptLesson: Codable, Equatable, Sendable, Identifiable {
             && (expiresAt.map { LessonValidation.isDate($0) && $0 > createdAt } ?? true)
     }
 
-    /// A deliberately literal scope rule: whole normalized words in order.
-    /// No semantic classifier, passive observation, or optional inference call.
-    func matches(question: String, sourceName: String?, sourceText: String, now: Date = Date()) -> Bool {
+    /// Explicit task scope takes precedence over literal topic matching, while
+    /// expiry and exact-source restrictions remain required for every lesson.
+    func matches(question: String, sourceName: String?, sourceText: String, now: Date = Date(),
+                 taskScope: HamptonTaskScope? = nil) -> Bool {
         guard isValid, LessonValidation.isDate(now), expiresAt.map({ $0 > now }) ?? true else { return false }
         if let source {
             guard source.name == sourceName, source.digest == LessonSource.digest(of: sourceText) else { return false }
         }
+        if let savedScope = self.taskScope { return savedScope == taskScope }
         let topicWords = LessonValidation.words(topic)
         let questionWords = LessonValidation.words(question)
         guard !topicWords.isEmpty, questionWords.count >= topicWords.count else { return false }
@@ -84,23 +103,30 @@ struct LessonSnapshot: Codable, Equatable, Sendable {
     let topic: String
     let text: String
     let source: LessonSource?
+    // Synthesized Codable omits nil, preserving legacy snapshot bytes/digests.
+    let taskScope: HamptonTaskScope?
 
-    init(id: String, revision: UInt64, topic: String, text: String, source: LessonSource? = nil) {
+    init(id: String, revision: UInt64, topic: String, text: String, source: LessonSource? = nil,
+         taskScope: HamptonTaskScope? = nil) {
         self.id = id
         self.revision = revision
         self.topic = topic
         self.text = text
         self.source = source
+        self.taskScope = taskScope
     }
 
     init(lesson: KeptLesson) {
-        self.init(id: lesson.id, revision: lesson.revision, topic: lesson.topic, text: lesson.text, source: lesson.source)
+        self.init(id: lesson.id, revision: lesson.revision, topic: lesson.topic, text: lesson.text,
+                  source: lesson.source, taskScope: lesson.taskScope)
     }
 
     var modelID: String { "kept-\(id)-r\(revision)" }
     var modelInput: JSONValue {
-        .object(["id": .string(modelID), "text": .string(text), "topic": .string(topic),
-                 "kind": .string("user-confirmed-lesson")])
+        var fields: [String: JSONValue] = ["id": .string(modelID), "text": .string(text), "topic": .string(topic),
+                                           "kind": .string("user-confirmed-lesson")]
+        if let taskScope { fields["taskScope"] = .string(taskScope.rawValue) }
+        return .object(fields)
     }
     var isValid: Bool {
         UUID(uuidString: id) != nil && revision > 0
@@ -128,8 +154,8 @@ private enum LessonValidation {
 /// A versioned extension of the existing native preference file, not another
 /// memory database. Preferences and explicitly kept lessons can be forgotten separately.
 struct NativePreferenceDocument: Codable, Equatable {
-    static let currentSchema = "archi-native-preferences/v5"
-    private static let previousSchemas = ["archi-native-preferences/v2", "archi-native-preferences/v3", "archi-native-preferences/v4"]
+    static let currentSchema = "archi-native-preferences/v8"
+    private static let previousSchemas = ["archi-native-preferences/v2", "archi-native-preferences/v3", "archi-native-preferences/v4", "archi-native-preferences/v5", "archi-native-preferences/v6", "archi-native-preferences/v7"]
     static let maximumBytes = 64 * 1024
     static let maximumLessons = 16
     var schema = Self.currentSchema
@@ -139,6 +165,7 @@ struct NativePreferenceDocument: Codable, Equatable {
     var focusGesture: FocusGestureConfiguration? = nil
     var qiMon: LocalQiMon? = nil
     var itemLibrary: [CompanionItemPackage] = []
+    var personalContext: PersonalContext? = nil
 
     static func validateLessonSnapshots(_ snapshots: [LessonSnapshot]) -> Bool {
         snapshots.count <= maximumLessons && snapshots.allSatisfy(\.isValid)
@@ -148,6 +175,7 @@ struct NativePreferenceDocument: Codable, Equatable {
     var isValid: Bool {
         schema == Self.currentSchema && (preferences?.isValid ?? true)
             && (qiMon?.isValid ?? true)
+            && (personalContext?.isValid ?? true)
             && CompanionItemPackage.isValidLibrary(itemLibrary)
             && (preferences?.equipment.design.map { itemLibrary.contains($0) } ?? true)
             && lessons.allSatisfy(\.isValid)
@@ -165,7 +193,8 @@ struct NativePreferenceDocument: Codable, Equatable {
         if object.keys.contains("schema") {
             guard let schema = object["schema"] as? String,
                   schema == currentSchema || previousSchemas.contains(schema) else { throw NativePreferenceError.unsupportedSchema }
-            let optional: Set<String> = schema == currentSchema ? ["preferences", "focusGesture", "qiMon", "itemLibrary"]
+            let optional: Set<String> = (schema == currentSchema || schema == "archi-native-preferences/v7" || schema == "archi-native-preferences/v6") ? ["preferences", "focusGesture", "qiMon", "itemLibrary", "personalContext"]
+                : schema == "archi-native-preferences/v5" ? ["preferences", "focusGesture", "qiMon", "itemLibrary"]
                 : schema == "archi-native-preferences/v4" ? ["preferences", "focusGesture", "qiMon"]
                 : schema == "archi-native-preferences/v3" ? ["preferences", "focusGesture"] : ["preferences"]
             try validateKeys(object, required: ["schema", "revision", "lessons"], optional: optional)
@@ -181,10 +210,15 @@ struct NativePreferenceDocument: Codable, Equatable {
                 guard let fields = qiMon as? [String: Any] else { throw NativePreferenceError.invalidDocument }
                 try validateKeys(fields, required: ["character", "originDigest", "welcomedAt"])
             }
+            if let context = object["personalContext"], !(context is NSNull) {
+                guard let fields = context as? [String: Any], let entries = fields["entries"] as? [[String: Any]] else { throw NativePreferenceError.invalidDocument }
+                try validateKeys(fields, required: ["version", "revision", "name", "preferredName", "entries"])
+                for entry in entries { try validateKeys(entry, required: ["id", "title", "text", "status", "source", "useInAssistance"]) }
+            }
             guard let lessons = object["lessons"] as? [[String: Any]] else { throw NativePreferenceError.invalidDocument }
             for lesson in lessons {
                 try validateKeys(lesson, required: ["id", "revision", "topic", "text", "reason", "createdAt", "updatedAt"],
-                    optional: ["source", "origin", "expiresAt"])
+                    optional: schema == currentSchema ? ["source", "origin", "expiresAt", "taskScope"] : ["source", "origin", "expiresAt"])
                 for (key, required) in [("source", Set(["name", "digest"])), ("origin", Set(["requestID", "inputDigest"]))] {
                     if let value = lesson[key], !(value is NSNull) {
                         guard let fields = value as? [String: Any] else { throw NativePreferenceError.invalidDocument }
@@ -219,7 +253,7 @@ struct NativePreferenceDocument: Codable, Equatable {
 
     private static func validatePreferenceKeys(_ object: [String: Any]) throws {
         try validateKeys(object, required: ["form", "tone", "replyLength", "size", "adaptive", "reduceMotion", "quiet"],
-                         optional: ["visualTreatment", "equipment", "musicalCues", "musicalVolume"])
+                         optional: ["workspaceAppearance", "seedAppearance", "seedColor", "visualTreatment", "equipment", "musicalCues", "musicalVolume"])
     }
 
     private static func validateKeys(_ object: [String: Any], required: Set<String>, optional: Set<String> = []) throws {
@@ -240,6 +274,7 @@ extension NativePreferenceDocument {
         focusGesture = try values.decodeIfPresent(FocusGestureConfiguration.self, forKey: .focusGesture)
         qiMon = try values.decodeIfPresent(LocalQiMon.self, forKey: .qiMon)
         itemLibrary = try values.decodeIfPresent([CompanionItemPackage].self, forKey: .itemLibrary) ?? []
+        personalContext = try values.decodeIfPresent(PersonalContext.self, forKey: .personalContext)
     }
 }
 
@@ -269,7 +304,7 @@ enum NativePreferencePersistence {
     static func write(document: NativePreferenceDocument, to url: URL, expected: Data?) throws -> Data? {
         let data = try document.encoded()
         guard try rawData(at: url) == expected else { throw NativePreferenceError.conflict }
-        if document.preferences == nil && document.lessons.isEmpty && document.focusGesture == nil && document.qiMon == nil && document.itemLibrary.isEmpty {
+        if document.preferences == nil && document.lessons.isEmpty && document.focusGesture == nil && document.qiMon == nil && document.itemLibrary.isEmpty && document.personalContext == nil {
             if expected != nil { try FileManager.default.removeItem(at: url) }
             return nil
         }

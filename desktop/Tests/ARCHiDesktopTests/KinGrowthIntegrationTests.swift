@@ -17,6 +17,9 @@ final class KinGrowthIntegrationTests: XCTestCase {
         let guidance = store.evolution.preferences
         let source = try Data(contentsOf: fixture.preferenceURL)
         XCTAssertEqual(store.presentationForm, .kinSeed)
+        // The appearance title uses the selected Seed look; the existing form's
+        // accessibility label retains its canonical Core Seed name.
+        XCTAssertEqual(store.kinBodyTitle, "Particle Seed")
         XCTAssertTrue(store.assistantAccessibilityValue.contains("Core Seed"))
         XCTAssertEqual(store.kinGrowthEvidence.count, 1)
         XCTAssertTrue(store.previewKinGrowth(receiptID: requestID))
@@ -57,7 +60,7 @@ final class KinGrowthIntegrationTests: XCTestCase {
 
         reopened.returnKinToSeed()
         XCTAssertEqual(reopened.presentationForm, .kinSeed)
-        XCTAssertEqual(reopened.kinBodyTitle, "Core Seed")
+        XCTAssertEqual(reopened.kinBodyTitle, "Particle Seed")
         XCTAssertTrue(reopened.assistantAccessibilityValue.contains("Core Seed"))
         XCTAssertEqual(reopened.evolution.kinGrowthRecord?.id, kept.id)
         XCTAssertEqual(reopened.evolution.kinGrowthRecord?.receipt, kept.receipt)
@@ -234,6 +237,7 @@ final class KinGrowthIntegrationTests: XCTestCase {
         let lesson = KeptLesson(topic: "Writing plans", text: "Begin with a short outline and one next step.",
             createdAt: clock.now, expiresAt: expiresAfter.map { clock.now.addingTimeInterval($0) })
         var preferences = CompanionPreferences()
+        preferences.seedAppearance = .kinParticles
         preferences.tone = "Warm"
         preferences.reduceMotion = true
         preferences.equipment = CompanionEquipment(hand: .focusStaff)

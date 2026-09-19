@@ -1,0 +1,19 @@
+{
+  "proposalHash": "sha256:f7fb816bfae94adb637517602305c10968ad0f6db30243211fda6f334099c629",
+  "receiptHashes": [
+    "sha256:01608ffb00c48a6fbda73726df9b408fc56d0ec4106f025027e14961dd53727e",
+    "sha256:7fbd2854944356e628a5bb3184ea7c2c1f40e4a22d54f3f206dfbbe88832ff9a",
+    "sha256:860e0df555c675b9e6a72fbc37c22ba12b6ecb6aa108d37804051bfcc967c911"
+  ],
+  "exactRate": 0.3333333333333333,
+  "counts": {
+    "exact": 1,
+    "incorrect": 2,
+    "missing": 0,
+    "invalid": 0,
+    "unscored": 0,
+    "totalExamples": 3,
+    "exactTasks": 0,
+    "totalTasks": 1
+  }
+}

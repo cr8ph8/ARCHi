@@ -5,7 +5,7 @@ extension CompanionStore {
     /// Kept knowledge is a separate owner and can change without an Evolution
     /// revision. Recheck its exact version and expiry at both Preview and Keep.
     var kinGrowthEvidence: [EvolutionUsefulReceipt] {
-        guard activeQiMon != nil else { return [] }
+        guard activeQiMon?.character == .kin else { return [] }
         return evolution.usefulReceipts.filter { receipt in
             guard let use = receipt.lessonUse else { return false }
             return keptLessons.contains { lesson in
@@ -15,7 +15,7 @@ extension CompanionStore {
         }
     }
 
-    var kinGrowthControlsAvailable: Bool { activeQiMon != nil && !isWorking && !isShuttingDown }
+    var kinGrowthControlsAvailable: Bool { activeQiMon?.character == .kin && !isWorking && !isShuttingDown }
 
     @discardableResult
     func previewKinGrowth(receiptID: UUID) -> Bool {

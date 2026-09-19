@@ -15,6 +15,8 @@ struct CompanionArt: View {
     let reduceMotion: Bool
     var naturalVariation: CompanionNaturalVariation? = nil
     var lightExpression: KinLightExpression = .resting
+    var treatment: CompanionVisualTreatment = .original
+    var seedColor: CompanionSeedColor = .original
 
     private var effectiveNaturalVariation: CompanionNaturalVariation? {
         form == .companion ? naturalVariation : nil
@@ -22,23 +24,30 @@ struct CompanionArt: View {
 
     var body: some View {
         Group {
-            if form == .particle {
+            if form == .hamptonSeed {
+                HamptonLiminalSeedArt(size: size, reduceMotion: reduceMotion, lightExpression: lightExpression, seedColor: seedColor)
+            } else if form == .corePearl {
+                ArchiLightSeedArt(size: size, reduceMotion: reduceMotion, lightExpression: lightExpression)
+            } else if form == .particleSeed {
+                KinArt(form: .kinSeed, size: size, reduceMotion: reduceMotion, lightExpression: lightExpression, seedColor: seedColor)
+            } else if form == .particle {
                 ParticleLightArt(size: size, reduceMotion: reduceMotion)
             } else if form.isOpticalLight {
                 LightFormArt(form: form, size: size, reduceMotion: reduceMotion)
             } else if form.isKin {
                 KinArt(form: form, size: size, reduceMotion: reduceMotion,
-                    lightExpression: form == .kinSeed || form == .kin ? lightExpression : .resting)
+                    lightExpression: form == .kinSeed || form == .kin ? lightExpression : .resting, treatment: treatment, seedColor: seedColor)
             } else if [.constellation, .sprout, .ribbonSpirit, .geode].contains(form) {
                 TealCompanionFallback(form: form).frame(width: size, height: size)
             } else {
                 familiarBody
             }
         }
+        .environment(\.companionSeedColor, seedColor)
         .frame(width: size, height: size)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(effectiveNaturalVariation == nil
-            ? "ARCHi, \(form.rawValue) form"
+            ? "ARCHi, " + CompanionVisualAsset.label(form: form, family: nil, treatment: treatment, seedColor: seedColor) + " form"
             : "ARCHi, \(form.rawValue) form, individual variation")
     }
 
@@ -72,13 +81,15 @@ struct CompanionArt: View {
         case .companion: softCompanion
         case .light: guideLight
         case .particle: ParticleLightFrame(phase: 0)
+        case .particleSeed: KinCoreSeedFrame(phase: 0)
+        case .hamptonSeed: HamptonLiminalSeedArt(size: size, reduceMotion: reduceMotion, lightExpression: lightExpression, seedColor: seedColor)
         case .corePearl, .orbitField, .lightForm: LightFormFrame(form: form, phase: 0)
         case .ribbon: ribbon
         case .ink: ink
         case .pixel: pixel
         case .kin, .kinSpark, .kinSimple, .kinSeed:
             KinArt(form: form, size: size, reduceMotion: reduceMotion,
-                lightExpression: form == .kinSeed || form == .kin ? lightExpression : .resting)
+                lightExpression: form == .kinSeed || form == .kin ? lightExpression : .resting, treatment: treatment, seedColor: seedColor)
         case .constellation, .sprout, .ribbonSpirit, .geode:
             TealCompanionFallback(form: form)
         }

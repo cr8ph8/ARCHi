@@ -18,7 +18,12 @@ struct AssistantRouteSelector: View {
     }
 
     private var disclosure: String {
-        switch store.route {
+        if store.arcCommandSelected || store.isARCWorking {
+            return "ARC uses its native local task capability. Only an explicit Qwen proposal invokes the local model."
+        }
+        return switch store.route {
+        case .native:
+            store.route.disclosure
         case .local:
             store.sessionContextEnabled
                 ? "Send runs on this Mac with optional local session excerpts."
@@ -48,6 +53,7 @@ struct AssistantRoutePicker: View {
                 Text("Answer with").font(.system(size: compact ? 11 : 12, weight: .medium))
             }
             Picker("Answer with", selection: Binding(get: { store.route }, set: { store.setAssistantRoute($0) })) {
+                Text(AssistantRoute.native.title).tag(AssistantRoute.native)
                 Text(AssistantRoute.local.title).tag(AssistantRoute.local)
                 Text(AssistantRoute.automatic.title).tag(AssistantRoute.automatic)
                 Text(AssistantRoute.codex.title).tag(AssistantRoute.codex)
@@ -75,6 +81,10 @@ struct AssistantComposerSettingsView: View {
                 Divider()
                 Text(store.route.disclosure).font(.system(size: 11)).foregroundStyle(.secondary)
                 AssistantConversationControls(store: store)
+                Text("Send saves usage metadata locally: task and model identifiers, counts, timing and outcome. Message and document text are excluded.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Usage & limits", systemImage: "chart.bar.doc.horizontal") { store.open(.steward) }
+                    .accessibilityIdentifier("assistant.open-steward")
             }
             .padding(20)
         }
@@ -87,7 +97,13 @@ struct AssistantComposerSettingsView: View {
 struct AssistantComposerConnections: View {
     @ObservedObject var store: CompanionStore
     var body: some View {
-        if !store.isWorking && store.route != .automatic {
+        if let warning = store.stewardMessage ?? store.tokenSteward.loadError {
+            HStack {
+                Text(warning).font(.caption).foregroundStyle(.orange).lineLimit(2).help(warning)
+                Button("Usage & limits") { store.open(.steward) }.buttonStyle(.borderless)
+            }.accessibilityIdentifier("assistant.accounting-warning")
+        }
+        if !store.isWorking && !store.arcCommandSelected && !store.route.connectsAutomatically {
             ForEach(store.route.providers.filter { store.connection(for: $0) != .ready }) { provider in
                 HStack(alignment: .center, spacing: 8) {
                     ProviderConnectionControls(store: store, provider: provider)
@@ -111,7 +127,7 @@ struct ProviderConnectionControls: View {
             case .ready:
                 Button("Disconnect", systemImage: "xmark") { store.disconnectAssistant(provider: provider) }
                     .buttonStyle(.bordered)
-                    .help("Disconnect \(provider.name). The other assistant keeps its connection and active reply.")
+                    .help("Disconnect \(provider.name) and stop its current request.")
             case .connecting:
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small).accessibilityLabel("Connecting to \(provider.name)")
@@ -138,7 +154,7 @@ struct AssistantProviderPanel: View {
         WorkspaceCard {
             HStack(alignment: .top, spacing: 14) {
                 Image(systemName: provider == .qwen ? "desktopcomputer" : "bubble.left.and.bubble.right")
-                    .font(.system(size: 23, weight: .light)).foregroundStyle(ArchiPalette.violet)
+                    .font(.system(size: 23, weight: .light)).foregroundStyle(WorkspaceTheme.accent)
                     .frame(width: 32)
                 VStack(alignment: .leading, spacing: 7) {
                     Text(provider.rawValue).font(.system(size: 18, weight: .medium, design: .rounded))
@@ -150,7 +166,7 @@ struct AssistantProviderPanel: View {
             Divider().padding(.vertical, 12)
             HStack(spacing: 7) {
                 Image(systemName: store.connection(for: provider) == .ready ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(ArchiPalette.violet)
+                    .foregroundStyle(WorkspaceTheme.accent)
                 Text(store.connection(for: provider).rawValue).font(.system(size: 12, weight: .medium))
             }
             Text(store.message(for: provider)).font(.system(size: 12)).foregroundStyle(.secondary)
@@ -158,7 +174,7 @@ struct AssistantProviderPanel: View {
             if provider == .qwen {
                 localModels.padding(.top, 12)
             } else {
-                Text("Optional external reference or alternative using your Codex login. Choose the route and Send to share the current request. The resolved model name is not reported by this adapter. Connecting does not send your draft or shared copy.")
+                Text("Codex uses your existing login. ARCHi · Qwen first permits one Codex fallback if Qwen is unavailable or times out. Codex and Compare send the current request directly. Kept lessons, personal context and Qwen conversation stay local. Connecting sends no draft or shared copy.")
                     .font(.system(size: 11)).foregroundStyle(.secondary).lineSpacing(3).padding(.top, 10)
                 Text("Review your provider account’s data and licensing terms before sharing sensitive or proprietary material. ARCHi makes no copyright or exclusive ownership guarantee.")
                     .font(.system(size: 11)).foregroundStyle(.secondary).lineSpacing(3).padding(.top, 6)
@@ -176,10 +192,10 @@ struct AssistantProviderPanel: View {
                 ForEach(QwenAssistant.supportedModels, id: \.self) { model in Text(model).tag(model) }
             }
             .pickerStyle(.menu).accessibilityLabel("Local Qwen context model")
-            Text("The context role selects exact excerpts only when Temporary session context is on. Changing a local model stops the local reply and clears its context; Codex stays available.")
+            Text("The context role selects exact excerpts only when Temporary session context is on. Changing a local model stops local work and any active native fallback, then clears local context.")
                 .font(.system(size: 11)).foregroundStyle(.secondary).lineSpacing(3)
             Button("Manage session context") { store.open(.memory) }.buttonStyle(.borderless)
-            Text("Connect checks the installed Ollama model without generating an answer. Only Send starts local inference. Model choices apply to this visit.")
+            Text("ARCHi manages the local Qwen connection. Connection checks verify the installed Ollama model without generating an answer. Send starts inference. Model choices apply to this visit.")
                 .font(.system(size: 11)).foregroundStyle(.secondary).lineSpacing(3)
         }
         .disabled(store.isShuttingDown)
@@ -238,6 +254,7 @@ private struct ComparisonReplyLane: View {
                 if provider == .qwen, lane.state == .complete {
                     HamptonReplyReferences(snapshot: store.hamptonSnapshot)
                 }
+                DocumentReadingFeedback(store: store, provider: provider)
                 EvolutionReplyFeedback(store: store, provider: provider)
                 LessonReplyControls(store: store, provider: provider)
                 if let receipt = lane.receipt { AssistantReceiptDetails(receipt: receipt, onOpenGraph: { store.open(.nodeLab) }) }
@@ -250,7 +267,7 @@ private struct ComparisonReplyLane: View {
         }
         .padding(12)
         .frame(minWidth: compact ? 0 : 230, maxWidth: .infinity, alignment: .topLeading)
-        .background(ArchiPalette.lilac.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+        .background(WorkspaceTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(provider.name) comparison result")
     }
@@ -279,7 +296,7 @@ struct HamptonReplyReferences: View {
                 }
                 if proposal.kind != .answer {
                     Text(proposal.kind == .clarify ? "More context needed" : "Unable to answer from this context")
-                        .font(.system(size: 10, weight: .medium)).foregroundStyle(ArchiPalette.violet)
+                        .font(.system(size: 10, weight: .medium)).foregroundStyle(WorkspaceTheme.accent)
                 }
             }
         }

@@ -1,8 +1,8 @@
 {
-  "schema": "archi-unity-bundled-brand/v1",
-  "source": "desktop/Sources/ARCHiDesktop/Resources/Branding/QuotientMark.png",
   "asset": "QuotientMark.png",
-  "sha256": "09d1de14a4c8ff23fdfdcb6ea112b4eb41edd1a4c0d4b0bb84f882e0bc4a10f3",
   "bytes": 849165,
-  "purpose": "Existing application branding, not an identity or edition endorsement"
+  "purpose": "Existing application branding, not an identity or edition endorsement",
+  "schema": "archi-unity-bundled-brand/v1",
+  "sha256": "78c718646763341481f0bd31ec8517be77ffb817365b34e0fa45214b90e36b55",
+  "source": "desktop/Sources/ARCHiDesktop/Resources/Branding/QuotientMark.png"
 }

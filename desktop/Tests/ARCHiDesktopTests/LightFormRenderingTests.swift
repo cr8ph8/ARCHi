@@ -30,7 +30,9 @@ final class LightFormRenderingTests: XCTestCase {
     @MainActor
     func testReducedMotionAndHostedExportUseTheSameDeterministicFrame() throws {
         for form in forms {
-            let expected = try render(LightFormFrame(form: form, phase: 0).frame(width: 256, height: 256), scale: 2)
+            let expected = form == .corePearl
+                ? try render(ArchiLightSeedArt(size: 256, reduceMotion: true), scale: 2)
+                : try render(LightFormFrame(form: form, phase: 0).frame(width: 256, height: 256), scale: 2)
             let reduced = try render(CompanionArt(form: form, size: 256, reduceMotion: true), scale: 2)
             // SwiftUI's system Reduce Motion value is read-only. Its shared
             // `reduceMotion || systemReduceMotion` path is source-reviewed;
@@ -63,6 +65,10 @@ final class LightFormRenderingTests: XCTestCase {
             XCTAssertTrue(identities.insert(equipped).inserted)
             XCTAssertNotEqual(base, equipped)
             for available in [true, false] {
+                if form == .corePearl && !available {
+                    XCTAssertNotEqual(base, CompanionVisualAsset.appearanceID(form: form, family: nil, treatment: .pearlStudy, assetAvailable: false))
+                    continue
+                }
                 XCTAssertEqual(base, CompanionVisualAsset.appearanceID(form: form, family: nil, treatment: .pearlStudy,
                     recipe: recipe, naturalVariation: natural, assetAvailable: available))
             }
@@ -70,7 +76,7 @@ final class LightFormRenderingTests: XCTestCase {
                 XCTAssertLessThanOrEqual("\(id)-expression-\(UInt64.max)".count, 100)
             }
             XCTAssertEqual(CompanionVisualAsset.label(form: form, family: nil, treatment: .pearlStudy,
-                recipe: recipe, naturalVariation: natural, equipment: staff), "\(form.rawValue) · Focus Staff")
+                recipe: recipe, naturalVariation: natural, equipment: staff), "\(form == .corePearl ? "ARCHi · Ball of Light" : form.rawValue) · Focus Staff")
             let basicImage = try XCTUnwrap(CompanionPresenceArt.png(form: form, family: nil))
             let equippedImage = try XCTUnwrap(CompanionPresenceArt.png(form: form, family: nil, equipment: staff))
             XCTAssertNotEqual(basicImage, equippedImage)

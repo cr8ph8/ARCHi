@@ -334,7 +334,8 @@ final class AssistantStoreTests: XCTestCase {
 
     @MainActor
     private func makeStore(_ client: ControlledAssistantClient) -> CompanionStore {
-        CompanionStore(preferenceURL: URL(fileURLWithPath: "/dev/null/unused"), assistant: client, provider: .codex)
+        CompanionStore(preferenceURL: URL(fileURLWithPath: "/dev/null/unused"), assistant: client, provider: .codex,
+            tokenSteward: TokenStewardStore())
     }
 
     @MainActor

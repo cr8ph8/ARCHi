@@ -6,7 +6,7 @@ final class AssistantProviderStoreTests: XCTestCase {
     func testDefaultAndProviderSelectionNeverConnectOrSendAndPreserveSharedDraft() async throws {
         let factory = ProviderClientFactory()
         let store = CompanionStore(preferenceURL: unusedPreferences,
-            assistantFactory: { provider, model in factory.make(provider, model) })
+            assistantFactory: { provider, model in factory.make(provider, model) }, tokenSteward: TokenStewardStore())
         defer { store.disconnectAssistant(); factory.drain() }
         XCTAssertEqual(store.assistantProvider, .qwen)
         XCTAssertEqual(factory.calls.count, 1)
@@ -349,7 +349,7 @@ final class AssistantProviderStoreTests: XCTestCase {
     private func makeStore(_ initial: ProviderControlledClient, provider: AssistantProvider = .qwen,
                            factory: ProviderClientFactory) -> CompanionStore {
         CompanionStore(preferenceURL: unusedPreferences, assistant: initial, provider: provider,
-            assistantFactory: { provider, model in factory.make(provider, model) })
+            assistantFactory: { provider, model in factory.make(provider, model) }, tokenSteward: TokenStewardStore())
     }
 
     @MainActor

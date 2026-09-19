@@ -267,11 +267,15 @@ final class EvolutionStore: ObservableObject {
     /// Set by the profile owner when recovery cannot establish a coherent pair.
     /// This owner must not read, replace or forget a file while that hold remains.
     @Published var persistenceBlockedReason: String?
+    /// The document owner must establish current withdrawals before old
+    /// learning receipts can be loaded. Session preferences remain available.
+    var historicalEvidenceUnavailableReason: String?
     @Published private(set) var status = "Your individual is already distinct. Appearance choices and shared history stay in this session until saved."
     private let deleteFile: (URL) throws -> Void
     // Exact bytes from the last successful explicit Load or Save. Construction
     // does not read disk, so a first Save expects an absent destination.
     private var saveBaseline: Data?
+    private var excludedDocumentRequests = Set<UUID>()
 
     /// A clean initial session does not establish that an earlier save was
     /// loaded. Only successful explicit Load/Save creates a known baseline.
@@ -393,6 +397,7 @@ final class EvolutionStore: ObservableObject {
               sourceDigest != nil || receipt.provider == .qwen else {
             status = "Only a completed local conversation or shared-document request with valid evidence can count."; return false
         }
+        guard !excludedDocumentRequests.contains(requestID) else { return false }
         let binding = EvolutionRequestBinding(receipt: receipt)
         let lessonUse: EvolutionLessonUse?
         if let snapshot = confirmedLesson {
@@ -418,6 +423,42 @@ final class EvolutionStore: ObservableObject {
         }
         usefulReceipts.append(EvolutionUsefulReceipt(requestID: requestID, sourceDigest: sourceDigest?.lowercased(), requestBinding: binding, lessonUse: lessonUse))
         changed(lessonUse == nil ? "Completed request marked useful." : "Completed request marked useful with your confirmed lesson use. Your appearance stays the same.")
+        return true
+    }
+
+    /// Durable document judgments can suppress older saved evidence without
+    /// saving unrelated session choices or changing a previously kept body.
+    func setDocumentFeedbackExclusions(_ ids: Set<UUID>) {
+        excludedDocumentRequests = ids
+        let priorCount = usefulReceipts.count
+        usefulReceipts.removeAll { ids.contains($0.requestID) }
+        if usefulReceipts.count != priorCount {
+            changed("Document feedback withdrawn from this learning review. Save evolution to retain the withdrawal; your appearance stays the same.")
+        }
+    }
+
+    @discardableResult
+    func markDocumentWorkUseful(requestID: UUID, sourceDigest: String,
+                                requestBinding: EvolutionRequestBinding,
+                                confirmedLesson: EvolutionLessonUse? = nil) -> Bool {
+        guard !excludedDocumentRequests.contains(requestID), Self.validDigest(sourceDigest), requestBinding.isValid else {
+            status = "This document outcome is unavailable for learning review."; return false
+        }
+        if let index = usefulReceipts.firstIndex(where: { $0.requestID == requestID }) {
+            let prior = usefulReceipts[index]
+            guard prior.sourceDigest == sourceDigest, prior.requestBinding == requestBinding else { return false }
+            if prior.lessonUse == confirmedLesson || confirmedLesson == nil { return true }
+            guard prior.lessonUse == nil else { return false }
+            usefulReceipts[index] = .init(requestID: requestID, sourceDigest: sourceDigest,
+                requestBinding: requestBinding, lessonUse: confirmedLesson)
+        } else {
+            guard usefulReceipts.count < Self.maximumUsefulReceipts else {
+                status = "The 32-request limit is reached. Withdraw an older experience first."; return false
+            }
+            usefulReceipts.append(.init(requestID: requestID, sourceDigest: sourceDigest,
+                requestBinding: requestBinding, lessonUse: confirmedLesson))
+        }
+        changed("Document outcome added to learning review. Save evolution to keep it; your appearance stays the same.")
         return true
     }
 
@@ -716,6 +757,10 @@ final class EvolutionStore: ObservableObject {
     @discardableResult
     func load() -> Bool {
         guard persistenceAllowed else { return false }
+        if let historicalEvidenceUnavailableReason {
+            status = historicalEvidenceUnavailableReason
+            return false
+        }
         kinGrowthProposal = nil
         guard let url = saveURL else { status = "No evolution save location is configured."; return false }
         do {
@@ -735,6 +780,7 @@ final class EvolutionStore: ObservableObject {
             proposal = nil; previewFamily = nil; kinGrowthProposal = nil; revision &+= 1
             hasUnsavedChanges = false; requiresReplacement = false
             status = "Saved evolution choices loaded. Their receipt identifiers are retained records, not fresh assistant observations."
+            setDocumentFeedbackExclusions(excludedDocumentRequests)
             return true
         } catch {
             requiresReplacement = true

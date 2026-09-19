@@ -3,6 +3,30 @@ import XCTest
 
 final class DesktopDevelopmentScopeTests: XCTestCase {
     @MainActor
+    func testLeavingWorkTogetherRetiresSelectionBeforeTheDestinationOpens() {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("preferences.json")
+        let store = CompanionStore(preferenceURL: url, allowsPlay: false)
+        store.share(text: "A synthetic passage remains in the working copy.", name: "Synthetic note.txt")
+        store.prompt = "An unsent question"
+        store.open(.context)
+        store.selectText(range: NSRange(location: 2, length: 9), sourceRevision: store.sourceRevision)
+        let ticket = store.contextTicket()
+        store.open(.context)
+        XCTAssertNotNil(store.textSelection, "Reopening the current workspace keeps the current passage.")
+        store.onOpenWorkspace = { destination in
+            XCTAssertEqual(destination, .unity)
+            XCTAssertNil(store.textSelection, "Retire geometry before view teardown and destination rendering.")
+        }
+        store.open(.unity)
+        XCTAssertNotEqual(store.contextTicket(), ticket)
+        XCTAssertEqual(store.sharedText, "A synthetic passage remains in the working copy.")
+        XCTAssertEqual(store.prompt, "An unsent question")
+        XCTAssertFalse(store.unityPresentation.isSharing)
+        store.onOpenWorkspace = nil
+        store.disconnectAssistant()
+    }
+
+    @MainActor
     func testDisabledPlayCannotOpenThroughStoreOrSidebarSelection() {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("preferences.json")
         let store = CompanionStore(preferenceURL: url, allowsPlay: false)

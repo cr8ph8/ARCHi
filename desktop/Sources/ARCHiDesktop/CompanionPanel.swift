@@ -174,12 +174,15 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
                 self?.store.desktopInterest.cancel()
             }
         }.store(in: &subscriptions)
-        store.desktopInterest.$phase.receive(on: RunLoop.main).sink { [weak self] phase in
+        store.desktopInterest.$phase.receive(on: RunLoop.main).sink { [weak self] _ in
             guard let self else { return }
-            self.interaction.setAccessibilityValue(self.store.cursorAccessibilityValue)
+            // Read the owned session after delivery. An earlier queued phase
+            // must not restart tracking after Stop or a newer acquisition.
+            let phase = self.store.desktopInterest.phase
+            self.refreshInterestPresentation()
             self.interestTracking?.cancel(); self.interestTracking = nil
             guard phase == .aiming || phase == .targeted || phase == .reading else {
-                self.interestOutline.show(nil); return
+                self.interestOutline.hide(); return
             }
             self.interestTracking = Task { [weak self] in
                 while !Task.isCancelled {
@@ -189,6 +192,14 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
                 }
             }
         }.store(in: &subscriptions)
+        store.desktopInterest.$target.combineLatest(store.desktopInterest.$message)
+            .receive(on: RunLoop.main).sink { [weak self] _ in
+                self?.refreshInterestPresentation()
+            }.store(in: &subscriptions)
+        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification)
+            .receive(on: RunLoop.main).sink { [weak self] _ in
+                self?.refreshInterestPresentation()
+            }.store(in: &subscriptions)
         store.$section.removeDuplicates().dropFirst().sink { [weak self] _ in
             self?.dismissChatBubble()
         }.store(in: &subscriptions)
@@ -203,7 +214,7 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
     deinit {
         interestTracking?.cancel()
         let outline = interestOutline
-        Task { @MainActor in outline.show(nil) }
+        Task { @MainActor in outline.hide() }
         NotificationCenter.default.removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
@@ -220,7 +231,11 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
     func setPresentedInHabitat(_ active: Bool) {
         guard active != presentedInHabitat else { return }
         presentedInHabitat = active
-        if active { interaction.cancelPointerGesture(); dismissChatBubble(); window.orderOut(nil) }
+        if active {
+            interaction.cancelPointerGesture(); dismissChatBubble()
+            store.desktopInterest.cancel(reason: "ARCHi moved to Habitat. Point again on the desktop.")
+            interestOutline.hide(); window.orderOut(nil)
+        }
         else if store.isVisible { window.orderFrontRegardless() }
     }
 
@@ -269,6 +284,7 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
         // Published preferences arrive before the stored property is replaced.
         // Use that incoming value so the spoken body never trails the drawing.
         interaction.setAccessibilityValue(store.cursorAccessibilityValue(for: preferences))
+        refreshInterestPresentation(preferences: preferences)
     }
 
     private func move(to proposed: CGRect, pointer: CGPoint? = nil, forceInvalidation: Bool = false) {
@@ -288,13 +304,22 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
     private func refreshInterestTarget() {
         let session = store.desktopInterest
         guard window.isVisible, window.isOnActiveSpace, store.isVisible, !store.isShuttingDown else {
-            session.cancel(); interestOutline.show(nil); return
+            session.cancel(); interestOutline.hide(); return
         }
         if session.phase == .aiming {
             session.hover(at: CGPoint(x: window.frame.midX, y: window.frame.midY + window.frame.height * 0.12))
         } else { session.refreshBoundary() }
-        let active = session.phase == .aiming || session.phase == .targeted || session.phase == .reading
-        interestOutline.show(active ? session.target?.frame : nil)
+        refreshInterestPresentation()
+    }
+
+    private func refreshInterestPresentation(preferences incoming: CompanionPreferences? = nil) {
+        let preferences = incoming ?? store.preferences
+        interaction.setAccessibilityValue(store.cursorAccessibilityValue(for: preferences))
+        guard !presentedInHabitat, window.isVisible, window.isOnActiveSpace,
+              store.isVisible, !store.isShuttingDown else { interestOutline.hide(); return }
+        interestOutline.show(cue: store.desktopInterest.cue, quiet: preferences.quiet,
+            reduceMotion: preferences.reduceMotion,
+            systemReduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
     @objc private func displaysChanged(_ notification: Notification) {
         interaction.cancelPointerGesture()
@@ -340,7 +365,7 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
         previewWindow?.contentView = NSHostingView(rootView: PlacementGhostBody(
             form: store.cursorPresentationForm, family: store.presentationFamily, treatment: store.preferences.visualTreatment,
             staysPut: preview.candidate.staysPut, recipe: store.presentationRecipe,
-            naturalVariation: store.presentationNaturalVariation, equipment: store.preferences.equipment))
+            naturalVariation: store.presentationNaturalVariation, equipment: store.preferences.equipment, seedColor: store.preferences.seedColor))
         previewWindow?.setFrame(preview.candidate.frame, display: true, animate: false)
         previewWindow?.orderFrontRegardless()
     }
@@ -359,11 +384,12 @@ private struct PlacementGhostBody: View {
     let recipe: CompanionAppearanceRecipe?
     let naturalVariation: CompanionNaturalVariation?
     let equipment: CompanionEquipment
+    let seedColor: CompanionSeedColor
     var body: some View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
                 CompanionPresenceArt(form: form, family: family, size: geometry.size.width * 0.80, reduceMotion: true,
-                    treatment: treatment, recipe: recipe, naturalVariation: naturalVariation, equipment: equipment)
+                    treatment: treatment, recipe: recipe, naturalVariation: naturalVariation, equipment: equipment, seedColor: seedColor)
                     .opacity(staysPut ? 0 : 0.34).frame(maxHeight: .infinity)
                 Text(staysPut ? "STAY HERE" : "PREVIEW")
                     .font(.system(size: 9, weight: .semibold)).tracking(1)
@@ -559,6 +585,7 @@ private final class CompanionInteractionView: NSView {
         _ = add("Work together…", #selector(context))
         menu.addItem(.separator())
         _ = add("Appearance…", #selector(openAppearance))
+        _ = add("Test marketplace…", #selector(openMarketplace))
         let quiet = add("Quiet mode", #selector(toggleQuiet))
         quiet.state = store.preferences.quiet ? .on : .off
         _ = add("Settings…", #selector(settings))
@@ -573,6 +600,7 @@ private final class CompanionInteractionView: NSView {
     @objc private func context() { store.open(.context) }
     @objc private func pointAtWindow() { store.beginDesktopInterest() }
     @objc private func openAppearance() { store.open(.appearance) }
+    @objc private func openMarketplace() { store.open(.marketplace) }
     @objc private func toggleQuiet() { store.preferences.quiet.toggle() }
     @objc private func settings() { store.open(.rhythm) }
     @objc private func hide() { store.hideCompanion() }

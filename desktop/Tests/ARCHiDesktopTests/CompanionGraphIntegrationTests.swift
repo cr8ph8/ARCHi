@@ -176,6 +176,7 @@ final class CompanionGraphIntegrationTests: XCTestCase {
         XCTAssertEqual(store.companionGraphSnapshot(at: fixture.now), localRemoved,
                        "The revoked local completion cannot reinsert its request or lesson into the graph")
         XCTAssertEqual(store.compareResults[.codex]?.receipt, external)
+        XCTAssertEqual(try fixture.files(), files, "The revoked local completion cannot rewrite retained state")
 
         fixture.codex.resolve()
         try await waitUntil { !store.isWorking }
@@ -185,7 +186,21 @@ final class CompanionGraphIntegrationTests: XCTestCase {
         XCTAssertEqual(completed.nodes.filter { $0.kind == .request }.count, 1)
         XCTAssertTrue(completed.nodes.contains { $0.kind == .answer })
         XCTAssertFalse(graphText(completed).contains(privateText))
-        XCTAssertEqual(try fixture.files(), files)
+        let completedFiles = try fixture.files()
+        let journalSuffix = "/preferences.steward.json"
+        XCTAssertEqual(completedFiles.filter { !$0.key.hasSuffix(journalSuffix) },
+                       files.filter { !$0.key.hasSuffix(journalSuffix) },
+                       "Only the surviving provider's usage journal may change when its answer completes")
+        let journalURL = fixture.profile.deletingPathExtension().appendingPathExtension("steward.json")
+        let retainedUsage = TokenStewardStore(url: journalURL)
+        let task = try XCTUnwrap(retainedUsage.tasks.first)
+        XCTAssertNil(retainedUsage.loadError)
+        XCTAssertEqual(retainedUsage.tasks.count, 1)
+        XCTAssertEqual(task.lanes.first { $0.provider == AssistantProvider.qwen.name }?.state, "cancelled")
+        XCTAssertEqual(task.lanes.first { $0.provider == AssistantProvider.codex.name }?.state, "complete")
+        XCTAssertFalse(String(decoding: try Data(contentsOf: journalURL), as: UTF8.self).contains(privateText))
+        XCTAssertEqual(store.companionGraphSnapshot(at: fixture.now), completed)
+        XCTAssertEqual(try fixture.files(), completedFiles, "Reading the completed graph adds no persistence")
         XCTAssertEqual(fixture.reasoner.requests.count, 1)
         XCTAssertEqual(fixture.codex.requests.count, 1)
         XCTAssertTrue(fixture.selector.requests.isEmpty)

@@ -12,4 +12,5 @@ struct LessonCorrectionDraft: Identifiable, Equatable {
     var source: LessonSource?
     var origin: LessonOrigin?
     var expiresAt: Date?
+    var taskScope: HamptonTaskScope? = nil
 }

@@ -1,7 +1,7 @@
 import AppKit
 
 /// The desktop owns its minimum independently of SwiftUI's repeated hosting
-/// measurements. NavigationSplitView may reset NSWindow's minimum to zero as
+/// measurements. SwiftUI hosting may reset NSWindow's minimum to zero as
 /// content changes; that must not make the message controls unreachable.
 @MainActor
 final class WorkspaceWindow: NSWindow {

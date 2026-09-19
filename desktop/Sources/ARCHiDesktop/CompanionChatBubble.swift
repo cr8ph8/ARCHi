@@ -195,7 +195,7 @@ struct CompanionChatBubble: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 8) {
                 Image(systemName: "bubble.left.and.bubble.right").foregroundStyle(ArchiPalette.violet)
-                Text(store.activeQiMon == nil ? "ARCHi" : "KIN · ARCHi")
+                Text(store.activeQiMon.map { "\($0.name) · ARCHi" } ?? "ARCHi")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
                 Spacer(minLength: 0)
                 AssistantTaskCue(activity: store.assistantActivity, quiet: store.preferences.quiet,
@@ -224,7 +224,7 @@ struct CompanionChatBubble: View {
                         .buttonStyle(.borderless).font(.system(size: 10))
                         .disabled(store.isShuttingDown)
                         .accessibilityIdentifier("companion-chat.lessons")
-                        .help("Inspect, correct or withdraw lessons in What I remember. Topic phrases: "
+                        .help("Inspect, correct or withdraw lessons in What I remember. Matched lessons: "
                             + store.nextReplyLessons.map(\.topic).joined(separator: ", ")
                             + ". Kept lessons stay on this Mac; opening them makes no model call.")
                     Text(store.nextCallBudget).font(.system(size: 10)).foregroundStyle(.secondary)
@@ -243,7 +243,10 @@ struct CompanionChatBubble: View {
             }
             .frame(minHeight: 65, maxHeight: .infinity)
             Divider()
-            AssistantComposerConnections(store: store)
+            HStack {
+                AssistantComposerConnections(store: store)
+                ARCActiveAssistantActions(store: store)
+            }
             TextField("Ask a question or describe a task…", text: $store.prompt, axis: .vertical)
                 .font(.system(size: 13)).textFieldStyle(.plain).lineLimit(2...3)
                 .focused($composerFocused)
@@ -268,8 +271,7 @@ struct CompanionChatBubble: View {
                 } else {
                     Button("Send", systemImage: "arrow.up") { store.submit() }
                         .buttonStyle(.borderedProminent)
-                        .disabled(!store.canBeginReply || store.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            || (store.requestsRevision && store.textSelection == nil))
+                        .disabled(!AssistantComposerState(store: store).canSend)
                         .keyboardShortcut(.return, modifiers: .command)
                         .accessibilityIdentifier("companion-chat.send")
                 }
@@ -301,7 +303,17 @@ struct CompanionChatBubble: View {
     }
 
     @ViewBuilder private var replies: some View {
-        if store.route == .compare {
+        if store.showsARC3Reply {
+                        ARC3AssistantReply(store: store, session: store.arc3)
+                    } else if store.activeARCAnswer != nil {
+            ARCActiveAssistantReply(store: store)
+        } else if store.compareResults.values.contains(where: { $0.revision != nil }) {
+            ForEach(AssistantProvider.allCases) { provider in
+                if let result = store.compareResults[provider] {
+                    WorkTogetherReplyLane(store: store, provider: provider, result: result)
+                }
+            }
+        } else if store.route == .compare {
             ComparisonReplyPanels(store: store, compact: true)
         } else if let result = store.compareResults[store.assistantProvider] {
             VStack(alignment: .leading, spacing: 8) {
@@ -313,6 +325,7 @@ struct CompanionChatBubble: View {
                 if result.revision != nil {
                     Button("Review revision in Assistant", action: openAssistant).buttonStyle(.borderless)
                 }
+                DocumentReadingFeedback(store: store, provider: store.assistantProvider)
                 LessonReplyControls(store: store, provider: store.assistantProvider)
                 if let receipt = result.receipt {
                     DisclosureGroup("Reply details") { AssistantReceiptDetails(receipt: receipt, onOpenGraph: { store.open(.nodeLab) }) }

@@ -493,7 +493,8 @@ private final class RoutingFixture {
     var cloud: RoutingControlledClient { factory.cloud }
     lazy var store = CompanionStore(preferenceURL: URL(fileURLWithPath: "/dev/null/unused"),
         assistant: local, provider: .qwen,
-        assistantFactory: { [factory] provider, model in factory.make(provider, model) })
+        assistantFactory: { [factory] provider, model in factory.make(provider, model) },
+        tokenSteward: TokenStewardStore())
 
     func client(_ provider: AssistantProvider) -> RoutingControlledClient { provider == .qwen ? local : cloud }
 

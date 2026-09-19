@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 enum CompanionGraphKind: String, CaseIterable, Identifiable, Sendable {
-    case companion, source, lesson, request, invocation, answer, context, omission
+    case companion, source, lesson, request, invocation, answer, context, omission, evaluation, accounting
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -14,6 +14,8 @@ enum CompanionGraphKind: String, CaseIterable, Identifiable, Sendable {
         case .answer: "Answer outcome"
         case .context: "Temporary context"
         case .omission: "Omission"
+        case .evaluation: "ARC evidence"
+        case .accounting: "Task accounting"
         }
     }
     var symbol: String {
@@ -26,11 +28,17 @@ enum CompanionGraphKind: String, CaseIterable, Identifiable, Sendable {
         case .answer: "text.bubble"
         case .context: "text.quote"
         case .omission: "minus.circle"
+        case .evaluation: "square.grid.3x3"
+        case .accounting: "chart.bar.doc.horizontal"
         }
     }
 }
 
-enum CompanionGraphTarget: String, Sendable { case assistant, context, memory, advanced }
+enum CompanionGraphTarget: Equatable, Sendable {
+    case assistant, context, memory, advanced, capabilities, steward, interactiveARC
+    case arcEvidence(proposalHash: String)
+    case stewardTask(taskID: String)
+}
 struct CompanionGraphDetail: Equatable, Sendable { let label: String; let value: String }
 struct CompanionGraphNode: Identifiable, Equatable, Sendable {
     let id: String
@@ -62,11 +70,15 @@ enum CompanionGraph {
     static let maximumNodes = 220
     static let maximumEdges = 500
     static func build(receipts: [AssistantLaneReceipt], lessons: [KeptLesson], source: CompanionGraphSource?,
-                      now: Date, records: [SessionContextRecord] = [], turn: Int = 0) -> CompanionGraphSnapshot {
+                      now: Date, records: [SessionContextRecord] = [], turn: Int = 0,
+                      arcRecords: [ARCCapabilitiesRecord] = [], arcError: String? = nil,
+                      accountingTasks: [TokenStewardTask] = [], accountingError: String? = nil) -> CompanionGraphSnapshot {
         var projection = Projection(source: source, now: now)
         projection.add("companion-archi", title: "ARCHi", subtitle: "Your existing companion", kind: .companion,
             status: "Read-only view", details: [.init(label: "Scope", value: "Existing records and request receipts. Connections do not establish truth or change memory.")], target: .assistant)
         projection.addCurrentSource()
+        // ARC owns the checked bundles. The graph never re-scores or persists them.
+        projection.addARC(arcRecords, error: arcError, tasks: accountingTasks, accountingError: accountingError)
         let orderedLessons = lessons.sorted { lessonKey($0) < lessonKey($1) }
         projection.truncated += max(0, orderedLessons.count - 64)
         for lesson in orderedLessons.prefix(64) where lesson.isValid { projection.addLesson(lesson) }
@@ -132,6 +144,72 @@ enum CompanionGraph {
             guard !edgeIDs.contains(id) else { return }
             guard nodeIDs.contains(from), nodeIDs.contains(to), edges.count < maximumEdges else { truncated += 1; return }
             edges.append(.init(id: id, source: from, target: to, label: label)); edgeIDs.insert(id)
+        }
+
+        mutating func addARC(_ records: [ARCCapabilitiesRecord], error: String?,
+                             tasks: [TokenStewardTask], accountingError: String?) {
+            if let error {
+                let id = "arc-shelf-error"
+                add(id, title: "ARC operation needs attention", subtitle: "Existing owner reported a problem",
+                    kind: .evaluation, status: "Review required",
+                    details: [.init(label: "Outcome", value: error),
+                        .init(label: "Meaning", value: "The latest operation did not complete. Existing results retain their last successful evaluation. Open ARC to review the reported problem; this graph does not repair files.")], target: .capabilities)
+                edge("companion-archi", id, "evidence review needed")
+            }
+            let ordered = records.sorted { $0.id < $1.id }
+            truncated += max(0, ordered.count - 16)
+            for record in ordered.prefix(16) {
+                let summary = record.summary, counts = summary.counts
+                let scope: String
+                let accountingScope: String
+                if let solving = record.solverEvidence {
+                    scope = "Recorded local symbolic search: \(solving.run.attemptedPrograms) rule attempts, \(solving.run.matchingPrograms) training fits; \(solving.run.outcome.rawValue). No model calls, growth, memory or permission changes. Opening this graph does not rerun the solver."
+                    accountingScope = "Local search and checking elapsed time. No model calls or API charges; CPU and energy cost is unmeasured. Repeated runs remain separate tasks in Token Steward."
+                } else {
+                    scope = "Local rescoring of supplied predictions. No solver execution or model calls; no growth, memory or permission changes."
+                    accountingScope = "Rescoring invokes no model. The cost of originally generating these predictions is unknown. Repeated checks remain separate tasks in Token Steward."
+                }
+                let id = key("arc-evaluation", record.id)
+                let sourceID = key("arc-manifest", summary.manifestHash)
+                let target = CompanionGraphTarget.arcEvidence(proposalHash: record.id)
+                add(sourceID, title: summary.sourceLabel, subtitle: "Frozen ARC manifest", kind: .source,
+                    status: summary.sourceStatus == "synthetic-fixture" ? "Synthetic fixture" : "Unverified offline snapshot",
+                    details: [.init(label: "Manifest ID", value: summary.manifestID),
+                        .init(label: "Manifest hash", value: summary.manifestHash),
+                        .init(label: "Scope", value: "\(counts.totalTasks) tasks · \(counts.totalExamples) test examples"),
+                        .init(label: "Meaning", value: "A retained bundle reference. Hashes identify content; they do not authenticate its source.")], target: target)
+                add(id, title: "ARC · \(counts.exact) of \(counts.totalExamples) exact",
+                    subtitle: summary.sourceLabel, kind: .evaluation,
+                    status: "Proposed · Not certified",
+                    details: [.init(label: "Outcome", value: "Exact \(counts.exact) · Incorrect \(counts.incorrect) · Missing \(counts.missing) · Invalid \(counts.invalid) · Unscored \(counts.unscored)"),
+                        .init(label: "Coverage", value: "Receipts \(summary.receiptCoverageComplete ? "complete" : "incomplete") · Scoring \(summary.scoredCoverageComplete ? "complete" : "incomplete")"),
+                        .init(label: "Scope", value: scope),
+                        .init(label: "Solver ID", value: summary.solverID),
+                        .init(label: "Meaning", value: "Solver provenance remains unattested. A perfect score still does not certify a capability."),
+                        .init(label: "Recorded", value: record.recordedAt.ISO8601Format()),
+                        .init(label: "Application task ID", value: record.taskID),
+                        .init(label: "Proposal hash", value: record.id),
+                        .init(label: "Bundle hash", value: record.bundleHash),
+                        .init(label: "Checker", value: ARCCapabilitiesEvaluator.scorer)], target: target)
+                edge("companion-archi", id, "checked evidence")
+                edge(sourceID, id, "rescored from")
+
+                // The usage journal is shared across profiles. Only the exact
+                // application-owned retention task may join this profile's graph.
+                let task = accountingError == nil ? tasks.first { task in
+                    task.id == record.taskID && task.route == "arc-evaluation" &&
+                    task.outcomes.contains { $0.kind == .checked && $0.evidenceID == record.id && $0.value == summary.allExact }
+                } : nil
+                let accountingID = key("arc-accounting", record.taskID)
+                let duration = task?.lanes.first?.elapsedMilliseconds.map { "\($0) ms" } ?? "Unavailable"
+                add(accountingID, title: "ARC task accounting", subtitle: "Original retention task", kind: .accounting,
+                    status: task == nil ? "Accounting unavailable" : "Recorded · Offline check",
+                    details: [.init(label: "Application task ID", value: record.taskID),
+                        .init(label: "Elapsed", value: duration),
+                        .init(label: "Outcome", value: task == nil ? (accountingError ?? "No matching accounting receipt is available.") : "The check completed. All predictions exact: \(summary.allExact ? "yes" : "no")."),
+                        .init(label: "Scope", value: accountingScope)], target: .stewardTask(taskID: record.taskID))
+                edge(id, accountingID, task == nil ? "accounting unavailable" : "accounted by")
+            }
         }
 
         mutating func addCurrentSource() {

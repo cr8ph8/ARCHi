@@ -6,7 +6,7 @@ final class HamptonStoreTests: XCTestCase {
     func testNativeWrapperStartsWithContextOffAndOnlyExplicitSendGenerates() async throws {
         let factory = HamptonStoreFactory()
         let store = CompanionStore(preferenceURL: preferences,
-            assistantFactory: { provider, model in factory.make(provider, model) })
+            assistantFactory: { provider, model in factory.make(provider, model) }, tokenSteward: TokenStewardStore())
         defer { store.disconnectAssistant(); factory.drain() }
         let rig = try XCTUnwrap(factory.rigs.first)
         XCTAssertEqual(store.assistantProvider, .qwen)
@@ -406,7 +406,7 @@ final class HamptonStoreTests: XCTestCase {
                 if let factory { return factory.make(provider, model) }
                 XCTFail("This test should not replace its injected client")
                 return HamptonStoreCodexClient()
-            })
+            }, tokenSteward: TokenStewardStore())
     }
 
     @MainActor

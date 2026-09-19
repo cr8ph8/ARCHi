@@ -15,7 +15,7 @@ struct ReactorExpressionPanel: View {
                         .font(.system(size: 19, weight: .medium, design: .rounded))
                     Spacer()
                     Text(reactor.state.title).font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(ArchiPalette.violet).accessibilityIdentifier("reactor-state")
+                        .foregroundStyle(WorkspaceTheme.accent).accessibilityIdentifier("reactor-state")
                 }
                 Text("Bring a little motion to the same ARCHi. Preview locally, then optionally try a short hosted expression.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)

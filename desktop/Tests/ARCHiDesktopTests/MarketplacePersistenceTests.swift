@@ -69,6 +69,39 @@ final class MarketplacePersistenceTests: XCTestCase {
         XCTAssertEqual(client.calls, 0)
     }
 
+    func testInvalidItemReviewExplainsRejectionWithoutChangingExistingProfileOrOutfit() throws {
+        let fixture = try Fixture(); defer { fixture.remove() }
+        let document = savedDocument(equipped: staff, library: [staff, star])
+        _ = try NativePreferencePersistence.write(document: document, to: fixture.preferences, expected: nil)
+        let original = try Data(contentsOf: fixture.preferences)
+        let client = MarketplacePersistenceNoCalls()
+        let store = makeStore(at: fixture.preferences, client: client)
+        let preferences = store.preferences
+        let identity = store.activeQiMon
+        let revision = store.lessonRevision
+
+        var missing = CompanionItemPackage.creatorDefault
+        missing.title = " "
+        missing.creator = ""
+        var malformed = CompanionItemPackage.creatorDefault
+        malformed.title = "private\u{0000}name"
+        malformed.summary = String(repeating: "x", count: 161)
+        for item in [missing, malformed] {
+            XCTAssertFalse(store.collectMarketItem(item))
+            XCTAssertEqual(store.marketplaceMessage, item.review.correctionMessage)
+            XCTAssertFalse(store.marketplaceMessage.isEmpty)
+            XCTAssertFalse(store.marketplaceMessage.contains("private"))
+            XCTAssertEqual(store.itemLibrary, document.itemLibrary)
+            XCTAssertEqual(store.preferences, preferences)
+            XCTAssertEqual(store.activeQiMon, identity)
+            XCTAssertEqual(store.keptLessons, document.lessons)
+            XCTAssertEqual(store.lessonRevision, revision)
+            XCTAssertEqual(try Data(contentsOf: fixture.preferences), original)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.evolution.path))
+            XCTAssertEqual(client.calls, 0)
+        }
+    }
+
     func testRemovingCurrentAndSavedDesignCommitsTogetherAndPreservesOtherProfileData() throws {
         let fixture = try Fixture(); defer { fixture.remove() }
         let document = savedDocument(equipped: staff, library: [staff, star])
@@ -172,7 +205,7 @@ final class MarketplacePersistenceTests: XCTestCase {
         XCTAssertEqual(try NativePreferencePersistence.read(fixture.preferences).baseline, legacyBytes)
         XCTAssertTrue(store.collectMarketItem(staff))
         let migrated = try NativePreferencePersistence.read(fixture.preferences).document
-        XCTAssertEqual(migrated.schema, "archi-native-preferences/v5")
+        XCTAssertEqual(migrated.schema, NativePreferenceDocument.currentSchema)
         XCTAssertEqual(migrated.revision, 13)
         XCTAssertEqual(migrated.preferences, legacyPreferences)
         XCTAssertEqual(migrated.lessons, source.lessons)
