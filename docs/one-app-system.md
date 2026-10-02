@@ -16,6 +16,8 @@ Open `/Applications/ARCHi.app`. Home, Ask ARCHi, Memory map, Work together, Mark
 
 Local Qwen, the representation runtime, Unity and creative authoring tools serve these owners. Keeping a helper does not create a second companion. Do not import donor applications' profile stores, model brokers or shells wholesale. See [current status](system-status-2026-09-29.md) for which research consumers are operational and which remain unfinished.
 
+ARCHi's local records are the canonical authority; WikiOS is a linked interface. See the [native authority and lineage map](native-authority-and-lineage.md) for exact owners, immutable task references, acquisition declarations and future plugin boundaries.
+
 ## Source and delivery
 
 The primary authored workspace is the main ARCHi repository. The local `output/source-checkpoint-2026-09-25/publication-01` checkout is the curated draft-PR source. They have different purposes: authored work can contain pending art, iPhone changes, research attachments and private local outputs that are not ready for publication or installation.

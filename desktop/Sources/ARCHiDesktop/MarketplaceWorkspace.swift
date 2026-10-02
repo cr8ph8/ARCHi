@@ -19,6 +19,7 @@ struct MarketplaceWorkspace: View {
     @State private var selected: CompanionItemPackage? = CompanionItemCatalog.designs.first
     @State private var removal: CompanionItemPackage?
     @State private var reviewOriginIsCatalog = false
+    @State private var reviewDownload: MarketplaceDownloadedItem?
     private enum ImportHandoff {
         case variation(CompanionItemPackage), workTogether(CompanionItemPackage)
     }
@@ -88,11 +89,11 @@ struct MarketplaceWorkspace: View {
             query = ""
             selected = nil
         }
-        .onChange(of: service.downloadedRecipe, initial: true) { _, recipe in
-            guard let recipe else { return }
+        .onChange(of: service.downloadedItem, initial: true) { _, download in
+            guard let download else { return }
             reviewOriginIsCatalog = true
-            store.importedMarketItem = recipe
-            service.downloadedRecipe = nil
+            reviewDownload = download
+            store.importedMarketItem = download.recipe
         }
         .sheet(item: $store.importedMarketItem, onDismiss: completeImportHandoff) { item in
             ScrollView {
@@ -299,6 +300,30 @@ struct MarketplaceWorkspace: View {
                         .accessibilityHint("Opens your working copy. Select a passage there to point to it.")
                         .accessibilityIdentifier("marketplace.use-work-together")
                 }
+                if let acquisition = store.marketItemAcquisition(for: item)
+                    ?? (isCatalogReview(item) ? reviewDownload?.acquisition : nil) {
+                    DisclosureGroup("Acquisition declaration") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Publisher: @\(acquisition.publisher.handle) · \(acquisition.publisher.displayName)")
+                            Text("Acquired by @\(acquisition.acquiringAccount.handle) on \(acquisition.acquiredAt)")
+                            Text("Listing \(acquisition.listingID) · version \(acquisition.listingVersion)")
+                            Text("Inventory record: \(acquisition.inventoryID)")
+                            Text("Catalog: \(acquisition.catalogEndpoint)")
+                            Text("Publisher declaration: \(acquisition.provenance.declaration.title)")
+                            Text(acquisition.provenance.attribution)
+                            if !acquisition.provenance.source.isEmpty { Text(acquisition.provenance.source) }
+                            Text("Catalog-supplied attribution and access history. Legal ownership and the declared rights have not been independently verified.")
+                        }.font(.caption).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    }.font(.system(size: 11)).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("marketplace.acquisition-declaration")
+                } else {
+                    Text("No catalog acquisition record is retained for this design.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if isCatalogReview(item), reviewDownload.map({ service.isCurrent($0) }) != true {
+                    Text("This download is no longer current. Download it again from your account library before adding it.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 DisclosureGroup("Recipe details") {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Design revision \(item.revision)").font(.caption)
@@ -324,6 +349,11 @@ struct MarketplaceWorkspace: View {
 
     @ViewBuilder private func actions(_ item: CompanionItemPackage, allowsRemoval: Bool) -> some View {
         if store.itemLibrary.contains(item) {
+            if isCatalogReview(item) {
+                Button("Save acquisition record") { collect(item) }
+                    .disabled(reviewDownload.map({ service.isCurrent($0) }) != true)
+                    .accessibilityIdentifier("marketplace.save-acquisition")
+            }
             Button(store.preferences.equipment.design?.id == item.id ? "Equipped · Unequip" : "Equip") {
                 if store.preferences.equipment.design?.id == item.id { _ = store.unequipMarketItem(item) }
                 else { _ = store.equipMarketItem(item) }
@@ -333,14 +363,27 @@ struct MarketplaceWorkspace: View {
                     .accessibilityIdentifier("marketplace.remove")
             }
         } else {
-            Button("Add on this Mac", systemImage: "plus") { _ = store.collectMarketItem(item) }
-                .buttonStyle(WorkspaceActionStyle(prominent: true)).disabled(!item.isValid || collectionIsFull(for: item))
+            Button("Add on this Mac", systemImage: "plus") { collect(item) }
+                .buttonStyle(WorkspaceActionStyle(prominent: true))
+                .disabled(!item.isValid || collectionIsFull(for: item)
+                    || (isCatalogReview(item) && reviewDownload.map({ service.isCurrent($0) }) != true))
                 .accessibilityIdentifier("marketplace.collect")
         }
         Button("Export recipe") { store.exportMarketItem(item) }.disabled(!item.isValid)
             .accessibilityIdentifier("marketplace.export")
         Button("Make a variation") { handoff(.variation(item)) }
             .accessibilityIdentifier("marketplace.variation")
+    }
+
+    private func isCatalogReview(_ item: CompanionItemPackage) -> Bool {
+        reviewOriginIsCatalog && store.importedMarketItem?.id == item.id
+    }
+
+    private func collect(_ item: CompanionItemPackage) {
+        if isCatalogReview(item) {
+            guard let reviewDownload, reviewDownload.recipe == item else { return }
+            _ = store.collectMarketDownload(reviewDownload)
+        } else { _ = store.collectMarketItem(item) }
     }
 
     private func collectionIsFull(for item: CompanionItemPackage) -> Bool {
@@ -358,6 +401,8 @@ struct MarketplaceWorkspace: View {
 
     private func completeImportHandoff() {
         reviewOriginIsCatalog = false
+        reviewDownload = nil
+        service.dismissDownload()
         guard let action = importHandoff else { return }
         importHandoff = nil
         perform(action)

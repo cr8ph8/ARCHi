@@ -95,6 +95,7 @@ enum CompanionGraph {
         let orderedReceipts = receipts.sorted { receiptKey($0) < receiptKey($1) }
         projection.truncated += max(0, orderedReceipts.count - 64)
         for receipt in orderedReceipts.prefix(64) { projection.addReceipt(receipt) }
+        if accountingError == nil { projection.addRetainedProvenance(accountingTasks) }
         return .init(nodes: projection.nodes, edges: projection.edges, truncatedCount: projection.truncated)
     }
 
@@ -214,6 +215,48 @@ enum CompanionGraph {
                         .init(label: "Outcome", value: task == nil ? (accountingError ?? "No matching accounting receipt is available.") : "The check completed. All predictions exact: \(summary.allExact ? "yes" : "no")."),
                         .init(label: "Scope", value: accountingScope)], target: .stewardTask(taskID: record.taskID))
                 edge(id, accountingID, task == nil ? "accounting unavailable" : "accounted by")
+            }
+        }
+
+        mutating func addRetainedProvenance(_ tasks: [TokenStewardTask]) {
+            let retained = tasks.filter { $0.requestProvenance?.isValid == true }.sorted {
+                $0.startedAt == $1.startedAt ? $0.id < $1.id : $0.startedAt > $1.startedAt
+            }
+            truncated += max(0, retained.count - 12)
+            for task in retained.prefix(12) {
+                guard let provenance = task.requestProvenance,
+                      let lane = task.lanes.first(where: { $0.provider == AssistantProvider.qwen.name }) else { continue }
+                let taskID = key("retained-local-request", task.id)
+                guard add(taskID, title: "Retained local request", subtitle: task.id, kind: .accounting,
+                    status: lane.dispatched ? lane.state.capitalized : "Prepared",
+                    details: [.init(label: "Request ID", value: task.id),
+                        .init(label: "Input digest", value: provenance.inputDigest),
+                        .init(label: "Knowledge context digest", value: provenance.knowledgeContextDigest ?? "Not recorded"),
+                        .init(label: "Purpose", value: provenance.isKnowledgeAcquisition ? "Editable knowledge proposal" : "Local assistance"),
+                        .init(label: "Meaning", value: "Captured source references from Usage. These do not establish current availability, model citation, factual truth or title rights.")],
+                    target: .stewardTask(taskID: task.id)) else { continue }
+                edge("companion-archi", taskID, "retained request provenance")
+                for binding in provenance.readingDependencies ?? [] {
+                    let id = key("retained-source-reference", binding.id, String(binding.revision), binding.digest,
+                        binding.provenance?.digest ?? "")
+                    if add(id, title: "Captured source version", subtitle: binding.id, kind: .source,
+                        status: "Historical reference", details: [.init(label: "Source ID", value: binding.id),
+                            .init(label: "Revision", value: String(binding.revision)), .init(label: "Digest", value: binding.digest),
+                            .init(label: "Provenance digest", value: binding.provenance?.digest ?? "No declaration recorded"),
+                            .init(label: "Availability", value: "Inspect the source owner. A newer source cannot replace this exact reference.")], target: .memory) {
+                        edge(id, taskID, lane.dispatched ? "captured dependency at dispatch" : "prepared dependency")
+                    }
+                }
+                for binding in provenance.knowledgeDependencies ?? [] {
+                    let id = key("retained-page-reference", binding.id, String(binding.revision), binding.digest)
+                    if add(id, title: "Captured page version", subtitle: binding.id, kind: .knowledge,
+                        status: "Historical reference", details: [.init(label: "Page ID", value: binding.id),
+                            .init(label: "Revision", value: String(binding.revision)), .init(label: "Digest", value: binding.digest),
+                            .init(label: "Availability", value: "Inspect the page history. This reference does not substitute the latest version or certify its claim.")],
+                        target: .knowledgePage(id: binding.id)) {
+                        edge(id, taskID, lane.dispatched ? "captured dependency at dispatch" : "prepared dependency")
+                    }
+                }
             }
         }
 

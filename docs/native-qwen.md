@@ -14,4 +14,6 @@ Usage records local attempts separately from Codex subscription requests. Unknow
 
 The optional representation route is described in [representation source](representation-source.md). It remains off until an explicitly imported compatible reader satisfies its scoped checks. Installing Qwen alone does not qualify a reader.
 
+The [2 October core hardening](core-assurance-2026-10-02.md) rejects duplicate JSON identity/content fields before provider responses are trusted. Optional duplicate usage counters remain unavailable accounting. When another session changes saved personal context or lessons, the existing preference baseline invalidates affected local work and follow-up reuse; it does not authorize external fallback or overwrite the changed file. Source/page request bindings now persist in the existing native task owner; see [authority and lineage](native-authority-and-lineage.md).
+
 See [the current source checkpoint](native-alpha-checkpoint-2026-09-25.md) for scope and distribution limits.

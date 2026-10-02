@@ -50,6 +50,11 @@ struct QwenChatStreamEvent {
     }
 
     init(data: Data) throws {
+        // Ambiguous message, identity, and action fields are never safe to
+        // collapse. Only optional top-level accounting keeps diagnostic-only
+        // duplicate handling; the same names in nested objects stay strict.
+        var keys = UniqueJSONKeys(bytes: Array(data), allowingDuplicateTopLevelKeys: Self.metricFields)
+        try keys.validate()
         // JSONDecoder still validates the complete JSON and decodes every
         // non-metric field before accounting is considered.
         value = try JSONDecoder().decode(Payload.self, from: data).value

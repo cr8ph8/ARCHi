@@ -262,7 +262,7 @@ final class LocalQwenRuntime: LocalQwenRuntimeManaging {
         do {
             var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 0.75)
             request.setValue("application/json", forHTTPHeaderField: "Accept")
-            let (bytes, response) = try await session.bytes(for: request, delegate: LocalQwenRuntimeRedirectPolicy())
+            let (bytes, response) = try await session.bytes(for: request, delegate: HTTPNoRedirectPolicy())
             try Task.checkCancellation()
             guard let http = response as? HTTPURLResponse, http.url == url, http.statusCode == 200 else { return false }
             var data = Data()
@@ -301,12 +301,4 @@ private final class LocalQwenOwnedProcess: LocalQwenRuntimeProcess {
 
     var isRunning: Bool { process.isRunning }
     func terminate() { if process.isRunning { process.terminate() } }
-}
-
-private final class LocalQwenRuntimeRedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-    func urlSession(_ session: URLSession, task: URLSessionTask,
-                    willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
-                    completionHandler: @escaping (URLRequest?) -> Void) {
-        completionHandler(nil)
-    }
 }

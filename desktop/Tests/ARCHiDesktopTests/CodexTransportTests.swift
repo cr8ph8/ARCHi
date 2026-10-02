@@ -151,6 +151,34 @@ struct CodexTransportTests {
         }
     }
 
+    @Test(arguments: ["duplicate_thread_key", "escaped_duplicate_thread_key"])
+    func ambiguousThreadConfigurationNeverReceivesDocument(_ mode: String) async throws {
+        let fixture = try CodexProcessFixture(mode: mode)
+        defer { fixture.cleanup() }
+        let client = CodexAssistant(executable: fixture.executable)
+        do {
+            try await client.connect()
+            await #expect(throws: AssistantFailure.protocolError) {
+                try await client.reply(to: request) { _ in Issue.record("Ambiguous configuration published a response") }
+            }
+            #expect(!fixture.requests.contains { $0["method"]?.string == "turn/start" },
+                    "Reject duplicate security fields before sending the document")
+            await client.shutdown()
+            #expect(fixture.livePIDs.isEmpty)
+        } catch { await client.shutdown(); throw error }
+    }
+
+    @Test func ambiguousConfigurationResponseCannotCompletePreflight() async throws {
+        let fixture = try CodexProcessFixture(mode: "duplicate_config_result")
+        defer { fixture.cleanup() }
+        let client = CodexAssistant(executable: fixture.executable)
+        await #expect(throws: AssistantFailure.protocolError) { try await client.connect() }
+        #expect(!fixture.requests.contains { $0["method"]?.string == "thread/start" })
+        #expect(!fixture.requests.contains { $0["method"]?.string == "turn/start" })
+        await client.shutdown()
+        #expect(fixture.livePIDs.isEmpty)
+    }
+
     @Test func shutdownWaitsForChildrenThatIgnoreTermination() async throws {
         let fixture = try CodexProcessFixture(mode: "ignore_term")
         defer { fixture.cleanup() }
@@ -297,6 +325,12 @@ def emit(value):
     sys.stdout.flush()
 
 def reply(request, value):
+    if mode == "duplicate_config_result" and request.get("method") == "config/read":
+        # Even identical duplicate values are an ambiguous protocol envelope.
+        payload = json.dumps(value, separators=(",", ":"))
+        sys.stdout.write('{"id":' + str(request["id"]) + ',"result":' + payload + ',"result":' + payload + '}\n')
+        sys.stdout.flush()
+        return
     emit({"id": request["id"], "result": value})
 
 def notify(method, params):
@@ -334,6 +368,13 @@ for line in sys.stdin:
         elif mode == "roots_drift": value["runtimeWorkspaceRoots"] = ["/unexpected-root"]
         elif mode == "network_drift": value["sandbox"]["networkAccess"] = True
         elif mode == "instructions_drift": value["instructionSources"] = ["/unexpected/AGENTS.md"]
+        if mode in ("duplicate_thread_key", "escaped_duplicate_thread_key"):
+            payload = json.dumps({"id": request["id"], "result": value}, separators=(",", ":"))
+            duplicate_key = 'networkAccess' if mode == "duplicate_thread_key" else 'network\\u0041ccess'
+            payload = payload.replace('"networkAccess":false', '"networkAccess":false,"' + duplicate_key + '":false')
+            sys.stdout.write(payload + "\n")
+            sys.stdout.flush()
+            continue
         reply(request, value)
     elif method == "turn/start":
         base = {"threadId": "fixture-thread", "turnId": "fixture-turn"}

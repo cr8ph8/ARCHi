@@ -71,12 +71,17 @@ struct AssistantReplyStream {
             let bodyBytes = body.utf8.count
             guard bodyBytes <= Self.textLimit else { throw AssistantFailure.protocolError }
             let phase = try decodePhase(item["phase"])
-            if let settled = messages[id], settled.settled {
+            if var settled = messages[id], settled.settled {
                 // A completion can precede a delayed start notification. A repeated
-                // completion must preserve the content already received.
+                // completion must preserve the content already received, while
+                // delayed explicit phase metadata still constrains its use.
                 if method == "item/completed" {
-                    guard body == settled.text,
-                          phase == .unknown || settled.phase == .unknown || phase == settled.phase else { throw AssistantFailure.protocolError }
+                    guard body == settled.text else { throw AssistantFailure.protocolError }
+                }
+                if phase != .unknown {
+                    guard settled.phase == .unknown || phase == settled.phase else { throw AssistantFailure.protocolError }
+                    settled.phase = phase
+                    messages[id] = settled
                 }
                 return
             }

@@ -147,6 +147,36 @@ struct QwenAssistantTests {
         #expect(QwenFixtureProtocol.state.requests.isEmpty)
     }
 
+    @Test func duplicateLocalityMetadataIsRejectedBeforeConnectionAndGeneration() async throws {
+        for mode in [QwenFixtureMode.duplicateTag, .duplicateShow] {
+            let client = makeClient(mode)
+            defer { client.disconnect() }
+            await #expect(throws: QwenFailure.invalidResponse) { try await client.connect() }
+            #expect(client.metadata == nil)
+            #expect(!QwenFixtureProtocol.state.requests.contains { $0.url?.path == "/api/chat" })
+        }
+        for mode in [QwenFixtureMode.duplicateReverifiedTag, .duplicateReverifiedShow] {
+            let client = makeClient(mode)
+            defer { client.disconnect() }
+            try await client.connect()
+            await #expect(throws: QwenFailure.invalidResponse) {
+                try await client.reply(to: sourceRequest()) { _ in Issue.record("Ambiguous model received a question") }
+            }
+            #expect(client.metadata == nil)
+            #expect(!QwenFixtureProtocol.state.requests.contains { $0.url?.path == "/api/chat" })
+        }
+    }
+
+    @Test func modelDiscoveryRejectsDuplicateLocalityMetadata() async {
+        QwenFixtureProtocol.state.reset(mode: .duplicateTag)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [QwenFixtureProtocol.self]
+        await #expect(throws: QwenFailure.invalidResponse) {
+            _ = try await QwenAssistant.discoverInstalledModels(configuration: configuration)
+        }
+        #expect(QwenFixtureProtocol.state.requests.map(\.url!.path) == ["/api/tags"])
+    }
+
     @Test func replacingInstalledAliasFailsReverificationBeforeSendingSource() async throws {
         let client = makeClient(.changedDigest)
         defer { client.disconnect() }
@@ -225,7 +255,7 @@ struct QwenAssistantTests {
         let origin = URL(string: "http://127.0.0.1:11434/api/chat")!
         let task = session.dataTask(with: origin) // Never resumed.
         let response = HTTPURLResponse(url: origin, statusCode: 307, httpVersion: nil, headerFields: nil)!
-        let policy = QwenRedirectPolicy()
+        let policy = HTTPNoRedirectPolicy()
         for destination in ["https://example.invalid/collect", "http://127.0.0.1:11434/another"] {
             var called = false
             policy.urlSession(session, task: task, willPerformHTTPRedirection: response,
@@ -262,6 +292,40 @@ struct QwenAssistantTests {
 }
 
 struct QwenReplyStreamTests {
+    @Test func ambiguousSecurityFieldsCannotPublishTextOrFinish() {
+        let wires = [
+            #"{"model":"qwen3.5:9b","mo\u0064el":"other-model","message":{"role":"assistant","content":"Answer"},"done":true,"done_reason":"stop"}"#,
+            #"{"model":"qwen3.5:9b","message":{"role":"assistant","content":"Answer"},"mess\u0061ge":{"role":"tool","content":"Tool text"},"done":true,"done_reason":"stop"}"#,
+            #"{"model":"qwen3.5:9b","message":{"role":"assistant","content":"Answer","thinking":"","think\u0069ng":"Private reasoning"},"done":true,"done_reason":"stop"}"#,
+            #"{"model":"qwen3.5:9b","message":{"role":"assistant","content":"Answer","tool_calls":[],"tool_\u0063alls":[{}]},"done":true,"done_reason":"stop"}"#,
+            #"{"model":"qwen3.5:9b","message":{"role":"assistant","content":"Answer"},"done":true,"do\u006ee":false,"done_reason":"stop"}"#,
+            #"{"model":"qwen3.5:9b","remote_host":"","remote_\u0068ost":"https://ollama.com","message":{"role":"assistant","content":"Answer"},"done":true,"done_reason":"stop"}"#
+        ]
+        for wire in wires {
+            var stream = QwenReplyStream(model: "qwen3.5:9b")
+            #expect(throws: QwenFailure.invalidResponse) { try stream.consume(Data(wire.utf8)) }
+            #expect(stream.text.isEmpty)
+            #expect(!stream.done)
+            #expect(stream.metrics == nil)
+        }
+    }
+
+    @Test func duplicateMetricExceptionAppliesOnlyToTopLevelAccounting() throws {
+        let valid = #"{"model":"qwen3.5:9b","message":{"role":"assistant","content":"Answer"},"done":true,"done_reason":"stop","eval_count":2,"eval_\u0063ount":3}"#
+        var stream = QwenReplyStream(model: "qwen3.5:9b")
+        _ = try stream.consume(Data(valid.utf8))
+        try stream.finish()
+        #expect(stream.text == "Answer")
+        #expect(stream.metrics == LocalInferenceMetrics(malformedFields: ["eval_count"]))
+
+        let nested = #"{"model":"qwen3.5:9b","message":{"role":"assistant","content":"Answer","eval_count":2,"eval_\u0063ount":3},"done":true,"done_reason":"stop"}"#
+        var rejected = QwenReplyStream(model: "qwen3.5:9b")
+        #expect(throws: QwenFailure.invalidResponse) { try rejected.consume(Data(nested.utf8)) }
+        #expect(rejected.text.isEmpty)
+        #expect(!rejected.done)
+        #expect(rejected.metrics == nil)
+    }
+
     @Test func metricsComeOnlyFromTheAcceptedTerminalEvent() throws {
         var stream = QwenReplyStream(model: "qwen3.5:9b")
         var early = QwenFixtureProtocol.chunk("Answer", done: false).object!
@@ -407,6 +471,7 @@ struct QwenReplyStreamTests {
 
 private enum QwenFixtureMode: Sendable {
     case normal, remoteTag, remoteShow, wrongFamily, missing, noCompletion, changedDigest
+    case duplicateTag, duplicateShow, duplicateReverifiedTag, duplicateReverifiedShow
     case holdChat, holdFirstTags, noDone, truncatedAnswer, timedOut, redirectResponse, revisionMalformed, revisionHold
 }
 
@@ -459,13 +524,27 @@ private final class QwenFixtureProtocol: URLProtocol, @unchecked Sendable {
             var tag: [String: JSONValue] = ["name": .string("qwen3.5:9b"), "model": .string("qwen3.5:9b"),
                 "details": details, "digest": .string(String(repeating: mode == .changedDigest && tagsCount > 1 ? "b" : "a", count: 64))]
             if mode == .remoteTag { tag["remote_host"] = .string("https://ollama.com") }
-            send(.object(["models": .array(mode == .missing ? [] : [.object(tag)])]))
+            if mode == .duplicateTag || (mode == .duplicateReverifiedTag && tagsCount > 1) {
+                tag["remote_host"] = .string("")
+                let encoded = String(decoding: try! JSONEncoder().encode(JSONValue.object(tag)), as: UTF8.self)
+                let ambiguous = String(encoded.dropLast()) + #", "remote_\u0068ost":"https://ollama.com"}"#
+                send(data: Data((#"{"models":["# + ambiguous + "]}").utf8))
+            } else {
+                send(.object(["models": .array(mode == .missing ? [] : [.object(tag)])]))
+            }
         } else if path == "/api/show" {
             var info: [String: JSONValue] = ["details": details,
                 "model_info": .object(["general.architecture": .string(mode == .wrongFamily ? "llama" : "qwen35")]),
                 "capabilities": .array(mode == .noCompletion ? [] : [.string("completion"), .string("thinking")])]
             if mode == .remoteShow { info["remote_model"] = .string("cloud") }
-            send(.object(info))
+            if mode == .duplicateShow || (mode == .duplicateReverifiedShow && tagsCount > 1) {
+                info["remote_model"] = .string("")
+                let encoded = String(decoding: try! JSONEncoder().encode(JSONValue.object(info)), as: UTF8.self)
+                let ambiguous = String(encoded.dropLast()) + #", "remote_\u006dodel":"cloud"}"#
+                send(data: Data(ambiguous.utf8))
+            } else {
+                send(.object(info))
+            }
         } else {
             if let body = captured.httpBody,
                let envelope = try? JSONDecoder().decode(JSONValue.self, from: body),
@@ -494,7 +573,11 @@ private final class QwenFixtureProtocol: URLProtocol, @unchecked Sendable {
     }
 
     private func send(_ value: JSONValue, newline: Bool = false) {
-        var data = try! JSONEncoder().encode(value)
+        send(data: try! JSONEncoder().encode(value), newline: newline)
+    }
+
+    private func send(data value: Data, newline: Bool = false) {
+        var data = value
         if newline { data.append(10) }
         // Split inside UTF-8 as well as JSON boundaries to exercise byte framing.
         let split = data.count / 2

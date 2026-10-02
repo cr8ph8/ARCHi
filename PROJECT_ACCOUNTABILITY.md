@@ -1,3 +1,13 @@
+## 2 October 2026 — Core admission and attributable native records
+
+`R02-CORE-ASSURANCE` · **IMPLEMENTED_INSTALLED_FOCUSED** · [Delivery and scope](docs/core-assurance-2026-10-02.md) · [Authority and lineage](docs/native-authority-and-lineage.md) · [Evidence](docs/accountability/evidence/r02-core-assurance-2026-10-02.json)
+
+ARCHi local records remain authoritative, with WikiOS as a linked interface. Hardened Codex/Qwen duplicate-field parsing, delayed reply-phase handling and cross-session private-memory revocation. Exact source/page dependencies now persist before task dispatch and remain inspectable after restart. Marketplace collection retains exact acquisition declarations in preferences v10 with session-bound review, immutable conflicts and no invented legacy rights. Fixed a loader mismatch for source provenance in kept-lesson origins. Three duplicate redirect-denial implementations now use one shared helper; no new state journal was added.
+
+Focused sets passed: 74 initial boundary/numerical checks, 90 provenance/transport checks and 53 acquisition/migration/backup checks. Sets overlap and are not summed as unique evidence. No model calls, puzzles, training or broad suite. Guarded install and deep/strict signature passed; compiled/installed program UUID and text hashes match. All 23 monitored JSON files and 435 bundled resources stayed unchanged, including retained Seed assets. Rollback is retained outside Applications.
+
+Installed Home → Memory map → Marketplace → Home navigation was observed through native accessibility readback; Qwen was connected with nothing sent. Missing acquisition evidence was labeled explicitly. Populated acquisition acceptance uses scripted transport and disposable profiles; no live catalog transaction, private-profile mutation or phone walkthrough occurred. Rights declarations are not verified legal title. Plugin connection, global cross-owner recovery, reader/transfer qualification and existing release blockers remain open.
+
 ## 30 September 2026 — Method review stays attached to its exact version
 
 The current outcome and restarted review queue now show the existing method used by an edit, its version-specific outcomes and next reuse guidance. Ordinary source edits retain their kept-method relationship after withdrawal, correction or supersession. Stale owners or missing versions show an unavailable state. This closes a visible handoff that previously invited duplicate method families; existing review, source and preparation owners remain authoritative.

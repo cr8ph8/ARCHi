@@ -148,9 +148,15 @@ enum HamptonProposalValidator {
 /// syntax. String keys are decoded so escaped duplicates cannot bypass checks.
 struct UniqueJSONKeys {
     let bytes: [UInt8]
+    // Optional telemetry may deliberately treat duplicate root fields as
+    // unavailable accounting. Identity, content and nested fields remain strict.
+    private let allowingDuplicateTopLevelKeys: Set<String>
     private var index = 0
 
-    init(bytes: [UInt8]) { self.bytes = bytes }
+    init(bytes: [UInt8], allowingDuplicateTopLevelKeys: Set<String> = []) {
+        self.bytes = bytes
+        self.allowingDuplicateTopLevelKeys = allowingDuplicateTopLevelKeys
+    }
 
     mutating func validate() throws {
         try value(depth: 0)
@@ -170,7 +176,9 @@ struct UniqueJSONKeys {
             while true {
                 whitespace()
                 let key = try string()
-                guard keys.insert(key).inserted else { throw HamptonProposalValidationError.duplicateKey }
+                guard keys.insert(key).inserted || (depth == 0 && allowingDuplicateTopLevelKeys.contains(key)) else {
+                    throw HamptonProposalValidationError.duplicateKey
+                }
                 whitespace()
                 guard take(58) else { throw HamptonProposalValidationError.malformedJSON }
                 try value(depth: depth + 1)

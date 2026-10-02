@@ -314,7 +314,7 @@ final class CompanionStore: ObservableObject {
     let evolution: EvolutionStore
     let reactor = ReactorExpressionStore()
     let unityPresentation = UnityPresentationConnection()
-    let marketplaceCatalog = MarketplaceCatalogStore()
+    let marketplaceCatalog: MarketplaceCatalogStore
     private var evolutionSubscriptions = Set<AnyCancellable>()
     private var documentDataSubscriptions = Set<AnyCancellable>()
     private var lastEvolutionAppearanceID: String?
@@ -586,6 +586,7 @@ final class CompanionStore: ObservableObject {
 
     var nextReplyConversation: [AssistantConversationExchange] {
         localConversationEnabled && route != .codex
+            && localPreferenceMemoryIsCurrent
             && (localContextTaskScope == nil || localContextTaskScope == currentTaskScope)
             && readingDependenciesAreCurrent(localConversationReadingSources)
             && knowledgeDependenciesAreCurrent(localConversationKnowledgePages)
@@ -644,7 +645,9 @@ final class CompanionStore: ObservableObject {
          monotonicTime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
          wallClock: @escaping () -> Date = Date.init, allowsPlay: Bool = true,
          voiceInput: VoiceInputController? = nil, interestReader: (any DesktopInterestReading)? = nil,
-         tokenSteward: TokenStewardStore? = nil, arcCapabilities: ARCCapabilitiesStore? = nil, arc3: ARC3SessionStore? = nil) {
+         tokenSteward: TokenStewardStore? = nil, arcCapabilities: ARCCapabilitiesStore? = nil, arc3: ARC3SessionStore? = nil,
+         marketplaceCatalog: MarketplaceCatalogStore? = nil) {
+        self.marketplaceCatalog = marketplaceCatalog ?? MarketplaceCatalogStore()
         self.voiceInput = voiceInput ?? VoiceInputController()
         self.desktopInterest = DesktopInterestSession(reader: interestReader)
         self.allowsPlay = allowsPlay
@@ -2213,6 +2216,7 @@ final class CompanionStore: ObservableObject {
             status = "Finish or cancel voice input before sending. Your draft is unchanged."
             return false
         }
+        if route.providers.contains(.qwen), !requireCurrentLocalPreferenceMemory() { return false }
         if !localConversationRequestIDs.isEmpty {
             do { try tokenSteward.refresh() } catch {
                 status = "Reading history is unavailable. Nothing was sent."
@@ -2532,6 +2536,10 @@ final class CompanionStore: ObservableObject {
                 }
                 if let reading = request.localReading {
                     guard self.readingReferencesAreCurrent(reading.references) else { throw QwenFailure.invalidResponse }
+                }
+                if let receipt = self.compareResults[provider]?.receipt,
+                   let provenance = TokenStewardRequestProvenance.capture(receipt) {
+                    try self.tokenSteward.recordRequestProvenance(requestID: requestID, provenance: provenance)
                 }
                 try self.tokenSteward.recordDispatch(requestID: requestID, provider: provider)
                 guard self.readingContinuationIsCurrent(conversationParents) else { throw QwenFailure.invalidResponse }
@@ -2933,6 +2941,7 @@ final class CompanionStore: ObservableObject {
         guard !isShuttingDown && replyOwners[provider] == owner && assistants[provider] === client
             && connectionGenerations[provider, default: 0] == epoch
             && isCurrentContent(ticket) else { return false }
+        if provider == .qwen, !requireCurrentLocalPreferenceMemory() { return false }
         // Recheck the actual target before dispatch and every incoming event,
         // even after the short staff animation has completed.
         if let pointing = compareResults[provider]?.receipt?.pointing,
@@ -3185,9 +3194,22 @@ final class CompanionStore: ObservableObject {
         }
     }
 
-    // Item recipes share the existing profile's atomic admission and recovery.
+    // Item recipes and acquisition claims share the profile's atomic admission.
+    func marketItemAcquisition(for item: CompanionItemPackage) -> MarketplaceItemAcquisition? {
+        preferenceDocument.itemAcquisitions?.first { $0.matches(item) }
+    }
+
     @discardableResult
-    func collectMarketItem(_ item: CompanionItemPackage) -> Bool {
+    func collectMarketDownload(_ download: MarketplaceDownloadedItem) -> Bool {
+        guard marketplaceCatalog.isCurrent(download) else {
+            marketplaceMessage = "This download is no longer current. Download it again from the signed-in account library."
+            return false
+        }
+        return collectMarketItem(download.recipe, acquisition: download.acquisition)
+    }
+
+    @discardableResult
+    func collectMarketItem(_ item: CompanionItemPackage, acquisition: MarketplaceItemAcquisition? = nil) -> Bool {
         guard !isShuttingDown else {
             marketplaceMessage = "Choose a valid item recipe before adding it."; return false
         }
@@ -3195,16 +3217,34 @@ final class CompanionStore: ObservableObject {
         guard review.isValid else {
             marketplaceMessage = review.correctionMessage; return false
         }
-        guard !itemLibrary.contains(where: { $0.id == item.id }) else {
+        guard acquisition?.matches(item) ?? true else {
+            marketplaceMessage = "The acquisition record does not match this exact design. Nothing was added."; return false
+        }
+        let saved = marketItemAcquisition(for: item)
+        guard acquisition == nil || saved == nil || saved == acquisition else {
+            marketplaceMessage = "This design already has a different acquisition record. Its saved provenance was preserved."; return false
+        }
+        let alreadyCollected = itemLibrary.contains(where: { $0.id == item.id })
+        if alreadyCollected {
+            guard profileRecoveryBlock == nil, preferenceFileReadable, preferenceBaselineKnownCurrent,
+                  let disk = try? NativePreferencePersistence.read(preferenceURL), disk.baseline == preferenceBaseline else {
+                marketplaceMessage = "The saved collection changed outside this session. Reopen ARCHi before adding this design."
+                return false
+            }
+        }
+        guard !alreadyCollected || (acquisition != nil && saved == nil) else {
             marketplaceMessage = "This exact design is already in My items."; return true
         }
-        guard itemLibrary.count < CompanionItemPackage.maximumLibraryCount else {
+        guard alreadyCollected || itemLibrary.count < CompanionItemPackage.maximumLibraryCount else {
             marketplaceMessage = "Your local Alpha collection holds eight designs. Remove one before adding another."; return false
         }
         var next = preferenceDocument
-        next.itemLibrary.append(item)
+        if !alreadyCollected { next.itemLibrary.append(item) }
+        if let acquisition { next.itemAcquisitions = (next.itemAcquisitions ?? []) + [acquisition] }
         guard commitPreferenceDocument(next) else { marketplaceMessage = status; return false }
-        marketplaceMessage = "Added \(item.title) to My items on this Mac. Choose Equip when ready."
+        marketplaceMessage = alreadyCollected
+            ? "Saved this design's catalog acquisition declaration on this Mac. Legal ownership has not been verified."
+            : "Added \(item.title) to My items on this Mac. Choose Equip when ready."
         return true
     }
 
@@ -3268,6 +3308,8 @@ final class CompanionStore: ObservableObject {
         guard !isShuttingDown, itemLibrary.contains(item) else { return false }
         var next = preferenceDocument
         next.itemLibrary.removeAll { $0.id == item.id }
+        next.itemAcquisitions?.removeAll { $0.recipeID == item.id }
+        if next.itemAcquisitions?.isEmpty == true { next.itemAcquisitions = nil }
         if next.preferences?.equipment.design?.id == item.id { next.preferences?.equipment = .empty }
         guard commitPreferenceDocument(next) else { marketplaceMessage = status; return false }
         if preferences.equipment.design?.id == item.id { preferences.equipment = .empty }
@@ -3516,6 +3558,7 @@ final class CompanionStore: ObservableObject {
     func isCurrentReplyContext(_ receipt: AssistantLaneReceipt) -> Bool {
         guard isCurrentContent(receipt.context), readingDependenciesAreCurrent(receipt.readingDependencies),
               knowledgeDependenciesAreCurrent(receipt.knowledgeDependencies) else { return false }
+        if receipt.provider == .qwen, !localPreferenceMemoryIsCurrent { return false }
         guard let pointing = receipt.pointing else { return true }
         return isCurrent(receipt.context, requireVisible: false) && isCurrentPointing(pointing)
     }
@@ -3560,6 +3603,7 @@ extension CompanionStore {
 
     private func dependencyBoundedLessons(question: String, taskScope: HamptonTaskScope)
         -> (snapshots: [LessonSnapshot], omissionCount: Int) {
+        guard localPreferenceMemoryIsCurrent else { return ([], 0) }
         func union<T: Equatable>(_ lhs: [T], _ rhs: [T]) -> [T] {
             rhs.reduce(into: lhs) { if !$0.contains($1) { $0.append($1) } }
         }
@@ -3597,7 +3641,8 @@ extension CompanionStore {
     }
 
     func currentKeptLesson(matching snapshot: LessonSnapshot) -> KeptLesson? {
-        keptLessons.first {
+        guard localPreferenceMemoryIsCurrent else { return nil }
+        return keptLessons.first {
             LessonSnapshot(lesson: $0) == snapshot && $0.isValid && lessonDependenciesAreCurrent($0.origin)
                 && ($0.expiresAt == nil || $0.expiresAt! > wallClock())
         }
@@ -3617,6 +3662,7 @@ extension CompanionStore {
 
     func beginLessonCorrection(for provider: AssistantProvider? = nil, revisingID: String? = nil) {
         guard !isShuttingDown else { return }
+        if provider == .qwen, !requireCurrentLocalPreferenceMemory() { return }
         if let provider, compareResults[provider]?.receipt?.isKnowledgeAcquisition == true { return }
         if let revisingID {
             guard let prior = keptLessons.first(where: { $0.id == revisingID }) else { return }
@@ -3718,6 +3764,7 @@ extension CompanionStore {
         export.focusGesture = nil
         export.qiMon = nil
         export.itemLibrary = []
+        export.itemAcquisitions = nil
         export.personalContext = nil
         return try export.encoded()
     }
@@ -3735,6 +3782,28 @@ extension CompanionStore {
     }
 
     var personalContext: PersonalContext? { preferenceDocument.personalContext }
+
+    /// The loaded envelope owns saved private context and lessons. Another
+    /// session's correction or forget must revoke their cached and indirect use,
+    /// just as a changed kept-source journal revokes its request snapshots.
+    private var localPreferenceMemoryIsCurrent: Bool {
+        guard preferenceDocument.personalContext != nil || !preferenceDocument.lessons.isEmpty else { return true }
+        guard preferenceFileReadable, preferenceBaselineKnownCurrent, profileRecoveryBlock == nil else { return false }
+        do { return try NativePreferencePersistence.read(preferenceURL).baseline == preferenceBaseline }
+        catch { return false }
+    }
+
+    private func requireCurrentLocalPreferenceMemory() -> Bool {
+        guard !localPreferenceMemoryIsCurrent else { return true }
+        preferenceBaselineKnownCurrent = false
+        clearSessionContext()
+        let reason = "Saved personal context or lessons changed outside this session. Reopen ARCHi before using local memory again."
+        localConversationNotice = reason
+        lessonMessage = reason
+        if assistantProvider == .qwen { reply = reason }
+        status = reason
+        return false
+    }
 
     @discardableResult
     func updatePersonalContext(_ value: PersonalContext?, expected: PersonalContext?) -> Bool {

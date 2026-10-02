@@ -1,0 +1,143 @@
+{
+  "schema": "archi-research-source-review/v1",
+  "reviewedOn": "2026-10-02",
+  "scope": "Primary-source research intake and current native source mapping; documentation only.",
+  "checkout": {
+    "head": "15544acf37152a400045e627a7def753e272c4ad",
+    "branch": "codex/archi-encounter-composition-v1",
+    "authoredChangesPresent": true,
+    "installedBinaryReverified": false
+  },
+  "sources": [
+    {
+      "id": "ride",
+      "paper": "https://arxiv.org/html/2609.36484v1",
+      "repository": "https://github.com/xixixixixxxx/RIDE",
+      "conversationID": "6abf49af-ccf8-83e8-9054-4d09ff4383ee",
+      "evidenceStatus": "Author-reported results; no independent reproduction in this intake.",
+      "releaseStatus": "Repository overview only; training code, evaluation scripts and checkpoints not included on review date."
+    },
+    {
+      "id": "loopcd-2610",
+      "paper": "https://arxiv.org/html/2610.02185v1",
+      "conversationID": "6abfc2d9-689c-83e8-a2ad-4f0df865625f",
+      "evidenceStatus": "Author-reported quality and analytical FLOPs; no ARCHi latency measurement.",
+      "releaseStatus": "No official implementation link located; this is a bounded search finding, not proof none exists.",
+      "nameCollision": {
+        "differentPaper": "https://arxiv.org/abs/2609.24196",
+        "differentRepository": "https://github.com/byeonghoyu/LoopCD"
+      }
+    },
+    {
+      "id": "semantic-calibration",
+      "paper": "https://arxiv.org/html/2511.04869v1",
+      "conversationID": "6abe8b30-bdd8-83e8-9cd3-604238ea697c",
+      "evidenceStatus": "Source theory and experiments; no ARCHi answer-calibration qualification."
+    },
+    {
+      "id": "opaque-reasoning",
+      "paper": "https://arxiv.org/html/2608.09867v1",
+      "authorReport": "https://research.snyk.io/blog/stealing-reasoning-traces/",
+      "conversationID": "6abf6310-5394-83e8-a8b9-d7ea70a0c7af",
+      "evidenceStatus": "Defensive review only; no extraction, credential inspection or live exploit. Provider patch coverage not established."
+    }
+  ],
+  "conversationHandling": "User-supplied cached previews used as context; primary papers checked independently. Referenced generated archives were not recovered.",
+  "codeBindings": [
+    {
+      "path": "desktop/Sources/ARCHiDesktop/HamptonNumericalDynamics.swift",
+      "line": 74,
+      "sha256": "51264c93ec0f65ff49867444e3e93a9f9e66a38ee3555e96d78d68ef83315d0d"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/HamptonQ2EController.swift",
+      "line": 52,
+      "sha256": "85b0e4a245522d2545df35b87b1fb4d94c827ff5a6e16469017709d727005073"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/QwenAssistant.swift",
+      "line": 33,
+      "sha256": "513bc9a664c5845d30fcd5af2661e6e6d664e5d0fa1019d2afa6c347ec2bab77"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/GGUFRepresentationClient.swift",
+      "line": 15,
+      "sha256": "afdc95ff0292bfd6c2aad8a29f32f2de3e28d354d21e3dcba2eb22008d5a6d46"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/GGUFReaderArtifact.swift",
+      "line": 33,
+      "sha256": "b8e1d40d8d9753adb5f7f60fca003ae1cea3218eeab9e5bbf6edf7562b14200e"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/GGUFReaderQualification.swift",
+      "line": 16,
+      "sha256": "b122d04d6565057d3a897e98c3aa33af9fcd7e4561fe6ab0fa814666f080750b"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/HamptonRepresentation.swift",
+      "line": 133,
+      "sha256": "fcb28ec1c723cff38228267df9b200722afdb644ca35e70adf19e076c3e121f1"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/AssistantConversation.swift",
+      "line": 4,
+      "sha256": "d595a654a866eec6542f56164a9e0fa4b22bbebafc9e0198d1b798d66578719e"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/AssistantReplyStream.swift",
+      "line": 67,
+      "sha256": "234ecdf34412ffad6fc34f7ebce0e784ff9d10a4c238c89dae05f89af88acc0e"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/CompanionStore.swift",
+      "line": 2907,
+      "sha256": "81262f784cbaec5c4e82b1f4644d26d4282259964b07b9888530a38d2e45a4e3"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/CodexAssistant.swift",
+      "line": 499,
+      "sha256": "5173517c4e35b7c123e4677f701adc6e551f7677c98ccc08aef1a1581e8f8aad"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/HamptonProposalValidation.swift",
+      "line": 17,
+      "sha256": "b8cc5c48b1849a17571d113c21ba2359524d093b6b963a1c29946e08a89f950f"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/HamptonAdmissionOutcome.swift",
+      "line": 72,
+      "sha256": "0f449e5e604b584e306b3372aa57aa366eb93e4b1b212e599687a581c92cd52e"
+    },
+    {
+      "path": "docs/accountability/evidence/r30-paste-intake-2026-09-30.json",
+      "line": 1,
+      "sha256": "262dc0093aa3cecc00f9daa55351c5c47c2b9dbfad1b25f0f6c3e5bda3abc945"
+    },
+    {
+      "path": "docs/native-qwen-representation.md",
+      "line": 1,
+      "sha256": "9b49c88d40ddabb5889ef2fdd9d38bec49ff89dd5ac9b40ff58a51a33125c883"
+    },
+    {
+      "path": "docs/hampton-work-status-2026-09-30.md",
+      "line": 1,
+      "sha256": "3ebaf83f368c5d984ba75ac786d6d9b538cfc00e757926e92b0404085060d08c"
+    }
+  ],
+  "execution": {
+    "modelCalls": 0,
+    "puzzleRuns": 0,
+    "trainingRuns": 0,
+    "testSuitesRun": 0,
+    "appInstallation": false,
+    "profileChanges": false,
+    "gitPublication": false
+  },
+  "proposedOrder": [
+    "everyday proposal fidelity",
+    "provider continuity containment",
+    "task-scoped representation qualification",
+    "separate training or recurrent decoding candidates"
+  ]
+}

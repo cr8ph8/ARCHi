@@ -88,7 +88,7 @@ final class MarketplaceServiceIntegrationTests: XCTestCase {
         XCTAssertEqual(creator.listings.first { $0.id == initial.id }?.status, .archived)
         reader.search = ""; await reader.refreshCatalog()
         XCTAssertFalse(reader.catalog.contains { $0.id == initial.id })
-        reader.downloadedRecipe = nil
+        reader.dismissDownload()
         await reader.download(acquisition)
         XCTAssertEqual(reader.downloadedRecipe, firstRecipe, "Acquired immutable versions remain downloadable after archive.")
         await reader.signOut()

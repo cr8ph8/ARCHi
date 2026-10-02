@@ -106,6 +106,7 @@ require_selected_app_stopped
 cp "$BIN_DIR/ARCHiDesktop" "$BUNDLE_DIR/Contents/MacOS/ARCHiDesktop"
 # The native art loader uses this packaged location, never a development fallback.
 cp -R "$REPO_ROOT/desktop/Sources/ARCHiDesktop/Resources/CompanionArt" "$BUNDLE_DIR/Contents/Resources/CompanionArt"
+python3 "$REPO_ROOT/script/verify_preserved_liminal_seed.py" --app "$BUNDLE_DIR"
 test -f "$BUNDLE_DIR/Contents/Resources/CompanionArt/archi-pearl-study-v1.png"
 cp -R "$REPO_ROOT/desktop/Sources/ARCHiDesktop/Resources/Branding" "$BUNDLE_DIR/Contents/Resources/Branding"
 cp "$BUNDLE_DIR/Contents/Resources/Branding/AppIcon.icns" "$BUNDLE_DIR/Contents/Resources/AppIcon.icns"

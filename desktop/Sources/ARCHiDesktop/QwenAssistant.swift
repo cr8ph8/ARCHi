@@ -47,7 +47,7 @@ final class QwenAssistant: AssistantClient, LocalRoleClient {
     private var session: URLSession?
     private var generation: UInt64 = 0
     private var busy = false
-    private let redirects = QwenRedirectPolicy()
+    private let redirects = HTTPNoRedirectPolicy()
 
     init(model: String = defaultModel, configuration: URLSessionConfiguration = .ephemeral,
          runtime: (any LocalQwenRuntimeManaging)? = nil) {
@@ -68,7 +68,7 @@ final class QwenAssistant: AssistantClient, LocalRoleClient {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         do {
             try Task.checkCancellation()
-            let (bytes, response) = try await connection.bytes(for: request, delegate: QwenRedirectPolicy())
+            let (bytes, response) = try await connection.bytes(for: request, delegate: HTTPNoRedirectPolicy())
             try Task.checkCancellation()
             try validate(response, for: request)
             guard response.expectedContentLength <= Int64(LocalModelCatalog.maximumResponseBytes) else {
@@ -81,6 +81,8 @@ final class QwenAssistant: AssistantClient, LocalRoleClient {
                 data.append(byte)
             }
             try Task.checkCancellation()
+            var keys = UniqueJSONKeys(bytes: Array(data))
+            try keys.validate()
             return try LocalModelCatalog.installedModels(from: data)
         } catch { throw failure(error) }
     }
@@ -329,7 +331,13 @@ final class QwenAssistant: AssistantClient, LocalRoleClient {
             guard data.count <= 1_048_576 else { throw QwenFailure.invalidResponse }
         }
         try requireOwner(owner)
-        do { return try JSONDecoder().decode(JSONValue.self, from: data) }
+        do {
+            // Locality and model identity must not depend on which value a
+            // decoder keeps when an untrusted response repeats a field.
+            var keys = UniqueJSONKeys(bytes: Array(data))
+            try keys.validate()
+            return try JSONDecoder().decode(JSONValue.self, from: data)
+        }
         catch { throw QwenFailure.invalidResponse }
     }
 
@@ -361,14 +369,6 @@ final class QwenAssistant: AssistantClient, LocalRoleClient {
             return QwenFailure.unavailable
         }
         return QwenFailure.invalidResponse
-    }
-}
-
-/// Deny every redirect before URLSession can contact its destination.
-final class QwenRedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
-        completionHandler(nil)
     }
 }
 

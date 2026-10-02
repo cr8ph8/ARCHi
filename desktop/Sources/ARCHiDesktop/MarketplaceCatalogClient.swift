@@ -14,7 +14,7 @@ struct MarketplaceURLTransport: MarketplaceHTTPTransport {
         configuration.urlCredentialStorage = nil
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 25
-        let session = URLSession(configuration: configuration, delegate: MarketplaceNoRedirect(), delegateQueue: nil)
+        let session = URLSession(configuration: configuration, delegate: HTTPNoRedirectPolicy(), delegateQueue: nil)
         defer { session.invalidateAndCancel() }
         let (bytes, response) = try await session.bytes(for: request)
         guard let response = response as? HTTPURLResponse else {
@@ -28,13 +28,6 @@ struct MarketplaceURLTransport: MarketplaceHTTPTransport {
             data.append(byte)
         }
         return (data, response)
-    }
-}
-
-private final class MarketplaceNoRedirect: NSObject, URLSessionTaskDelegate, Sendable {
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
-        completionHandler(nil)
     }
 }
 

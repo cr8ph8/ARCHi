@@ -82,6 +82,76 @@ struct MarketplaceInventoryEntry: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// A catalog-supplied acquisition claim retained with the exact local design.
+/// This records attribution and access history, not verified copyright or title.
+struct MarketplaceItemAcquisition: Codable, Equatable, Sendable {
+    static let currentSchema = "archi-item-acquisition/v1"
+    let schema: String
+    let catalogEndpoint: String
+    let inventoryID: String
+    let listingID: String
+    let listingVersion: Int
+    let recipeID: String
+    let recipeRevision: Int
+    let publisher: MarketplaceAccount
+    let acquiringAccount: MarketplaceAccount
+    let provenance: MarketplaceProvenance
+    let acquiredAt: String
+
+    init(entry: MarketplaceInventoryEntry, endpoint: URL, account: MarketplaceAccount) {
+        schema = Self.currentSchema
+        catalogEndpoint = endpoint.absoluteString
+        inventoryID = entry.id; listingID = entry.listingID; listingVersion = entry.version
+        recipeID = entry.recipeID; recipeRevision = entry.recipe.revision
+        publisher = entry.publisher; acquiringAccount = account
+        provenance = entry.provenance; acquiredAt = entry.acquiredAt
+    }
+
+    var isValid: Bool {
+        guard schema == Self.currentSchema,
+              let url = URLComponents(string: catalogEndpoint), catalogEndpoint.utf8.count <= 128,
+              url.scheme == "http", url.host == "127.0.0.1", let port = url.port, (1...65535).contains(port),
+              url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
+              url.path.isEmpty || url.path == "/" else { return false }
+        return UUID(uuidString: inventoryID) != nil && UUID(uuidString: listingID) != nil
+            && listingVersion > 0 && (1...999).contains(recipeRevision)
+            && recipeID.utf8.count == 64 && recipeID.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
+            && publisher.isValid && acquiringAccount.isValid && provenance.isValid
+            && Self.validTimestamp(acquiredAt) && Self.validTimestamp(publisher.createdAt)
+            && Self.validTimestamp(acquiringAccount.createdAt)
+    }
+
+    func matches(_ item: CompanionItemPackage) -> Bool {
+        isValid && item.isValid && recipeID == item.id && recipeRevision == item.revision
+    }
+
+    static func valid(_ records: [Self]?, library: [CompanionItemPackage]) -> Bool {
+        guard let records else { return true } // Legacy/manual imports have no acquisition evidence.
+        return !records.isEmpty && records.count <= CompanionItemPackage.maximumLibraryCount
+            && Set(records.map(\.recipeID)).count == records.count
+            && Set(records.map(\.acquisitionIdentity)).count == records.count
+            && records.allSatisfy { record in library.contains { record.matches($0) } }
+    }
+
+    private var acquisitionIdentity: String {
+        let endpoint = URLComponents(string: catalogEndpoint)
+        return "http://127.0.0.1:\(endpoint?.port ?? 0)/\(UUID(uuidString: inventoryID)?.uuidString ?? inventoryID)"
+    }
+
+    private static func validTimestamp(_ value: String) -> Bool {
+        value.utf8.count <= 64 && ((try? Date.ISO8601FormatStyle().parse(value)) != nil
+            || (try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(value)) != nil)
+    }
+}
+
+/// Volatile download review. Only its claim enters preferences after Add;
+/// the session nonce and bearer token never enter durable acquisition records.
+struct MarketplaceDownloadedItem: Equatable, Sendable {
+    let recipe: CompanionItemPackage
+    let acquisition: MarketplaceItemAcquisition
+    let sessionID: UUID
+}
+
 struct MarketplacePage<Item: Decodable & Sendable>: Decodable, Sendable {
     let items: [Item]
     let total: Int
@@ -129,6 +199,7 @@ struct MarketplaceServiceError: Error, LocalizedError, Sendable {
         case "listing_changed": "This published version changed. Refresh the catalog before acquiring it."
         case "validation_failed", "invalid_request": "Check the required fields and their limits before trying again."
         case "not_found": "This listing or version is unavailable to this account."
+        case "stale_download": "This download no longer matches the current account library. Download it again before adding it."
         case "digest_mismatch": "The downloaded recipe does not match its listing. Nothing was installed."
         case "response_too_large", "invalid_response": "The catalog returned an invalid response. Nothing was installed."
         case "capacity_reached", "rate_limited": "The development service has reached a limit. Try again later."

@@ -8,6 +8,27 @@ import XCTest
 /// Import uses decoded fixture bytes; this is not NSOpenPanel or VoiceOver proof.
 final class MarketplaceInteractionTests: XCTestCase {
     @MainActor
+    private func returningDownloadCatalog() throws -> MarketplaceCatalogStore {
+        let recipe = CompanionItemCatalog.designs[0]
+        let account = MarketplaceAccount(id: "550e8400-e29b-41d4-a716-446655440000", handle: "fixture_reader",
+            displayName: "Fixture Reader", createdAt: "2026-09-16T12:00:00Z")
+        let entry = MarketplaceInventoryEntry(id: "550e8400-e29b-41d4-a716-446655440002",
+            listingID: "550e8400-e29b-41d4-a716-446655440001", version: 1, recipeID: recipe.id, recipe: recipe,
+            publisher: account, provenance: .init(attribution: "Synthetic declaration", rightsConfirmed: true),
+            acquiredAt: "2026-10-02T12:00:00Z")
+        let accountJSON = String(decoding: try JSONEncoder().encode(account), as: UTF8.self)
+        let entryJSON = String(decoding: try JSONEncoder().encode(entry), as: UTF8.self)
+        let transport = MarketplaceScriptTransport([
+            .json("{\"service\":\"archi-marketplace\",\"apiVersion\":1,\"mode\":\"development\",\"commerce\":false,\"recipeSchema\":\"archi-item-design/v1\",\"maximumRecipeBytes\":4096}"),
+            .json("{\"items\":[],\"total\":0,\"limit\":40,\"offset\":0}"),
+            .json("{\"account\":\(accountJSON),\"token\":\"synthetic-token\",\"expiresAt\":\"2026-10-03T12:00:00Z\"}"),
+            .json("{\"items\":[\(entryJSON)],\"total\":1,\"limit\":40,\"offset\":0}"),
+            .json("{\"items\":[],\"total\":0,\"limit\":40,\"offset\":0}"),
+            .data(try recipe.encoded(), headers: ["X-ARCHi-Recipe-ID": recipe.id])])
+        return MarketplaceCatalogStore(transport: transport)
+    }
+
+    @MainActor
     func testNativeSearchKeepsDetailsWithinResultsAndFirstCollectionItemAppears() async throws {
         guard ProcessInfo.processInfo.environment["ARCHI_MARKETPLACE_NATIVE"] == "1" else {
             throw XCTSkip("Set ARCHI_MARKETPLACE_NATIVE=1 for disposable native marketplace interaction evidence.")
@@ -27,8 +48,9 @@ final class MarketplaceInteractionTests: XCTestCase {
         }
         let assistant = MarketplaceInteractionNoCalls()
         let profile = directory.appendingPathComponent("preferences.json")
+        let catalog = try returningDownloadCatalog()
         let store = CompanionStore(preferenceURL: profile,
-            assistant: assistant, assistantFactory: { _, _ in assistant }, allowsPlay: false)
+            assistant: assistant, assistantFactory: { _, _ in assistant }, allowsPlay: false, marketplaceCatalog: catalog)
         let before = store.preferences
         let appearance = store.reactor.appearanceID
         let panel = NSPanel(contentRect: CGRect(x: 100, y: 100, width: 1100, height: 800),
@@ -77,7 +99,10 @@ final class MarketplaceInteractionTests: XCTestCase {
         // Returning must offer review and must never silently install/equip it.
         let libraryBeforeReturn = store.itemLibrary
         panel.contentView = nil
-        store.marketplaceCatalog.downloadedRecipe = CompanionItemCatalog.designs[0]
+        await catalog.connect()
+        await catalog.signIn(handle: "fixture_reader", password: "synthetic-password")
+        await catalog.download(try XCTUnwrap(catalog.inventory.first))
+        XCTAssertNotNil(catalog.downloadedItem, catalog.errorMessage ?? "Download missing")
         panel.contentView = NSHostingView(rootView: MarketplaceWorkspace(store: store)
             .frame(width: 1100, height: 800).preferredColorScheme(.dark)
             .background(WorkspaceTheme.background))

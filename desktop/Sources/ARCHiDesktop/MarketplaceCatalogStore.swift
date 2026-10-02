@@ -26,11 +26,13 @@ final class MarketplaceCatalogStore: ObservableObject {
     @Published private(set) var message = "Connect to a development catalog to discover and publish creator recipes."
     @Published private(set) var errorMessage: String?
     @Published private(set) var hasPendingMutation = false
-    @Published var downloadedRecipe: CompanionItemPackage?
+    @Published private(set) var downloadedItem: MarketplaceDownloadedItem?
+    var downloadedRecipe: CompanionItemPackage? { downloadedItem?.recipe }
 
     private let transport: any MarketplaceHTTPTransport
     private var client: MarketplaceCatalogClient
     private var token: String?
+    private var sessionID = UUID()
     private var catalogOffset = 0, inventoryOffset = 0, listingsOffset = 0, historyOffset = 0
     private var searchedQuery = ""
     private struct PendingMutation {
@@ -90,6 +92,8 @@ final class MarketplaceCatalogStore: ObservableObject {
                   session.token.unicodeScalars.allSatisfy({ (0x21...0x7e).contains($0.value) }) else {
                 throw MarketplaceServiceError(code: "invalid_response", status: nil)
             }
+            self.sessionID = UUID()
+            self.downloadedItem = nil
             self.token = session.token
             self.account = session.account
             self.message = "Signed in as @\(session.account.handle). This session stays in memory until you quit or sign out."
@@ -178,13 +182,37 @@ final class MarketplaceCatalogStore: ObservableObject {
     }
 
     func download(_ entry: MarketplaceInventoryEntry) async {
-        guard account != nil else { return }
+        guard let account, let token, entry.isValid, inventory.contains(entry) else { return }
+        let generation = sessionID
+        let source = client
         await run {
-            self.downloadedRecipe = try await self.client.download(listingID: entry.listingID, version: entry.version,
-                recipeID: entry.recipeID, token: self.token)
-            self.message = "Downloaded and checked \(entry.recipe.title). Review it before adding it on this Mac."
+            self.downloadedItem = nil
+            let recipe = try await source.download(listingID: entry.listingID, version: entry.version,
+                recipeID: entry.recipeID, token: token)
+            try Task.checkCancellation()
+            let acquisition = MarketplaceItemAcquisition(entry: entry, endpoint: source.endpoint, account: account)
+            guard self.sessionID == generation, self.account == account, self.token == token,
+                  self.client.endpoint == source.endpoint, self.inventory.contains(entry),
+                  recipe == entry.recipe, acquisition.matches(recipe) else {
+                throw MarketplaceServiceError(code: "stale_download", status: nil)
+            }
+            self.downloadedItem = .init(recipe: recipe, acquisition: acquisition, sessionID: generation)
+            self.message = "Downloaded and checked \(entry.recipe.title). Review its acquisition declaration before adding it on this Mac."
         }
     }
+
+    func isCurrent(_ download: MarketplaceDownloadedItem) -> Bool {
+        guard downloadedItem == download, download.sessionID == sessionID,
+              let account, account == download.acquisition.acquiringAccount,
+              download.acquisition.catalogEndpoint == client.endpoint.absoluteString,
+              download.acquisition.matches(download.recipe) else { return false }
+        return inventory.contains { entry in
+            entry.recipe == download.recipe && MarketplaceItemAcquisition(entry: entry, endpoint: client.endpoint,
+                account: account) == download.acquisition
+        }
+    }
+
+    func dismissDownload() { downloadedItem = nil }
 
     func loadHistory(_ listing: MarketplaceListing, more: Bool = false) async {
         guard account?.id == listing.publisher.id, !more || hasMoreHistory else { return }
@@ -311,10 +339,11 @@ final class MarketplaceCatalogStore: ObservableObject {
         }
     }
     private func forgetSession() {
+        sessionID = UUID()
         token = nil; account = nil; inventory = []; listings = []; history = []
         inventoryTotal = 0; listingsTotal = 0; historyTotal = 0
         inventoryOffset = 0; listingsOffset = 0; historyOffset = 0
-        editingListing = nil; historyListingID = nil; downloadedRecipe = nil
+        editingListing = nil; historyListingID = nil; downloadedItem = nil
         provenance.rightsConfirmed = false
     }
 }

@@ -641,7 +641,17 @@ final class CodexAssistant: AssistantClient {
         buffer.append(data)
         while let end = buffer.firstIndex(of: 10) {
             let line = buffer[..<end]; buffer.removeSubrange(...end)
-            guard line.count <= 524_288, let value = try? JSONDecoder().decode(JSONValue.self, from: line) else { stopProcess(error: .protocolError); return }
+            guard line.count <= 524_288 else { stopProcess(error: .protocolError); return }
+            let value: JSONValue
+            do {
+                // Configuration and identity readbacks are security inputs too.
+                // Reject ambiguous fields (including escaped nested duplicates)
+                // before a dictionary decoder can silently choose one value.
+                var scanner = UniqueJSONKeys(bytes: Array(line))
+                try scanner.validate()
+                value = try JSONDecoder().decode(JSONValue.self, from: line)
+                guard value.object != nil else { throw AssistantFailure.protocolError }
+            } catch { stopProcess(error: .protocolError); return }
             if value["method"] != nil && value["id"] != nil {
                 // This client grants no server-initiated action, login, or approval request.
                 stopProcess(error: .protocolError); return

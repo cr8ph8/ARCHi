@@ -86,6 +86,59 @@ struct TokenStewardOutcome: Codable, Equatable, Sendable {
     let recordedAt: Date
 }
 
+/// Exact local request references, owned by the existing usage task journal.
+/// These are captured dependencies, not source text, citations or truth claims.
+struct TokenStewardRequestProvenance: Codable, Equatable, Sendable {
+    let inputDigest: String
+    let readingDependencies: [ReadingSourceBinding]?
+    let knowledgeDependencies: [KnowledgePageBinding]?
+    let knowledgeContextDigest: String?
+    let isKnowledgeAcquisition: Bool
+
+    init(inputDigest: String, readingDependencies: [ReadingSourceBinding]? = nil,
+         knowledgeDependencies: [KnowledgePageBinding]? = nil, knowledgeContextDigest: String? = nil,
+         isKnowledgeAcquisition: Bool = false) {
+        self.inputDigest = inputDigest
+        self.readingDependencies = readingDependencies?.sorted { $0.id < $1.id }
+        self.knowledgeDependencies = knowledgeDependencies?.sorted { $0.id < $1.id }
+        self.knowledgeContextDigest = knowledgeContextDigest
+        self.isKnowledgeAcquisition = isKnowledgeAcquisition
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case inputDigest, readingDependencies, knowledgeDependencies, knowledgeContextDigest, isKnowledgeAcquisition
+    }
+    init(from decoder: Decoder) throws {
+        try SourceProvenanceKeys.require(["inputDigest", "isKnowledgeAcquisition"],
+            optional: ["readingDependencies", "knowledgeDependencies", "knowledgeContextDigest"], in: decoder)
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(inputDigest: try values.decode(String.self, forKey: .inputDigest),
+            readingDependencies: values.contains(.readingDependencies) ? try values.decode([ReadingSourceBinding].self, forKey: .readingDependencies) : nil,
+            knowledgeDependencies: values.contains(.knowledgeDependencies) ? try values.decode([KnowledgePageBinding].self, forKey: .knowledgeDependencies) : nil,
+            knowledgeContextDigest: values.contains(.knowledgeContextDigest) ? try values.decode(String.self, forKey: .knowledgeContextDigest) : nil,
+            isKnowledgeAcquisition: try values.decode(Bool.self, forKey: .isKnowledgeAcquisition))
+        guard isValid else { throw SourceProvenanceKeys.invalid(decoder) }
+    }
+
+    var isValid: Bool {
+        DocumentReadingTrace.isDigest(inputDigest)
+            && (readingDependencies != nil || knowledgeDependencies != nil)
+            && ReadingSourceBinding.valid(readingDependencies)
+            && Set((readingDependencies ?? []).compactMap { UUID(uuidString: $0.id) }).count == (readingDependencies?.count ?? 0)
+            && KnowledgePageBinding.valid(knowledgeDependencies)
+            && (knowledgeContextDigest.map(DocumentReadingTrace.isDigest) ?? true)
+            && (knowledgeContextDigest == nil || knowledgeDependencies != nil)
+    }
+
+    static func capture(_ receipt: AssistantLaneReceipt) -> Self? {
+        guard receipt.provider == .qwen,
+              receipt.readingDependencies != nil || receipt.knowledgeDependencies != nil else { return nil }
+        return Self(inputDigest: receipt.inputDigest, readingDependencies: receipt.readingDependencies,
+            knowledgeDependencies: receipt.knowledgeDependencies, knowledgeContextDigest: receipt.knowledgeContextDigest,
+            isKnowledgeAcquisition: receipt.isKnowledgeAcquisition)
+    }
+}
+
 struct TokenStewardTask: Codable, Equatable, Identifiable, Sendable {
     let id: String
     let route: String
@@ -95,6 +148,8 @@ struct TokenStewardTask: Codable, Equatable, Identifiable, Sendable {
     /// Optional additions keep legacy tasks readable without inventing reading evidence.
     var documentReading: DocumentReadingTrace? = nil
     var documentReadingResult: DocumentReadingResult? = nil
+    /// Nil on earlier tasks; loading/replaying them never invents a source chain.
+    var requestProvenance: TokenStewardRequestProvenance? = nil
     var isClosed: Bool { !lanes.isEmpty && lanes.allSatisfy { $0.state != "pending" } }
     var delivered: Bool { lanes.contains { $0.state == "complete" } }
     var userUseful: Bool { outcomes.last { $0.kind == .userUseful }?.value == true }
@@ -212,6 +267,28 @@ final class TokenStewardStore: ObservableObject {
         }
     }
 
+    /// Bind dependencies before Qwen dispatch. Only the source/page owners can
+    /// establish current availability; this journal freezes their exact references.
+    func recordRequestProvenance(requestID: String, provenance: TokenStewardRequestProvenance) throws {
+        try transaction { state in
+            guard provenance.isValid else { throw TokenStewardError.invalid("request provenance") }
+            guard let index = state.tasks.firstIndex(where: { $0.id == requestID }) else { throw TokenStewardError.missingTask }
+            let task = state.tasks[index]
+            guard ["local", "automatic", "native", "compare"].contains(task.route),
+                  let lane = task.lanes.first(where: { $0.provider == AssistantProvider.qwen.name }) else {
+                throw TokenStewardError.invalid("request provenance route")
+            }
+            if let existing = task.requestProvenance {
+                guard existing == provenance else { throw TokenStewardError.conflict("immutable request provenance") }
+                return
+            }
+            guard lane.state == "pending", !lane.dispatched else {
+                throw TokenStewardError.conflict("request provenance after Qwen dispatch")
+            }
+            state.tasks[index].requestProvenance = provenance
+        }
+    }
+
     /// Retain the frozen reading decision before Qwen dispatch. Replaying an
     /// identical retained trace is harmless; a changed trace or first late write
     /// fails without replacing the existing task's provenance.
@@ -298,6 +375,7 @@ final class TokenStewardStore: ObservableObject {
                 throw TokenStewardError.missingTask
             }
             guard state.tasks[task].route == "native",
+                  state.tasks[task].requestProvenance == nil,
                   state.tasks[task].lanes.first(where: { $0.provider == AssistantProvider.qwen.name })?.state == "failed" else {
                 throw TokenStewardError.conflict("fallback requires a failed native local lane")
             }
@@ -354,6 +432,11 @@ final class TokenStewardStore: ObservableObject {
                 throw TokenStewardError.missingTask
             }
             let oldLane = state.tasks[taskIndex].lanes[laneIndex]
+            if receipt.provider == .qwen, let provenance = state.tasks[taskIndex].requestProvenance {
+                guard TokenStewardRequestProvenance.capture(receipt) == provenance else {
+                    throw TokenStewardError.conflict("lane request provenance")
+                }
+            }
             let measured = receipt.localInvocationReceipts != nil
             let lane = TokenStewardLane(provider: receipt.provider.name,
                 dispatched: receipt.requestStarted || oldLane.dispatched,
@@ -1002,6 +1085,18 @@ final class TokenStewardStore: ObservableObject {
                 guard trace.isValid, permitsDocumentReading(task),
                       HamptonMemoryDependencies.validParents(trace, before: task.id, tasks: state.tasks) else {
                     throw TokenStewardError.invalid("saved document reading trace or route")
+                }
+            }
+            if let provenance = task.requestProvenance {
+                guard provenance.isValid, ["local", "automatic", "native", "compare"].contains(task.route),
+                      providers.contains(AssistantProvider.qwen.name),
+                      task.route != "native" || !providers.contains(AssistantProvider.codex.name) else {
+                    throw TokenStewardError.invalid("saved request provenance or route")
+                }
+                if let trace = task.documentReading {
+                    guard (trace.references ?? []).allSatisfy({ provenance.readingDependencies?.contains($0) == true }) else {
+                        throw TokenStewardError.invalid("reading trace outside request provenance")
+                    }
                 }
             }
             if let result = task.documentReadingResult {
