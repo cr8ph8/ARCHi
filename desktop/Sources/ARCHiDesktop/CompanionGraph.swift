@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 enum CompanionGraphKind: String, CaseIterable, Identifiable, Sendable {
-    case companion, source, knowledge, lesson, request, invocation, answer, context, omission, evaluation, accounting
+    case companion, source, knowledge, lesson, method, request, invocation, answer, context, omission, evaluation, accounting
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -10,6 +10,7 @@ enum CompanionGraphKind: String, CaseIterable, Identifiable, Sendable {
         case .source: "Source"
         case .knowledge: "Knowledge page"
         case .lesson: "Kept lesson"
+        case .method: "Saved method"
         case .request: "Request"
         case .invocation: "Model call"
         case .answer: "Answer outcome"
@@ -25,6 +26,7 @@ enum CompanionGraphKind: String, CaseIterable, Identifiable, Sendable {
         case .source: "doc.text"
         case .knowledge: "books.vertical"
         case .lesson: "bookmark"
+        case .method: "arrow.triangle.branch"
         case .request: "bubble.left"
         case .invocation: "arrow.triangle.2.circlepath"
         case .answer: "text.bubble"
@@ -41,6 +43,7 @@ enum CompanionGraphTarget: Equatable, Sendable {
     case arcEvidence(proposalHash: String)
     case stewardTask(taskID: String)
     case knowledgePage(id: String)
+    case documentMethod(DocumentProcedureUse)
 }
 struct CompanionGraphDetail: Equatable, Sendable { let label: String; let value: String }
 struct CompanionGraphNode: Identifiable, Equatable, Sendable {

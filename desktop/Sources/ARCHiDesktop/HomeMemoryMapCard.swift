@@ -23,7 +23,8 @@ struct HomeMemoryMapCard: View {
 
     private var pageCount: Int { library.latestKnowledgePages.count }
     private var lessonCount: Int { store.keptLessons.filter { $0.isValid && ($0.expiresAt.map { $0 > checkedAt } ?? true) }.count }
-    private var hasRecords: Bool { !library.sources.isEmpty || pageCount > 0 || store.keptLessons.contains(where: \.isValid) }
+    private var methodCount: Int { store.documentProcedures.latestProcedures.count }
+    private var hasRecords: Bool { !library.sources.isEmpty || pageCount > 0 || methodCount > 0 || store.keptLessons.contains(where: \.isValid) }
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -52,6 +53,9 @@ struct HomeMemoryMapCard: View {
         .onChange(of: library.knowledgeLinks) { _, _ in refresh() }
         .onChange(of: library.loadError) { _, _ in refresh() }
         .onChange(of: store.keptLessons) { _, _ in refresh() }
+        .onChange(of: store.documentProcedures.procedures) { _, _ in refresh() }
+        .onChange(of: store.documentWork.records) { _, _ in refresh() }
+        .onChange(of: ObjectIdentifier(store.documentProcedures)) { _, _ in refresh() }
         .onChange(of: ObjectIdentifier(store.readingSources)) { _, _ in refresh() }
         .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
     }
@@ -63,7 +67,7 @@ struct HomeMemoryMapCard: View {
                 .font(.system(size: 22, weight: .medium, design: .rounded))
                 .fixedSize(horizontal: false, vertical: true)
             Text(hasRecords
-                 ? "Follow sources, ideas and lessons back to the records behind them."
+                 ? "Follow sources, ideas, lessons and methods back to the records behind them."
                  : "Keep a source or a useful lesson. Its place in your memory map starts here.")
                 .font(.system(size: 13)).foregroundStyle(WorkspaceTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -71,6 +75,7 @@ struct HomeMemoryMapCard: View {
                 recordCount(library.sources.count, title: "sources", identifier: "sources")
                 recordCount(pageCount, title: "pages", identifier: "pages")
                 recordCount(lessonCount, title: "active lessons", identifier: "lessons")
+                recordCount(methodCount, title: "methods", identifier: "methods")
             }
             .padding(.vertical, 2)
             if libraryNeedsAttention {
@@ -130,7 +135,7 @@ struct HomeMemoryMapCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Open memory map")
-        .accessibilityHint("Explore retained sources, pages and lessons.")
+        .accessibilityHint("Explore retained sources, pages, lessons and methods.")
         .accessibilityIdentifier("home.memory-map.preview")
     }
 
@@ -145,12 +150,13 @@ struct HomeMemoryMapCard: View {
         .accessibilityIdentifier(identifier == "lessons" ? "home.lesson-count" : "home.memory-map.count.\(identifier)")
         .help(identifier == "sources" ? "Source copies retained in this profile. Referenced copies that were removed are not counted."
               : identifier == "pages" ? "The latest record for each authored page, including drafts and withdrawn pages. Open a page to inspect its status."
+              : identifier == "methods" ? "Saved method families, including unavailable and withdrawn methods. Open the map to inspect each version."
               : "Explicitly kept lessons, excluding expired ones. Open a lesson to inspect its status.")
     }
 
     private func refresh() {
         checkedAt = Date()
-        let next = MemoryMapSnapshot.build(library: library, lessons: store.keptLessons)
+        let next = store.memoryMapSnapshot()
         if next != snapshot {
             snapshot = next
             field = KnowledgeParticleField(snapshot: next)

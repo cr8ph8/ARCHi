@@ -78,7 +78,7 @@ struct DocumentWorkHistory: View {
                                 }
                             }
                             if currentOutcome?.id != record.id {
-                                KeepDocumentProcedureView(store: store, record: record)
+                                DocumentMethodFollowThroughView(store: store, record: record)
                             } else {
                                 Text("Review this change above.").font(.caption2).foregroundStyle(.secondary)
                             }

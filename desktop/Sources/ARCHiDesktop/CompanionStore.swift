@@ -136,6 +136,7 @@ final class CompanionStore: ObservableObject {
     /// Navigation focus is transient and never enters a profile or usage journal.
     @Published private(set) var selectedStewardTaskID: String?
     @Published private(set) var selectedGraphNodeID: String?
+    @Published var inspectedDocumentMethod: DocumentMethodInspectionSelection?
     @Published private(set) var workspaceRoutingNotice: String?
     private var pendingStewardReceipts: [String: AssistantLaneReceipt] = [:]
     private var pendingStewardEvaluations: [String: ARCCapabilitiesEvent] = [:]

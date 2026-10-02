@@ -756,6 +756,7 @@ struct CompanionGraphView: View {
         case .context: "Open shared context"
         case .memory: "Manage memories"
         case .knowledgePage: "Open this knowledge page"
+        case .documentMethod: "Inspect this method version"
         case .advanced: "Open local receipts"
         case .capabilities: "Open ARC"
         case .interactiveARC: "Open ARC3 episode"
@@ -772,6 +773,7 @@ func graphColor(_ kind: CompanionGraphKind) -> Color {
     case .source: Color.blue
     case .knowledge: Color.pink
     case .lesson: WorkspaceTheme.accent
+    case .method: Color.orange
     case .request: Color.indigo
     case .invocation: Color.purple
     case .answer: Color.teal

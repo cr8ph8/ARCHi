@@ -307,6 +307,48 @@ private struct DocumentProcedureVersionDetails: View {
 }
 
 @MainActor
+struct DocumentMethodInspectionView: View {
+    @ObservedObject var store: CompanionStore
+    let selection: DocumentMethodInspectionSelection
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Saved method version").font(.headline)
+            if let method = store.methodForInspection(selection) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        DocumentProcedureVersionDetails(store: store, procedure: method,
+                            isHistorical: !store.documentProcedures.latestProcedures.contains(method))
+                        Text("Opening this version does not prepare a request or restore an earlier document.")
+                            .foregroundStyle(.secondary)
+                        if store.documentProcedures.latestProcedures.contains(method) {
+                            DocumentMethodPreviewButton(store: store, procedure: method,
+                                title: "Use for this passage…",
+                                accessibilityID: "document.inspect-method.use")
+                        }
+                    }.font(.caption).frame(maxWidth: .infinity, alignment: .leading)
+                }.frame(maxHeight: 480)
+                Button("Open document work") {
+                    store.inspectedDocumentMethod = nil
+                    store.open(.context)
+                }.buttonStyle(.borderless)
+            } else {
+                Text("This exact version or its profile history changed. Close this inspector and reopen the current method record. No replacement version was selected.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("document.inspect-method.unavailable")
+            }
+            HStack {
+                Spacer()
+                Button("Done") { store.inspectedDocumentMethod = nil }
+                    .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(20).frame(width: 560)
+        .accessibilityIdentifier("document.inspect-method")
+    }
+}
+
+@MainActor
 struct PreparedDocumentProcedureView: View {
     @ObservedObject var store: CompanionStore
     var body: some View {

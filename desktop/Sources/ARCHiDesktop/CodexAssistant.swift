@@ -631,8 +631,7 @@ final class CodexAssistant: AssistantClient {
 
     private func send(_ message: JSONValue) throws {
         guard let input else { throw AssistantFailure.unavailable }
-        var data = try JSONEncoder().encode(message); data.append(10)
-        guard data.count <= 524_288 else { throw AssistantFailure.protocolError }
+        guard let data = try RevisionLiteralBudget.codexMessageData(message) else { throw AssistantFailure.protocolError }
         try input.write(contentsOf: data)
     }
 

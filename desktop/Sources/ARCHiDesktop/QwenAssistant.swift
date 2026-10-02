@@ -116,20 +116,20 @@ final class QwenAssistant: AssistantClient, LocalRoleClient {
               request.hasValidLocalMethodDraft, request.hasValidLocalConceptDraft else { throw QwenFailure.invalidResponse }
         guard metadata != nil else { throw QwenFailure.unavailable }
         guard !busy else { throw QwenFailure.busy }
-        let input = request.localInput
         let system = (request.revisionTarget == nil ? AssistantInstructions.groundedText : AssistantInstructions.passageRevisionText)
             + (request.localReading == nil ? "" : "\n" + AssistantInstructions.documentReadingText)
             + (request.localLessons.isEmpty ? "" : "\n" + LocalLessonGuidance.text)
             + (request.localConversation.isEmpty ? "" : "\n" + LocalConversationGuidance.text)
             + (request.localKnowledge == nil ? "" : "\n" + LocalKnowledgeGuidance.text)
-        guard !request.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              input.utf8.count + system.utf8.count <= Self.maximumInputBytes else {
-            throw QwenFailure.contextLimit
+        guard !request.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw QwenFailure.contextLimit }
+        let format = request.revisionTarget.map {
+            PassageRevisionValidator.schema(target: $0, sourceIDs: request.localSourceIDs,
+                memoryIDs: request.localLessons.map(\.modelID))
         }
+        let input = try Self.budgetedChatInput(model: model, system: system, input: request.localInput, format: format)
         if let target = request.revisionTarget {
             let memoryIDs = request.localLessons.map(\.modelID)
-            let result = try await generateText(system: system, input: input,
-                format: PassageRevisionValidator.schema(target: target, sourceIDs: request.localSourceIDs, memoryIDs: memoryIDs))
+            let result = try await generateText(system: system, input: input, format: format)
             try requireOwner(result.owner)
             let proposal: PassageRevisionProposal
             do { proposal = try PassageRevisionValidator.parse(result.text, target: target, sourceIDs: request.localSourceIDs, memoryIDs: memoryIDs) }
@@ -162,15 +162,8 @@ final class QwenAssistant: AssistantClient, LocalRoleClient {
                                metrics: result.metrics)
     }
 
-    /// Both conversational and structured calls use the same verified, bounded
-    /// local stream. A role caller supplies no text observer, keeping partial
-    /// JSON private until the terminal event and request ownership are checked.
-    private func generateText(system: String, input: String, format: JSONValue?,
-                              onText: (@MainActor (String) -> Void)? = nil) async throws
-        -> (text: String, metadata: QwenModelMetadata, elapsedMilliseconds: Int, owner: UInt64,
-            metrics: LocalInferenceMetrics?) {
-        guard let installed = metadata else { throw QwenFailure.unavailable }
-        guard !busy else { throw QwenFailure.busy }
+    /// The exact /api/chat serialization is shared with admission preflight.
+    static func encodedChatBody(model: String, system: String, input: String, format: JSONValue?) throws -> Data {
         var payload: [String: JSONValue] = [
             "model": .string(model), "stream": .bool(true), "think": .bool(false),
             "messages": .array([
@@ -188,8 +181,31 @@ final class QwenAssistant: AssistantClient, LocalRoleClient {
                 "temperature": .number(HamptonInvocationPolicy.temperature)
             ])
         }
+        return try JSONEncoder().encode(JSONValue.object(payload))
+    }
+
+    static func budgetedChatInput(model: String, system: String, input: String, format: JSONValue?) throws -> String {
+        guard let fitted = try RevisionLiteralBudget.fittingText(input, fits: { candidate in
+            guard candidate.utf8.count + system.utf8.count <= maximumInputBytes else { return false }
+            return try encodedChatBody(model: model, system: system, input: candidate, format: format).count <= maximumInputBytes
+        }) else { throw QwenFailure.contextLimit }
+        return fitted
+    }
+
+    /// Both conversational and structured calls use the same verified, bounded
+    /// local stream. Structured input is never rewritten here: its owner has
+    /// already captured digests of the admitted LocalRoleRequest.
+    private func generateText(system: String, input: String, format: JSONValue?,
+                              onText: (@MainActor (String) -> Void)? = nil) async throws
+        -> (text: String, metadata: QwenModelMetadata, elapsedMilliseconds: Int, owner: UInt64,
+            metrics: LocalInferenceMetrics?) {
+        guard let installed = metadata else { throw QwenFailure.unavailable }
+        guard !busy else { throw QwenFailure.busy }
         let httpRequest: URLRequest
-        do { httpRequest = try makeRequest(path: "api/chat", body: payload) }
+        do {
+            httpRequest = try makeRequest(path: "api/chat", body: nil,
+                encodedBody: Self.encodedChatBody(model: model, system: system, input: input, format: format))
+        }
         catch { throw Self.failure(error) }
         // The wire budget includes schemas, lessons, and JSON-in-message
         // escaping for both conversational and structured local requests.
@@ -341,13 +357,14 @@ final class QwenAssistant: AssistantClient, LocalRoleClient {
         catch { throw QwenFailure.invalidResponse }
     }
 
-    private func makeRequest(path: String, body: [String: JSONValue]?) throws -> URLRequest {
+    private func makeRequest(path: String, body: [String: JSONValue]?, encodedBody: Data? = nil) throws -> URLRequest {
         let url = URL(string: "http://127.0.0.1:11434/\(path)")!
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
-        request.httpMethod = body == nil ? "GET" : "POST"
+        request.httpMethod = body == nil && encodedBody == nil ? "GET" : "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json, application/x-ndjson", forHTTPHeaderField: "Accept")
-        if let body { request.httpBody = try JSONEncoder().encode(JSONValue.object(body)) }
+        if let encodedBody { request.httpBody = encodedBody }
+        else if let body { request.httpBody = try JSONEncoder().encode(JSONValue.object(body)) }
         return request
     }
 

@@ -39,6 +39,28 @@ enum DocumentWorkCapability {
     // it. Relative links and prose link labels are outside this mechanical check.
     private static let linkPattern = #"(?i)(?:[a-z][a-z0-9+.-]*://|mailto:|www\.)[^\s<>"']+"#
 
+    /// Generation guidance derived from the same literal grammar as admission.
+    /// Only the selected passage is inspected. The guide is request-scoped data,
+    /// never saved memory, and cannot replace the full independent checks below.
+    /// On overflow, omit the entire inventory rather than provide a partial list
+    /// that could be mistaken for the complete preservation requirement.
+    static func literalPreservationInput(for text: String) -> JSONValue {
+        let omitted = JSONValue.object(["status": .string("omitted-limit")])
+        guard let numbers = tokens(in: text, pattern: numberPattern),
+              let links = tokens(in: text, pattern: linkPattern),
+              numbers.count + links.count <= 128 else { return omitted }
+        func entries(_ values: [Data: Int]) -> JSONValue {
+            .array(values.keys.sorted { $0.lexicographicallyPrecedes($1) }.map { bytes in
+                .object(["token": .string(String(decoding: bytes, as: UTF8.self)),
+                         "count": .number(Double(values[bytes]!))])
+            })
+        }
+        let input = JSONValue.object(["status": .string("complete"),
+            "numbers": entries(numbers), "links": entries(links)])
+        guard let encoded = try? JSONEncoder().encode(input), encoded.count <= 8_192 else { return omitted }
+        return input
+    }
+
     static func verify(proposal: PassageRevisionProposal, text: String, sourceRevision: UInt64,
                        requirements: DocumentWorkRequirements) -> DocumentWorkVerification {
         guard proposal.decision == .propose else {

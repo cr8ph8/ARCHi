@@ -5,6 +5,12 @@ import CryptoKit
 /// and reviewed user declarations, not certified entailment or development.
 @MainActor
 enum KnowledgePageGraph {
+    /// The page owner admits a unique content binding for each retained revision.
+    /// Reusers must still resolve the exact binding before choosing this node.
+    static func nodeID(_ binding: KnowledgePageBinding) -> String {
+        key(["knowledge", binding.id, String(binding.revision)])
+    }
+
     static func append(to base: CompanionGraphSnapshot, library: ReadingSourceLibrary) -> CompanionGraphSnapshot {
         var nodes = base.nodes, edges = base.edges, truncated = base.truncatedCount
         var ids = Set(nodes.map(\.id)), edgeIDs = Set(edges.map(\.id))
@@ -60,7 +66,7 @@ enum KnowledgePageGraph {
             return id
         }
         for page in library.latestKnowledgePages.sorted(by: { $0.id < $1.id }) {
-            let id = key(["knowledge", page.id, String(page.revision)])
+            let id = nodeID(page.binding)
             let issue = library.availability(of: page)
             let stale = !page.anchors.allSatisfy { library.quote(for: $0) != nil }
             let status = page.state == .withdrawn ? "Withdrawn" : stale ? "Needs source review" : issue == nil ? "Reviewed · current sources" : page.state.title
@@ -80,8 +86,7 @@ enum KnowledgePageGraph {
         // remain inspectable in page history, never silently rebound to new pages.
         for connection in library.latestKnowledgeLinks.sorted(by: { $0.identity < $1.identity }) {
             guard library.availability(of: connection) == nil else { continue }
-            link(key(["knowledge", connection.from.id, String(connection.from.revision)]),
-                 key(["knowledge", connection.to.id, String(connection.to.revision)]),
+            link(nodeID(connection.from), nodeID(connection.to),
                  "declared " + connection.kind.title.lowercased())
         }
         // Kept sources have their own identity even before a page cites them.

@@ -19,8 +19,9 @@ extension CompanionStore {
         }
         let knowledge = KnowledgePageGraph.append(to: base, library: readingSources)
         let interactive = ARC3Graph.append(to: knowledge, observation: arc3.observation, transitions: arc3.transitions, summary: recordedSummary)
-        return DocumentWorkGraph.append(to: interactive, records: documentWork.records,
+        let work = DocumentWorkGraph.append(to: interactive, records: documentWork.records,
             accountingTaskIDs: tokenSteward.loadError == nil ? Set(tokenSteward.tasks.map(\.id)) : [], lessons: keptLessons)
+        return DocumentMethodGraph.append(to: work, store: self)
     }
 
     func openGraphTarget(_ target: CompanionGraphTarget) {
@@ -31,6 +32,11 @@ extension CompanionStore {
         case .knowledgePage(let id):
             selectedKnowledgePageID = id
             open(.memory)
+        case .documentMethod(let binding):
+            inspectedDocumentMethod = .init(binding: binding,
+                methodOwner: ObjectIdentifier(documentProcedures), historyOwner: ObjectIdentifier(documentWork),
+                sourceOwner: ObjectIdentifier(readingSources))
+            open(.nodeLab)
         case .advanced: open(.advanced)
         case .capabilities: open(.capabilities)
         case .steward: open(.steward)
@@ -55,7 +61,7 @@ struct CompanionGraphWorkspace: View {
         library = store.readingSources
         self.initialShowcase = initialShowcase
         // A receipt opened from an existing activity route stays reachable.
-        let memory = MemoryMapSnapshot.build(library: store.readingSources, lessons: store.keptLessons)
+        let memory = store.memoryMapSnapshot()
         _includesActivity = State(initialValue: !initialShowcase && store.selectedGraphNodeID.map { selected in
             !memory.nodes.contains { $0.id == selected }
         } == true)
@@ -69,7 +75,7 @@ struct CompanionGraphWorkspace: View {
                     Text("All activity").tag(true)
                 }.pickerStyle(.segmented).frame(width: 226)
                     .accessibilityIdentifier("memory-map.scope")
-                Text(includesActivity ? "Includes requests, outcomes, and usage." : "Sources, knowledge pages, and kept lessons.")
+                Text(includesActivity ? "Includes requests, outcomes, and usage." : "Sources, pages, lessons, and saved methods.")
                     .font(.system(size: 11)).foregroundStyle(WorkspaceTheme.muted)
                 Spacer(minLength: 0)
                 Button("Manage memories", systemImage: "bookmark") { store.open(.memory) }
@@ -79,7 +85,7 @@ struct CompanionGraphWorkspace: View {
             // Refresh expiry without running a model or writing any record.
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 let snapshot = includesActivity ? store.companionGraphSnapshot(at: context.date)
-                    : MemoryMapSnapshot.build(library: library, lessons: store.keptLessons, at: context.date)
+                    : store.memoryMapSnapshot(at: context.date)
                 CompanionGraphView(snapshot: snapshot,
                     onOpen: store.openGraphTarget, initialSelectionID: initialShowcase ? nil : store.selectedGraphNodeID,
                     reduceMotion: store.preferences.reduceMotion || store.preferences.quiet,
@@ -89,5 +95,14 @@ struct CompanionGraphWorkspace: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("node-lab.workspace")
+        .sheet(item: $store.inspectedDocumentMethod) { selection in
+            DocumentMethodInspectionView(store: store, selection: selection)
+        }
+        .onChange(of: ObjectIdentifier(store.documentProcedures)) { _, _ in store.inspectedDocumentMethod = nil }
+        .onChange(of: ObjectIdentifier(store.documentWork)) { _, _ in store.inspectedDocumentMethod = nil }
+        .onChange(of: ObjectIdentifier(store.readingSources)) { _, _ in store.inspectedDocumentMethod = nil }
+        .onChange(of: store.section) { _, section in
+            if section != .nodeLab { store.inspectedDocumentMethod = nil }
+        }
     }
 }

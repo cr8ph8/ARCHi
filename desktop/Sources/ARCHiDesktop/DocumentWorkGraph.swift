@@ -4,6 +4,8 @@ import CryptoKit
 /// A pure view of retained document-task metadata. It neither reads the working
 /// copy nor applies an edit, reruns checks, infers meaning, or updates a journal.
 enum DocumentWorkGraph {
+    static func nodeID(recordID: String) -> String { "document-work-" + key(recordID) }
+
     static func append(to base: CompanionGraphSnapshot, records: [DocumentWorkRecord],
                        accountingTaskIDs: Set<String>, lessons: [KeptLesson] = []) -> CompanionGraphSnapshot {
         var nodes = Array(base.nodes.prefix(CompanionGraph.maximumNodes))
@@ -46,7 +48,7 @@ enum DocumentWorkGraph {
         }
 
         for record in latest.prefix(12) {
-            let taskID = "document-work-" + key(record.id)
+            let taskID = nodeID(recordID: record.id)
             let hasAccounting = accountingIDs.contains(Data(record.requestID.utf8))
             var details: [CompanionGraphDetail] = [
                 .init(label: "Scope", value: "Selected-passage task metadata. Mechanical checks do not establish factual accuracy or preserved meaning."),

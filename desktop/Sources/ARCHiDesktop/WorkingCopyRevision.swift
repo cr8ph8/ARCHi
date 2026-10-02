@@ -25,7 +25,12 @@ struct RevisionTarget: Equatable, Sendable {
     }
 
     var input: JSONValue {
-        .object(["id": .string(id), "sourceDigest": .string(sourceDigest), "selection": selection.input, "requirements": requirements.input])
+        var fields: [String: JSONValue] = ["id": .string(id), "sourceDigest": .string(sourceDigest),
+            "selection": selection.input, "requirements": requirements.input]
+        if requirements.preserveNumbersAndLinks {
+            fields["literalPreservation"] = DocumentWorkCapability.literalPreservationInput(for: selection.quote)
+        }
+        return .object(fields)
     }
 }
 

@@ -687,13 +687,24 @@ final class HamptonReasonsAssistant: AssistantClient {
         let request = LocalRoleRequest(id: id, role: role, input: .object(input), outputSchema: schema,
             systemInstructionOverride: revisionTarget == nil ? nil : AssistantInstructions.passageRevisionText + "\n" + LocalLessonGuidance.text
                 + (fields["context"]?["localConversation"] == nil ? "" : "\n" + LocalConversationGuidance.text))
-        // Conservative encoded envelope preflight, including JSON-in-message escaping.
-        // Transport independently enforces its exact 24 KB /api/chat body bound.
+        return try budgetedRequest(request)
+    }
+
+    /// Return the actual request before invocation/receipt digests are captured.
+    /// Drop the optional inventory before prepareReasoning considers history.
+    static func budgetedRequest(_ request: LocalRoleRequest) throws -> LocalRoleRequest {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        let text = String(decoding: try encoder.encode(request.input), as: UTF8.self)
-        let envelope: JSONValue = .object(["system": .string(request.systemInstruction), "input": .string(text), "format": schema])
-        guard try encoder.encode(envelope).count <= maximumEncodedInputBytes else { throw HamptonAssistantFailure.contextLimit }
-        return request
+        // Every supported model name fits this conservative transport preflight.
+        let model = QwenAssistant.supportedModels.max { $0.utf8.count < $1.utf8.count } ?? QwenAssistant.defaultModel
+        guard let input = try RevisionLiteralBudget.fitting(request.input, fits: { input in
+            let text = String(decoding: try encoder.encode(input), as: UTF8.self)
+            let envelope: JSONValue = .object(["system": .string(request.systemInstruction), "input": .string(text), "format": request.outputSchema])
+            return try encoder.encode(envelope).count <= maximumEncodedInputBytes
+                && QwenAssistant.encodedChatBody(model: model, system: request.systemInstruction,
+                    input: text, format: request.outputSchema).count <= QwenAssistant.maximumInputBytes
+        }) else { throw HamptonAssistantFailure.contextLimit }
+        return LocalRoleRequest(id: request.id, role: request.role, input: input,
+            outputSchema: request.outputSchema, systemInstructionOverride: request.systemInstructionOverride)
     }
 
     private static func candidateInput(_ record: SessionContextCandidate) -> JSONValue {

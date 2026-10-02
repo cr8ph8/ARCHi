@@ -1,3 +1,13 @@
+## 2 October 2026 — Exact methods in Memory map and bounded revision guidance
+
+`R02-METHOD-MEMORY` · **BUILT_SIGNED_STAGED_NOT_INSTALLED** · [Implementation](docs/method-memory-integration-2026-10-02.md) · [Evidence](docs/accountability/evidence/r02-method-memory-2026-10-02.json)
+
+Saved methods now project exact versions, support, supersession and recorded outcomes into Home and Memory map. Read-only inspection binds existing profile owners; historical work uses the same follow-through controls after restart. A bounded request-only literal inventory improves revision guidance, with omission before mandatory input/history loss and actual provider-envelope budget checks. Historical concept references cannot redirect a method's exact origin to an older page.
+
+Focused runs passed 52 and 10 checks with overlap, representing 53 unique provider-free cases. Native fixture renders were inspected. One local Qwen proposal preserved numbers, caveat and ordering but joined punctuation to a URL; independent exact-link verification blocked Apply. No retries, cloud calls, puzzles, broad suite, personal Helpful review or saved learning credit. The model expectation remains failed evidence.
+
+The candidate is built and signed; all 435 resource hashes match the installed baseline and all 23 monitored profile files remain unchanged. The updater refused the running app. Normal Quit automation is unavailable, so installation and installed walkthrough are pending user shutdown. Phone version was freshly read as 0.6.2 (7), unchanged. Recovery audit found account-owned task provenance coupled with budgets/reservations; no unsafe profile-restore schema was added. Existing release and useful-transfer gaps remain open.
+
 ## 2 October 2026 — Core admission and attributable native records
 
 `R02-CORE-ASSURANCE` · **IMPLEMENTED_INSTALLED_FOCUSED** · [Delivery and scope](docs/core-assurance-2026-10-02.md) · [Authority and lineage](docs/native-authority-and-lineage.md) · [Evidence](docs/accountability/evidence/r02-core-assurance-2026-10-02.json)
