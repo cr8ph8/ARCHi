@@ -1,3 +1,13 @@
+## 2 October 2026 — Method-memory upgrade installed and reopened
+
+`R02-METHOD-MEMORY-DELIVERY` · **INSTALLED_FOCUSED_NATIVE_READBACK** · [Guide](docs/method-memory-integration-2026-10-02.md) · [Delivery evidence](docs/accountability/evidence/r02-method-memory-installed-2026-10-02.json)
+
+Installed implementation `e966e88` through the existing guarded updater after normal Quit. Signature and compiled/installed program identity match. All 23 monitored profile files and 435 resource files remain unchanged after restart; the original Liminal assets remain included and the retained rollback matches the preceding executable.
+
+Installed native readback covered Home method counts, the Saved method filter and honest empty state, real knowledge-node version/backlinks, return Home, normal Quit/reopen, and the saved-method help entry. No model calls, puzzles or test suite reruns. This profile has zero methods; no invented Helpful judgment or saved learning event was added. Later screenshots were Stage Manager thumbnails, so full-size installed visual acceptance is not claimed. Prior disposable native fixture renders remain separately scoped.
+
+The preceding one-call revision remains blocked for URL punctuation. Useful owner-reviewed method transfer, cross-owner recovery, phone continuity and beta gates remain open. Recovery review identified a bounded historical evidence appendix as the next safe slice; no backup or financial schema changed. The earlier staged receipt is retained as history.
+
 ## 2 October 2026 — Exact methods in Memory map and bounded revision guidance
 
 `R02-METHOD-MEMORY` · **BUILT_SIGNED_STAGED_NOT_INSTALLED** · [Implementation](docs/method-memory-integration-2026-10-02.md) · [Evidence](docs/accountability/evidence/r02-method-memory-2026-10-02.json)

@@ -30,8 +30,16 @@ The companion [evidence receipt](accountability/evidence/r02-method-memory-2026-
 
 ## Current delivery result
 
-The signed candidate is staged, not installed. The guarded updater refused the still-open ARCHi session; native Quit automation did not succeed, so installation and its walkthrough await normal shutdown. All 23 monitored profile JSON files are unchanged, and the candidate preserves all 435 installed resource files, including the original Liminal Seed. Its program identity matches the compiled source.
+Implementation `e966e88` is installed in the one ARCHi app. [The installation and restart receipt](accountability/evidence/r02-method-memory-installed-2026-10-02.json) follows the earlier staged qualification receipt without replacing its history. Normal Quit, guarded installation, signature and program identity checks passed. All 23 monitored profile files and all 435 bundled resources are unchanged after restart; rollback retains the prior executable and the original Liminal assets remain included.
 
-The two focused runs passed 52 and 10 checks with overlap (53 unique provider-free checks); four opt-in cases were skipped in the first run. A single separate local Qwen proposal preserved digits, the caveat and requested order, but attached the final period to a URL. The exact-link check blocked Apply. This live expectation failed; no retry, cloud call, Helpful judgment or learning credit was recorded.
+Native readback verified Home's method count, the Saved method map filter and empty state, an existing concept's v2 identity and backlinks, Home return, Quit/reopen, and the Saved methods help entry. The selected profile has no methods, so populated installed method use remains unqualified. Later captures returned Stage Manager thumbnails; full-size layout evidence comes from the earlier labeled disposable fixtures.
 
-The paired physical iPhone was freshly read as 0.6.2 (7). No phone update ran. Populated method inspection was rendered and checked using disposable scripted records; it is not an owner-rated learning result.
+Prior focused runs passed 52 and 10 checks with overlap (53 unique provider-free checks). A single separate local Qwen proposal preserved digits, caveat and requested order, but joined sentence punctuation to a URL; the exact-link check blocked Apply. That live expectation remains failed evidence. This delivery ran no additional model calls, puzzle runs or test suites and recorded no Helpful judgment or learning credit.
+
+## Next recovery slice
+
+The source audit supports a bounded **document-linked historical provenance appendix** inside a future backup format. Its inclusion reasons should come from exact document records in the same captured profile archive, including request and method-version bindings. The existing account owner should capture matching task evidence and any required reading-parent references, explicitly retaining missing or legacy information. Preview must identify these records as captured history.
+
+Keep restore limited to the existing five profile files for that slice. The appendix must not recreate live tasks, insert old Helpful outcomes, replace budgets/reservations/billing or infer profile ownership from timing, names or common sources. Complete live recovery still needs additive conflict-rejecting reconciliation. This is a next implementation boundary, not installed backup functionality.
+
+The paired phone was last read as 0.6.2 (7) during the preceding work. No phone update ran here. Everyday owner-rated transfer, phone/WikiOS continuity, broader research consumers and beta acceptance remain open.

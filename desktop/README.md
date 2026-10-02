@@ -2,7 +2,7 @@
 
 **ARCHi — ARC Hampton Interphase.** This is the ARCHi companion app, a separate product from Quotient Wiki OS. Its interface centers the active companion, conversation, shared work and chosen memories. KIN and other chosen companion names identify the individual within ARCHi; they do not rename the application. See the [interface identity](../docs/archi-interface-identity.md) for the reference direction and product boundary.
 
-The current target is a supervised local desktop Alpha on this Mac. Start with the [desktop Alpha guide](../docs/desktop-alpha-guide.md) for the task checklist, explicit save/load behavior and recovery. Current delivery and remaining work are summarized in the [29 September system status](../docs/system-status-2026-09-29.md); this README does not declare release acceptance.
+The current target is a supervised local desktop Alpha on this Mac. Start with the [desktop Alpha guide](../docs/desktop-alpha-guide.md) for the task checklist, explicit save/load behavior and recovery. The [2 October method-memory delivery](../docs/method-memory-integration-2026-10-02.md) records the latest installed increment and limits. The [29 September system status](../docs/system-status-2026-09-29.md) is retained historical scope; this README does not declare release acceptance.
 
 ## Build and launch
 

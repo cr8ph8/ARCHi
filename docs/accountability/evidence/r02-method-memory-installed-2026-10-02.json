@@ -1,0 +1,65 @@
+{
+  "schema": "archi-method-memory-installed/v1",
+  "date": "2026-10-02",
+  "status": "INSTALLED_FOCUSED_NATIVE_READBACK",
+  "implementationCommit": "e966e888affbe8adaa428469e02499dab7bd394e",
+  "precedingQualification": "r02-method-memory-2026-10-02.json",
+  "delivery": {
+    "schema": "archi-method-memory-delivery/v1",
+    "mode": "installed",
+    "date": "2026-10-02",
+    "installedExecutableSHA256": "cdc22a6999274d7c3d8ae89b0f719817ff202513a8266b4164fb7c27ca7f48f9",
+    "compiled": {
+      "textSHA256": "78ea64636868ef6caadc1b017b7849c9d0bf1b6ef48c30a175899f9eecafcb69",
+      "uuid": "6a0ba159-0a21-3284-b34b-eaa1b9693209"
+    },
+    "installed": {
+      "textSHA256": "78ea64636868ef6caadc1b017b7849c9d0bf1b6ef48c30a175899f9eecafcb69",
+      "uuid": "6a0ba159-0a21-3284-b34b-eaa1b9693209"
+    },
+    "compiledInstalledProgramMatch": true,
+    "profileFileCount": 23,
+    "profilesUnchanged": true,
+    "resourceFileCount": 435,
+    "resourcesUnchanged": true,
+    "signaturePassed": true,
+    "guardedUpdater": true,
+    "rollbackRetained": true,
+    "rollbackDirectory": "20261002T220933Z-1fislkaa",
+    "launched": true,
+    "normalQuitAndRestartObserved": true,
+    "rollbackMatchesPriorExecutable": true
+  },
+  "walkthrough": {
+    "observations": [
+      "Home displays saved-method count alongside existing source/page/lesson counts",
+      "Memory map exposes Saved method filter and honest empty state",
+      "Existing knowledge particle resolves Concept v2 with two backlinks and two outgoing links",
+      "Home return preserves source/page counts and no request sent",
+      "Normal Quit, process absence, reopen and Home readback observed",
+      "Saved methods entry after restart explains candidate authoring and reviewed reuse",
+      "Closed detail sheet and left ARCHi on Home"
+    ],
+    "modelGenerationCalls": 0,
+    "puzzleRuns": 0,
+    "testSuitesRunThisDelivery": 0,
+    "personalMethodsCreated": 0,
+    "helpfulJudgmentsWritten": 0,
+    "visualLimits": "Home before update was captured full size; later installed captures returned Stage Manager thumbnails. Installed control/state acceptance uses native accessibility readback. Populated method layout retains prior labeled fixture render evidence, not personal-profile acceptance."
+  },
+  "preservation": "All 23 monitored profile JSON files and 435 bundled resource files remain byte-identical through installation and restart. Original Liminal resources retained. Rollback executable matches pre-update app.",
+  "priorModelOutcome": "Previous one-call Qwen revision remains failed exact-link preservation and blocked Apply; this delivery makes no new model-quality claim.",
+  "recoveryReview": {
+    "scope": "Read-only source audit; no recovery code or schema changed",
+    "finding": "Production task evidence shares account-wide Usage with budgets/reservations, while task records have no profile ID.",
+    "nextSlice": "Document-linked historical provenance appendix selected from exact backed-up document records, captured by the existing account owner, inspectable without recreating live tasks or restoring financial state.",
+    "completeLiveRecovery": false
+  },
+  "limits": [
+    "Personal profile has zero saved methods; populated installed method use is not claimed",
+    "Owner-authored Apply, judgment, retained method, restart and useful reuse remains open",
+    "Semantic preservation and exact-link generation reliability remain open",
+    "No phone update, cross-device sync, general RepE qualification or beta release"
+  ],
+  "installLogSHA256": "1bf5cb44828213e1dca119cccaa3fb2a94a20b26c896b08d6d9945f97cc80658"
+}

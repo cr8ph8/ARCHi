@@ -1,6 +1,6 @@
 # ARCHi source candidate
 
-**Current system — 29 September:** [Installed behavior and remaining work](docs/system-status-2026-09-29.md) · [One-app system and recovery](docs/one-app-system.md) · [Desktop guide](desktop/README.md) · [Marketplace and Arena access](docs/developer-access-protocol.md).
+**Current delivery — 2 October:** [Installed method-memory upgrade and limits](docs/method-memory-integration-2026-10-02.md) · [Native authority](docs/native-authority-and-lineage.md) · [One-app system and recovery](docs/one-app-system.md) · [Marketplace and Arena access](docs/developer-access-protocol.md). The [29 September inventory](docs/system-status-2026-09-29.md) is retained historical scope.
 
 Open **`/Applications/ARCHi.app`** for Home, Ask ARCHi, Memory map, Work together, Marketplace and Arena. These are workspaces in one app. Existing profiles, sources and development history remain with their current owners. Dated entries below preserve historical evidence and do not override the current status report.
 
