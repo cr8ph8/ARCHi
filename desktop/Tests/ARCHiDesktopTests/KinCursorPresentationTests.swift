@@ -7,6 +7,25 @@ import XCTest
 /// All data, windows and completed-answer fixtures here are local and disposable.
 final class KinCursorPresentationTests: XCTestCase {
     @MainActor
+    func testLiminalSelectionCannotEmitRejectedFirstLightCombination() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.clean() }
+        _ = try keepGrowth(in: fixture)
+        let store = fixture.store, growth = store.evolution.kinGrowthRecord
+        let individual = store.activeQiMon
+        store.chooseSeedAppearance(.hamptonLiminal)
+        XCTAssertEqual(store.presentationForm, .hamptonSeed)
+        let snapshot = try XCTUnwrap(UnityPresentationSnapshot.capture(store: store, sessionID: UUID(), revision: 1,
+                                                                      active: true, now: Date(), systemReduceMotion: true))
+        XCTAssertEqual(snapshot.body, "seed")
+        XCTAssertEqual(snapshot.seedAppearance, "hamptonLiminal")
+        XCTAssertEqual(store.evolution.kinGrowthRecord, growth)
+        store.chooseSeedAppearance(.kinParticles)
+        XCTAssertEqual(store.presentationForm, .kin)
+        XCTAssertEqual(store.activeQiMon, individual)
+        XCTAssertEqual(store.evolution.kinGrowthRecord, growth)
+    }
+    @MainActor
     func testLightAppearanceKeepsOneIdentityAndBodyMilestoneAcrossSaveAndReturn() async throws {
         let fixture = try makeFixture()
         defer { fixture.clean() }
@@ -185,8 +204,11 @@ final class KinCursorPresentationTests: XCTestCase {
         let cursor = try render(LiveCompanionPresence(store: store, size: 128, role: .cursor))
         let body = try render(LiveCompanionPresence(store: store, size: 128))
         let floating = try render(FloatingCompanionBody(store: store).frame(width: 128, height: 154))
-        let seedReference = try render(CompanionPresenceArt(form: .kinSeed, family: nil, size: 128, reduceMotion: true))
-        let bodyReference = try render(CompanionPresenceArt(form: .kin, family: nil, size: 128, reduceMotion: true))
+        let memory = store.liminalFormDevelopment()
+        let seedReference = try render(CompanionPresenceArt(form: .kinSeed, family: nil, size: 128, reduceMotion: true)
+            .environment(\.companionMemoryDevelopment, memory))
+        let bodyReference = try render(CompanionPresenceArt(form: .kin, family: nil, size: 128, reduceMotion: true)
+            .environment(\.companionMemoryDevelopment, memory))
         for (first, second, label) in [(cursorBefore, cursor, "cursor before and after growth"),
                                         (cursor, seedReference, "live cursor and Core Seed"),
                                         (body, bodyReference, "live body and First Light"),

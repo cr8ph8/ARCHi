@@ -1,0 +1,88 @@
+{
+  "schema": "archi-companion-memory-forms/v1",
+  "date": "2026-10-03",
+  "status": "INSTALLED_NATIVE_CORRECTION_WITH_REMAINING_CROSS_TARGET_GATES",
+  "canonicalOwner": "Existing native profile, knowledge, lesson, Journey and outcome records",
+  "primaryPresentations": [
+    "Proto",
+    "KIN",
+    "Liminal"
+  ],
+  "legacyPreserved": true,
+  "newIdentityStore": false,
+  "originalArtworkPublished": false,
+  "memory": {
+    "currentDistinctNodesObserved": 17,
+    "reviewedApplicationsObserved": 0,
+    "duplicatesCoalescedWithReferences": true,
+    "sourceCorrectionsInvalidateSupport": true,
+    "independentWorldExperienceClaimed": false
+  },
+  "checks": {
+    "nativeFocused": {
+      "cases": 35,
+      "skips": 1,
+      "failures": 0
+    },
+    "exportsXCTest": {
+      "cases": 12,
+      "failures": 0
+    },
+    "reactorSwiftTesting": {
+      "cases": 9,
+      "failures": 0
+    },
+    "bindings": {
+      "cases": 19,
+      "failures": 0,
+      "productionShapedFailureReproducedFirst": true
+    },
+    "packagingPython": {
+      "cases": 14,
+      "failures": 0
+    },
+    "countsOverlap": true
+  },
+  "installedWalkthrough": {
+    "protoBodyAvailable": true,
+    "kinBodySelection": true,
+    "liminalBeastAndCurledDrawing": true,
+    "liminalCurrentBindingReady": true,
+    "memoryRecordNavigation": true,
+    "liminalCurledRoomHandoff": true,
+    "roomEndedNormally": true,
+    "fullParticleClickAcceptance": false,
+    "sustainedFPSMeasured": false
+  },
+  "unchangedOwners": {
+    "monitoredProfileFiles": 23,
+    "changedFiles": 0
+  },
+  "remaining": [
+    "Unity Proto/KIN common memory overlay",
+    "Particle click to exact inspector acceptance across targets",
+    "Full Arena, profile, color and reduced-motion walkthrough",
+    "Sustained 30 fps measurement",
+    "Independent direct-experience attribution and calibrated capability/battle effects",
+    "Existing device, recovery, rights and distribution gates"
+  ],
+  "notRun": [
+    "model calls",
+    "puzzle runs",
+    "battle round",
+    "phone update",
+    "broad benchmark"
+  ],
+  "source": {
+    "promotedPaths": 26,
+    "privateHistoryPublished": false,
+    "unrelatedLocalGameDifferencesPreserved": 3
+  },
+  "installed": {
+    "strictLocalSignature": true,
+    "compiledUUID": "62D67D91-6F9D-3F8D-9FA6-3CE70BCA8FB6",
+    "matchesBuiltUUID": true,
+    "binarySHA256": "455fe57b3e3dd77a12d5be2645584a0e6e51faf250285f97eed8c9f3ffb36181",
+    "rollbackRetained": true
+  }
+}

@@ -31,6 +31,8 @@ EXACT = RELEASE_FILES | ARC_REPLAY_FILES | {
     "desktop/Package.swift", "desktop/README.md", "arc/README.md", "arc/tsconfig.json",
     "desktop/Sources/ARCHiDesktop/Resources/RecordReader/reader.qualified.json",
     "script/package_record_reader.py", "script/package_representation_runtime.py",
+    "script/package_companion_supplement.py", "script/test_package_companion_supplement.py",
+    "docs/companion-evolution.md",
     "docs/native-record-lookup.md",
     "arc/fixtures/manifest.json", "arc/fixtures/golden/smoke-evidence-v1.json",
     "arc/fixtures/smoke/synthetic-increment-001.json", "arc/fixtures/portable/smoke-evaluation-v1.json",

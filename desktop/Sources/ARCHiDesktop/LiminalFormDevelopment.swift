@@ -8,20 +8,48 @@ enum LiminalFormDevelopment {
     static let maximumNodes = 64
     static let maximumVisibleNodes = 24
 
-    struct Node: Equatable, Identifiable {
+    /// These are evidence states, not truth scores or grades of intelligence.
+    /// A retained/source-derived lesson becomes practiced only when the existing
+    /// outcome owner supplies an exact, current, user-reviewed application.
+    enum EvidenceState: String, Equatable, Sendable {
+        case retainedKnowledge, reviewedApplication
+    }
+    struct Node: Equatable, Identifiable, Sendable {
         let id: String
         let lessonIDs: [String]
         let graphNodeIDs: [String]
         let title: String
+        /// Bounded artistic input; it must not truncate the evidence history.
         let applications: Int
+        let reviewedApplicationCount: Int
+        let supportDigest: String?
+        var evidenceState: EvidenceState { reviewedApplicationCount > 0 ? .reviewedApplication : .retainedKnowledge }
+
+        init(id: String, lessonIDs: [String], graphNodeIDs: [String], title: String,
+             applications: Int, reviewedApplicationCount: Int? = nil, supportDigest: String? = nil) {
+            self.id = id; self.lessonIDs = lessonIDs; self.graphNodeIDs = graphNodeIDs; self.title = title
+            self.applications = applications
+            self.reviewedApplicationCount = reviewedApplicationCount ?? applications
+            self.supportDigest = supportDigest
+        }
     }
-    struct Snapshot: Equatable {
+    struct Snapshot: Equatable, Sendable {
         let originDigest: String
         let nodes: [Node]
         let unavailableLessons: Int
         let duplicateLessons: Int
         let evidenceAvailable: Bool
-        var practicedNodes: Int { nodes.filter { $0.applications > 0 }.count }
+        let unavailableKnowledgePages: Int
+        let duplicateKnowledgePages: Int
+        init(originDigest: String, nodes: [Node], unavailableLessons: Int, duplicateLessons: Int,
+             evidenceAvailable: Bool, unavailableKnowledgePages: Int = 0, duplicateKnowledgePages: Int = 0) {
+            self.originDigest = originDigest; self.nodes = nodes; self.unavailableLessons = unavailableLessons
+            self.duplicateLessons = duplicateLessons; self.evidenceAvailable = evidenceAvailable
+            self.unavailableKnowledgePages = unavailableKnowledgePages; self.duplicateKnowledgePages = duplicateKnowledgePages
+        }
+        var practicedNodes: Int { nodes.filter { $0.evidenceState == .reviewedApplication }.count }
+        var retainedOnlyNodes: Int { nodes.count - practicedNodes }
+        var reviewedApplicationCount: Int { nodes.reduce(0) { $0 + $1.reviewedApplicationCount } }
         /// Artistic construction limits, not intelligence or gameplay power.
         var availableDetail: Int {
             guard !nodes.isEmpty else { return 0 }
@@ -34,15 +62,21 @@ enum LiminalFormDevelopment {
         var hiddenNodes: Int { max(0, nodes.count - maximumVisibleNodes) }
     }
 
+    /// The caller must resolve pages through ReadingSourceLibrary.availability
+    /// immediately before projection; this pure recipe cannot re-read its files.
     @MainActor static func build(originDigest: String, lessons: [KeptLesson], currentLessonIDs: Set<String>,
-                      receipts: [EvolutionUsefulReceipt], evidenceOrigin: String?, now: Date) -> Snapshot {
+                      receipts: [EvolutionUsefulReceipt], evidenceOrigin: String?, now: Date,
+                      currentKnowledgePages: [KnowledgePage] = []) -> Snapshot {
         let identityValid = LiminalKnowledgeBindings.isDigest(originDigest)
         let evidenceAvailable = identityValid && evidenceOrigin == originDigest
             && receipts.count <= EvolutionStore.maximumUsefulReceipts
-        guard identityValid, now.timeIntervalSince1970.isFinite, lessons.count <= maximumNodes,
-              Set(lessons.map(\.id)).count == lessons.count else {
+        guard identityValid, now.timeIntervalSince1970.isFinite,
+              lessons.count + currentKnowledgePages.count <= maximumNodes,
+              Set(lessons.map(\.id)).count == lessons.count,
+              Set(currentKnowledgePages.map { $0.id.lowercased() }).count == currentKnowledgePages.count else {
             return .init(originDigest: originDigest, nodes: [], unavailableLessons: lessons.count,
-                         duplicateLessons: 0, evidenceAvailable: false)
+                         duplicateLessons: 0, evidenceAvailable: false,
+                         unavailableKnowledgePages: currentKnowledgePages.count)
         }
         let current = lessons.filter {
             $0.isValid && currentLessonIDs.contains($0.id) && $0.createdAt <= now && $0.updatedAt <= now
@@ -51,32 +85,82 @@ enum LiminalFormDevelopment {
         // Rewording a title, changing case, or copying a lesson is not a new fact.
         // These are exact normalized duplicates only, not semantic equivalence.
         let groups = Dictionary(grouping: current, by: contentID)
+        let pages = currentKnowledgePages.filter {
+            $0.isValid && $0.state == .reviewed && $0.binding.isValid && $0.createdAt <= now && $0.updatedAt <= now
+        }
+        // Only reviewed semantic records enter here, never their raw source
+        // copies. Identical untyped prose shares an anchor with an exact lesson.
+        // People and encounters retain their own identities despite similar text.
+        let pageGroups = Dictionary(grouping: pages, by: pageContentID)
         let byRequest = Dictionary(grouping: evidenceAvailable ? receipts : [], by: \.requestID)
         let admitted = evidenceAvailable ? byRequest.values.compactMap { copies -> EvolutionUsefulReceipt? in
             guard let first = copies.first, copies.allSatisfy({ $0 == first }),
                   first.hasValidEvidence, first.requestBinding?.isValid == true else { return nil }
             return first
         } : []
-        let nodes = groups.map { id, records -> Node in
-            let ordered = records.sorted { $0.id < $1.id }
+        let nodes = Set(groups.keys).union(pageGroups.keys).map { id -> Node in
+            let ordered = (groups[id] ?? []).sorted { $0.id < $1.id }
+            let orderedPages = (pageGroups[id] ?? []).sorted { $0.id < $1.id }
             var uses = Set<String>()
+            var support = Set<String>()
+            // Keep current source/revision provenance even before practical use.
+            // The content ID stays stable when this same knowledge is reinforced.
+            for record in ordered {
+                if let reference = EvolutionLessonUse.make(snapshot: LessonSnapshot(lesson: record)) {
+                    support.insert(evidenceKey(["lesson", reference.lessonID,
+                                                String(reference.lessonRevision), reference.snapshotDigest]))
+                }
+            }
+            for page in orderedPages {
+                let binding = page.binding
+                support.insert(evidenceKey(["reviewed-page", binding.id, String(binding.revision), binding.digest]))
+            }
             for receipt in admitted {
                 guard let use = receipt.lessonUse, let binding = receipt.requestBinding,
-                      ordered.contains(where: { use.matches(snapshot: LessonSnapshot(lesson: $0)) }) else { continue }
+                      ordered.contains(where: {
+                          use.matches(snapshot: LessonSnapshot(lesson: $0))
+                              && ($0.source == nil || $0.source?.digest == receipt.sourceDigest)
+                              // Producing a lesson is acquisition. It cannot also
+                              // count as applying that lesson in the same request.
+                              && UUID(uuidString: $0.origin?.requestID ?? "") != receipt.requestID
+                      }) else { continue }
                 // Retrying identical input with a different request UUID does not
                 // multiply practice; exact current lesson revision is checked above.
                 uses.insert(binding.inputDigest + ":" + (receipt.sourceDigest ?? "conversation"))
+                support.insert(evidenceKey(["application", receipt.requestID.uuidString,
+                    binding.inputDigest, binding.contextDigest, receipt.sourceDigest ?? "conversation",
+                    use.lessonID, String(use.lessonRevision), use.snapshotDigest]))
             }
             return Node(id: id, lessonIDs: ordered.map(\.id),
-                        graphNodeIDs: ordered.map(CompanionGraph.lessonNodeID), title: ordered[0].topic,
-                        applications: min(8, uses.count))
+                        graphNodeIDs: (ordered.map(CompanionGraph.lessonNodeID)
+                            + orderedPages.map { KnowledgePageGraph.nodeID($0.binding) }).sorted(),
+                        title: ordered.first?.topic ?? orderedPages[0].title,
+                        applications: min(8, uses.count), reviewedApplicationCount: uses.count,
+                        supportDigest: evidenceKey(["liminal-current-support/v2"] + support.sorted()))
         }.sorted { $0.id < $1.id }
         return .init(originDigest: originDigest, nodes: nodes, unavailableLessons: lessons.count - current.count,
-                     duplicateLessons: current.count - nodes.count, evidenceAvailable: evidenceAvailable)
+                     duplicateLessons: current.count - groups.count, evidenceAvailable: evidenceAvailable,
+                     unavailableKnowledgePages: currentKnowledgePages.count - pages.count,
+                     duplicateKnowledgePages: pages.count - Set(pageGroups.keys).subtracting(groups.keys).count)
+    }
+
+    private static func evidenceKey(_ pieces: [String]) -> String {
+        LiminalKnowledgeBindings.sha256(Data(pieces.map { "\($0.utf8.count):\($0)" }.joined().utf8))
     }
 
     private static func contentID(_ lesson: KeptLesson) -> String {
-        let normalized = lesson.text.precomposedStringWithCanonicalMapping.lowercased()
+        contentID(lesson.text)
+    }
+
+    private static func pageContentID(_ page: KnowledgePage) -> String {
+        if page.relationship != nil {
+            return evidenceKey(["liminal-relationship-identity/v1", page.id.lowercased()])
+        }
+        return contentID(page.body)
+    }
+
+    private static func contentID(_ text: String) -> String {
+        let normalized = text.precomposedStringWithCanonicalMapping.lowercased()
             .split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
         return LiminalKnowledgeBindings.sha256(Data((revision + ":" + normalized).utf8))
     }

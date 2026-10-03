@@ -4,17 +4,16 @@ import SwiftUI
 @MainActor
 extension CompanionStore {
     func refreshReactorReference(family: EvolutionFamily? = nil, usesExplicitFamily: Bool = false) {
+        reactor.refreshCurrentReference = { [weak self] in self?.refreshReactorReference() }
         let selectedFamily = hasPersonalQiMon ? nil : (usesExplicitFamily ? family : evolution.activeFamily)
         let recipe = presentationRecipe
-        let id = CompanionVisualAsset.appearanceID(form: presentationForm, family: selectedFamily,
-            treatment: preferences.visualTreatment, recipe: recipe, naturalVariation: presentationNaturalVariation,
-            equipment: preferences.equipment, seedColor: preferences.seedColor,
-            pointProgress: preferences.liminalPointProgress) + (liveLiminalPointStructure.map { "-structure-" + $0.digest } ?? "")
-        let bytes = reactor.appearanceID == id ? reactor.referencePNG : CompanionPresenceArt.png(
+        let reference = currentReactorReference(family: selectedFamily)
+        let bytes = reactor.appearanceID == reference.id && reactor.referencePNG != nil ? reactor.referencePNG : CompanionPresenceArt.png(
             form: presentationForm, family: selectedFamily, treatment: preferences.visualTreatment,
             recipe: recipe, naturalVariation: presentationNaturalVariation, equipment: preferences.equipment, seedColor: preferences.seedColor,
-            pointProgress: preferences.liminalPointProgress, pointStructure: liveLiminalPointStructure)
-        reactor.updateReference(id: id,
+            pointProgress: preferences.liminalPointProgress, pointStructure: reference.structure,
+            memoryDevelopment: reference.memory)
+        reactor.updateReference(id: reference.id,
             label: CompanionVisualAsset.label(form: presentationForm, family: selectedFamily,
                 treatment: preferences.visualTreatment, recipe: recipe, naturalVariation: presentationNaturalVariation,
                 equipment: preferences.equipment, seedColor: preferences.seedColor),
@@ -26,10 +25,30 @@ extension CompanionStore {
     /// A candidate frame is usable only for the current body and equipped item.
     /// Preference changes may redraw SwiftUI before the reference observer runs.
     var reactorReferenceMatchesCurrentAppearance: Bool {
-        reactor.appearanceID == CompanionVisualAsset.appearanceID(form: presentationForm, family: presentationFamily,
+        reactor.referencePNG != nil && reactor.appearanceID == currentReactorReference(family: presentationFamily).id
+    }
+
+    /// Capture current origin-bound evidence once so the cache key and pixels
+    /// describe the same records. A failed replacement retires the old reference
+    /// through Reactor's existing identity-change cancellation.
+    private func currentReactorReference(family: EvolutionFamily?) -> (id: String, structure: LiminalPointStructure?, memory: LiminalFormDevelopment.Snapshot?) {
+        let usesPoints = LiminalV008Runtime.applies(form: presentationForm, family: family, treatment: preferences.visualTreatment)
+        let memoryApplies = !usesPoints && CompanionMemoryParticles.applies(form: presentationForm, family: family,
+            treatment: preferences.visualTreatment)
+        let snapshot = usesPoints || memoryApplies ? liminalFormDevelopment() : nil
+        let structure = usesPoints ? LiminalV008Runtime.asset.flatMap { asset -> LiminalPointStructure? in
+            guard let snapshot else { return nil }
+            return LiminalPointStructure.make(snapshot, sessionID: liminalStructureSessionID,
+                manifestSHA256: asset.manifestSHA256, lowDetailIDs: asset.lowDetailIDs)
+        } : nil
+        let memory = memoryApplies ? snapshot : nil
+        let id = CompanionVisualAsset.appearanceID(form: presentationForm, family: family,
             treatment: preferences.visualTreatment, recipe: presentationRecipe,
             naturalVariation: presentationNaturalVariation, equipment: preferences.equipment, seedColor: preferences.seedColor,
-            pointProgress: preferences.liminalPointProgress) + (liveLiminalPointStructure.map { "-structure-" + $0.digest } ?? "")
+            pointProgress: preferences.liminalPointProgress)
+            + (structure.map { "-structure-" + $0.digest } ?? "")
+            + (memory.map { "-memory-" + CompanionMemoryParticles.identity($0) } ?? "")
+        return (id, structure, memory)
     }
 }
 

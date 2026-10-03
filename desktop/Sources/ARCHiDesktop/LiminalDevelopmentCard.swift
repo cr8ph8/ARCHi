@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// A local construction study. The user's qualified body and saved pose keep
-/// their existing owners; this deliberately does not claim Unity parity.
+/// Shows retained learning and its current reviewed applications. The optional
+/// construction study remains a visual projection of those existing records.
 @MainActor
 struct LiminalDevelopmentCard: View {
     @ObservedObject var store: CompanionStore
@@ -14,19 +14,21 @@ struct LiminalDevelopmentCard: View {
     @State private var impulseAt = Date.distantPast
     @State private var visible = false
     @State private var exportNotice: String?
+    @State private var inspectionNotice: String?
+    @State private var studyExpanded = false
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     var body: some View {
-        if store.activeQiMon?.character == .hampton {
+        if store.activeQiMon != nil {
             WorkspaceCard {
                 TimelineView(.periodic(from: .now, by: 2)) { tick in
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
-                            Text("Liminal · growing structure").font(.headline)
+                            Text("Memory & experience").font(.headline)
                             Spacer()
                             Text(store.kinLightExpression.label).font(.caption).foregroundStyle(.secondary)
                         }
-                        Text("Keep a distinct lesson to add a node. Confirm that it helped to strengthen that node. Together, supported nodes can carry more intricate patterns.")
+                        Text("Kept knowledge adds a memory node. Reviewing a helpful application strengthens that same node with support. Later direct experience can build on that knowledge through its own recorded and reviewed outcome.")
                             .font(.callout).foregroundStyle(.secondary)
                         if let snapshot = store.liminalFormDevelopment(at: tick.date) {
                             content(snapshot)
@@ -45,66 +47,98 @@ struct LiminalDevelopmentCard: View {
     private func content(_ snapshot: LiminalFormDevelopment.Snapshot) -> some View {
         let reduced = systemReduceMotion || store.preferences.reduceMotion || store.preferences.quiet
         let structure = LiminalFormDevelopment.structure(snapshot, form: form, requestedDetail: detail)
-        return VStack(alignment: .leading, spacing: 10) {
-            Text("\(snapshot.nodes.count) distinct nodes · \(snapshot.practicedNodes) supported by confirmed use")
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("\(snapshot.nodes.count) distinct nodes · \(snapshot.practicedNodes) supported by helpful applications")
                 .font(.callout.weight(.medium)).accessibilityIdentifier("liminal.development.counts")
-            Picker("Structure study", selection: $form) {
-                ForEach(LiminalFormDevelopment.Form.allCases) { form in Text(form.title).tag(form) }
-            }.pickerStyle(.segmented)
-            TimelineView(.animation(minimumInterval: 1 / 30,
-                                    paused: !visible || stopped || reduced)) { time in
-                LiminalStructureDrawing(structure: structure,
-                    elapsed: time.date.timeIntervalSince(impulseAt), reducedMotion: reduced,
-                    stopped: stopped || !visible)
-            }.frame(height: 235)
-                .background(Color(red: 0.025, green: 0.019, blue: 0.028), in: RoundedRectangle(cornerRadius: 12))
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(form.title) construction preview, detail \(structure.detail) of \(snapshot.availableDetail), \(snapshot.nodes.count) memory nodes. Golden Seed remains at the center. Construction lines are artistic constraints.")
-            HStack {
-                Stepper("Detail \(structure.detail) / \(snapshot.availableDetail)", value: Binding(
-                    get: { min(detail, snapshot.availableDetail) }, set: { detail = $0 }), in: 0...max(0, snapshot.availableDetail))
-                Button("Test response") { impulseAt = Date(); stopped = false }
-                    .disabled(reduced || structure.particles.isEmpty)
-                    .accessibilityIdentifier("liminal.development.impulse")
-                Button("Stop") { stopped = true }.disabled(stopped)
-                    .accessibilityIdentifier("liminal.development.stop")
-            }.font(.caption)
-            Text("Structure study · \(structure.particles.count) display particles. These particles represent the same \(snapshot.nodes.count) nodes; screen pixels and rendering detail add no memories.")
-                .font(.caption).foregroundStyle(.secondary)
-            Text("More practiced nodes recover their shape sooner after a test impulse. Rest and Stop preserve learning. All three forms remain available.")
-                .font(.caption).foregroundStyle(.secondary)
-            if snapshot.unavailableLessons > 0 || snapshot.duplicateLessons > 0 || snapshot.hiddenNodes > 0 {
-                Text("\(snapshot.unavailableLessons) lessons need a current source or review; \(snapshot.duplicateLessons) duplicate copies share a node; \(snapshot.hiddenNodes) nodes are outside this drawing’s detail budget.")
+            if snapshot.nodes.isEmpty {
+                Text("Keep a useful lesson in Memories to begin. Its source and later reviewed uses stay inspectable.")
+                    .font(.callout).foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(snapshot.nodes.prefix(6))) { node in
+                    Button { inspect(node, origin: snapshot.originDigest) } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Image(systemName: node.applications > 0 ? "checkmark.circle" : "bookmark")
+                            Text(node.title).lineLimit(2).multilineTextAlignment(.leading)
+                            Spacer(minLength: 8)
+                            Text(node.applications > 0 ? "Helpful application" : "Kept knowledge")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Image(systemName: "arrow.up.right").font(.caption)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 5)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Open the current memory record, sources and connections.")
+                }
+                Text("Support here means you reviewed a specific application as helpful. It does not independently verify a real-world event. Retained or distilled knowledge keeps its source and can gain stronger support through direct experience.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            if !snapshot.evidenceAvailable {
-                if evolution.practiceJourneyOriginDigest == nil {
-                    Text("Connect this study to Liminal’s Journey to use this profile’s reviewed learning references. They remain profile evidence, not a claim of personally earned ability.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Button("Connect learning study") { _ = store.connectLiminalLearningStudy() }
-                        .disabled(store.isWorking).accessibilityIdentifier("liminal.development.connect")
-                } else {
-                    Text("Current feedback needs review before it can support more detail. Retained nodes remain visible. Reopen the profile after resolving changes to the feedback records.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
+            if let inspectionNotice { Text(inspectionNotice).font(.caption).foregroundStyle(.secondary) }
             HStack {
+                Button("Open memory map") { store.open(.nodeLab) }
                 Button("Review lessons") { store.open(.memory) }
                 Button("Review useful work") { store.open(.evolution) }
             }.buttonStyle(.borderless)
-            Button("Export Blender study…") { exportStudy() }
-                .accessibilityIdentifier("liminal.development.export")
-                .help("Exports node identifiers and construction geometry locally. No lesson text or source files.")
-            if let exportNotice { Text(exportNotice).font(.caption).foregroundStyle(.secondary) }
+            if !snapshot.evidenceAvailable {
+                if evolution.practiceJourneyOriginDigest == nil {
+                    Text("Connect this companion’s Journey to its reviewed learning references. This does not turn imported knowledge into direct experience.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Connect reviewed applications") { _ = store.connectLiminalLearningStudy() }
+                        .disabled(store.isWorking).accessibilityIdentifier("liminal.development.connect")
+                } else {
+                    Text("The current learning references need review before they can support these applications. Retained knowledge stays visible.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if snapshot.unavailableLessons > 0 || snapshot.duplicateLessons > 0 {
+                Text("\(snapshot.unavailableLessons) lessons need a current source or review; \(snapshot.duplicateLessons) duplicate copies share an existing node.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if evolution.hasUnsavedChanges {
                 Button("Save evolution") { _ = evolution.save() }
                     .accessibilityIdentifier("liminal.development.save")
                 Text(evolution.status).font(.caption).foregroundStyle(.secondary)
             }
-            DisclosureGroup("How detail develops") {
-                Text("Detail 1: a retained node. Detail 2: 3 nodes, 2 with confirmed use. Detail 3: 6 nodes, 3 supported. Detail 4: 12 nodes, 6 supported. These are editable art rules, not intelligence scores or battle bonuses. Identical lesson copies share one node; repeating the same input does not add practice. Correcting or withdrawing support changes this study, never confiscates a kept body. Kept lessons and Evolution keep their existing Save and Load controls. This native study does not replace the qualified Blender/Unity body.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }.font(.caption)
+            DisclosureGroup("Particle construction study", isExpanded: $studyExpanded) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Picker("Structure study", selection: $form) {
+                        ForEach(LiminalFormDevelopment.Form.allCases) { form in Text(form.title).tag(form) }
+                    }.pickerStyle(.segmented)
+                    TimelineView(.animation(minimumInterval: 1 / 30,
+                                            paused: !visible || !studyExpanded || stopped || reduced)) { time in
+                        LiminalStructureDrawing(structure: structure,
+                            elapsed: time.date.timeIntervalSince(impulseAt), reducedMotion: reduced,
+                            stopped: stopped || !visible || !studyExpanded)
+                    }.frame(height: 235)
+                        .background(Color(red: 0.025, green: 0.019, blue: 0.028), in: RoundedRectangle(cornerRadius: 12))
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("\(form.title) construction preview, detail \(structure.detail) of \(snapshot.availableDetail), \(snapshot.nodes.count) memory nodes. Golden Seed remains at the center. Construction lines are artistic constraints.")
+                    HStack {
+                        Stepper("Detail \(structure.detail) / \(snapshot.availableDetail)", value: Binding(
+                            get: { min(detail, snapshot.availableDetail) }, set: { detail = $0 }), in: 0...max(0, snapshot.availableDetail))
+                        Button("Preview response") { impulseAt = Date(); stopped = false }
+                            .disabled(reduced || structure.particles.isEmpty)
+                            .accessibilityIdentifier("liminal.development.impulse")
+                        Button("Stop") { stopped = true }.disabled(stopped)
+                            .accessibilityIdentifier("liminal.development.stop")
+                    }.font(.caption)
+                    Text("\(structure.particles.count) display particles represent \(snapshot.nodes.count) memory nodes. More particles do not create additional memories.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Supported nodes recover their shape sooner after a preview impulse. This is an artistic response, not measured intelligence or battle power. Rest and Stop preserve learning.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if snapshot.hiddenNodes > 0 {
+                        Text("\(snapshot.hiddenNodes) nodes are outside this drawing’s detail budget and remain in memory.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Button("Export Blender study…") { exportStudy() }
+                        .accessibilityIdentifier("liminal.development.export")
+                        .help("Exports node identifiers and construction geometry locally. No lesson text or source files.")
+                    if let exportNotice { Text(exportNotice).font(.caption).foregroundStyle(.secondary) }
+                    DisclosureGroup("How detail develops") {
+                        Text("Detail 1: a retained node. Detail 2: 3 nodes, 2 with confirmed use. Detail 3: 6 nodes, 3 supported. Detail 4: 12 nodes, 6 supported. These are editable art rules, not intelligence scores or battle bonuses. Identical lesson copies share one node; repeating the same input does not add practice. Correcting or withdrawing support changes this study, never confiscates a kept body. Kept lessons and Evolution keep their existing Save and Load controls. This native study does not replace the qualified Blender/Unity body.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }.font(.caption)
+                }.padding(.top, 10)
+            }
         }
         .task(id: impulseAt) {
             guard !stopped else { return }
@@ -115,7 +149,22 @@ struct LiminalDevelopmentCard: View {
             } catch { }
         }
         .onChange(of: reduced) { _, value in if value { stopped = true } }
-        .onChange(of: snapshot.originDigest) { _, _ in stopped = true }
+        .onChange(of: studyExpanded) { _, value in if !value { stopped = true } }
+        .onChange(of: snapshot.originDigest) { _, _ in stopped = true; inspectionNotice = nil }
+    }
+
+    private func inspect(_ node: LiminalFormDevelopment.Node, origin: String) {
+        guard store.activeQiMon?.originDigest == origin else {
+            inspectionNotice = "The active companion changed. Select the current memory again."
+            return
+        }
+        let graph = store.companionGraphSnapshot()
+        guard let id = node.graphNodeIDs.first(where: { id in graph.nodes.contains { $0.id == id } }),
+              store.inspectKnowledgeParticle(nodeID: id, graphDigest: LiminalKnowledgeBindings.digest(graph)) else {
+            inspectionNotice = "This memory is no longer available in the current map. Review its source before continuing."
+            return
+        }
+        inspectionNotice = nil
     }
 
     private func exportStudy() {

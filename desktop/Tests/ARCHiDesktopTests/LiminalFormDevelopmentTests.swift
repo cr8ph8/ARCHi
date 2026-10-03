@@ -11,15 +11,27 @@ final class LiminalFormDevelopmentTests: XCTestCase {
         KeptLesson(topic: "Planning \(index)", text: "Remember distinct reviewed procedure number \(index).", createdAt: now.addingTimeInterval(-10))
     }
     private func receipt(_ lesson: KeptLesson, input: String = "b", id: UUID = UUID()) -> EvolutionUsefulReceipt {
-        .init(requestID: id, sourceDigest: nil,
+        .init(requestID: id, sourceDigest: lesson.source?.digest,
               requestBinding: .init(inputDigest: String(repeating: input, count: 64), contextDigest: origin),
               lessonUse: EvolutionLessonUse.make(snapshot: .init(lesson: lesson)))
     }
     @MainActor private func build(_ lessons: [KeptLesson], _ receipts: [EvolutionUsefulReceipt] = [],
-                                  currentIDs: Set<String>? = nil, bound: Bool = true) -> LiminalFormDevelopment.Snapshot {
+                                  currentIDs: Set<String>? = nil, bound: Bool = true,
+                                  pages: [KnowledgePage] = []) -> LiminalFormDevelopment.Snapshot {
         LiminalFormDevelopment.build(originDigest: origin, lessons: lessons,
             currentLessonIDs: currentIDs ?? Set(lessons.map(\.id)), receipts: receipts,
-            evidenceOrigin: bound ? origin : nil, now: now)
+            evidenceOrigin: bound ? origin : nil, now: now, currentKnowledgePages: pages)
+    }
+    private func page(_ body: String, id: String = UUID().uuidString, revision: UInt64 = 1,
+                      state: KnowledgePageState = .reviewed,
+                      relationship: RelationshipMemoryMetadata? = nil) -> KnowledgePage {
+        let date = now.addingTimeInterval(-5)
+        return KnowledgePage(id: id, revision: revision, title: "Reviewed record", body: body,
+            kind: relationship == nil ? .concept : .claim,
+            anchors: [.init(source: .init(id: UUID().uuidString, revision: 1, digest: origin),
+                            location: 0, length: 1, quoteDigest: origin)],
+            state: state, createdAt: date, updatedAt: date,
+            review: state == .draft ? nil : .init(state: state, recordedAt: date), relationship: relationship)
     }
 
     @MainActor func testUsefulEvidenceRaisesDetailWithoutInventingNodesOrForcingForm() {
@@ -66,6 +78,158 @@ final class LiminalFormDevelopmentTests: XCTestCase {
         XCTAssertEqual(build([one], Array(repeating: use, count: 32) + [conflict]).practicedNodes, 0)
     }
 
+    @MainActor func testRetainedSourceKnowledgeCanGainAndWithdrawReviewedExperienceOnTheSameNode() throws {
+        var one = lesson(1)
+        one.source = .init(name: "Retained research", digest: String(repeating: "e", count: 64))
+        let original = one
+        let retained = build([one])
+        XCTAssertEqual(retained.nodes[0].evidenceState, .retainedKnowledge)
+        XCTAssertEqual(retained.retainedOnlyNodes, 1)
+        let reviewed = receipt(one)
+        let wrongSource = EvolutionUsefulReceipt(requestID: UUID(), sourceDigest: nil,
+            requestBinding: reviewed.requestBinding, lessonUse: reviewed.lessonUse)
+        XCTAssertEqual(build([one], [wrongSource]).nodes[0].evidenceState, .retainedKnowledge,
+                       "A source-bound lesson cannot claim use on another document or a source-free request")
+        let practiced = build([one], [reviewed])
+        XCTAssertEqual(practiced.nodes[0].id, retained.nodes[0].id)
+        XCTAssertEqual(practiced.nodes[0].lessonIDs, retained.nodes[0].lessonIDs)
+        XCTAssertEqual(practiced.nodes[0].evidenceState, .reviewedApplication)
+        XCTAssertEqual(practiced.nodes[0].reviewedApplicationCount, 1)
+        XCTAssertEqual(practiced.reviewedApplicationCount, 1)
+        XCTAssertNotEqual(practiced.nodes[0].supportDigest, retained.nodes[0].supportDigest)
+        XCTAssertEqual(build([one]), retained, "Withdrawal rebuilds retained knowledge without deleting it")
+        XCTAssertEqual(one, original, "Presentation never edits the source lesson")
+        one.revision += 1
+        let corrected = build([one], [reviewed])
+        XCTAssertEqual(corrected.nodes[0].id, retained.nodes[0].id)
+        XCTAssertEqual(corrected.nodes[0].evidenceState, .retainedKnowledge)
+        XCTAssertNotEqual(corrected.nodes[0].supportDigest, retained.nodes[0].supportDigest)
+        XCTAssertEqual(build([one], [receipt(one)]).nodes[0].evidenceState, .reviewedApplication,
+                       "A corrected record can acquire new experience against its current revision")
+    }
+
+    @MainActor func testLessonAcquisitionCannotBeItsOwnApplication() {
+        var one = lesson(1)
+        let acquisition = UUID()
+        one.origin = .init(requestID: acquisition.uuidString.lowercased(), inputDigest: origin)
+        let circularUse = receipt(one, id: acquisition)
+        XCTAssertEqual(build([one], [circularUse]).practicedNodes, 0)
+        let laterUse = receipt(one, input: "c")
+        XCTAssertEqual(build([one], [circularUse, laterUse]).nodes[0].reviewedApplicationCount, 1)
+    }
+
+    @MainActor func testLaterExperienceRemainsVisibleAfterArtDampingLimitAndRebindsPresentation() throws {
+        let one = lesson(1)
+        let eight = (1...8).map { receipt(one, input: String($0, radix: 16)) }
+        let before = build([one], eight)
+        let after = build([one], eight + [receipt(one, input: "9")])
+        XCTAssertEqual(before.nodes[0].applications, 8)
+        XCTAssertEqual(after.nodes[0].applications, 8, "Existing motion bound stays finite")
+        XCTAssertEqual(after.nodes[0].reviewedApplicationCount, 9, "Evidence is not truncated by a graphics cap")
+        XCTAssertEqual(after.nodes[0].id, before.nodes[0].id)
+        let session = UUID().uuidString
+        let first = try XCTUnwrap(LiminalPointStructure.make(before, sessionID: session,
+            manifestSHA256: origin, lowDetailIDs: Array(0..<64)))
+        let next = try XCTUnwrap(LiminalPointStructure.make(after, sessionID: session,
+            manifestSHA256: origin, lowDetailIDs: Array(0..<64)))
+        XCTAssertEqual(first.nodes, next.nodes, "Reinforcement does not reshuffle art anchors")
+        XCTAssertNotEqual(first.evidenceDigest, next.evidenceDigest)
+        XCTAssertNotEqual(first.digest, next.digest)
+    }
+
+    @MainActor func testReplacingCurrentSupportAtSameCountInvalidatesOldPresentation() throws {
+        let one = lesson(1)
+        let firstUse = receipt(one)
+        let otherUse = receipt(one, input: "c")
+        let before = build([one], [firstUse])
+        let after = build([one], [otherUse])
+        XCTAssertEqual(before.nodes[0].applications, after.nodes[0].applications)
+        XCTAssertNotEqual(before.nodes[0].supportDigest, after.nodes[0].supportDigest)
+        XCTAssertEqual(build([one], [firstUse, firstUse]), before)
+        XCTAssertEqual(build([one], [firstUse, receipt(one)]).reviewedApplicationCount, 1,
+                       "Retrying the same input does not create another experience")
+        let session = UUID().uuidString
+        let first = try XCTUnwrap(LiminalPointStructure.make(before, sessionID: session,
+            manifestSHA256: origin, lowDetailIDs: Array(0..<64)))
+        let next = try XCTUnwrap(LiminalPointStructure.make(after, sessionID: session,
+            manifestSHA256: origin, lowDetailIDs: Array(0..<64)))
+        XCTAssertEqual(first.nodes, next.nodes)
+        XCTAssertNotEqual(first.evidenceDigest, next.evidenceDigest)
+    }
+
+    @MainActor func testReviewedPagesAddBaseMemoriesAndCoalesceExactCopiesWithoutPracticeCredit() {
+        let one = lesson(1)
+        let concept = page("  " + one.text.uppercased() + "\n")
+        let copy = page(one.text)
+        let retained = build([], pages: [concept, copy])
+        XCTAssertEqual(retained.nodes.count, 1)
+        XCTAssertEqual(retained.duplicateKnowledgePages, 1)
+        XCTAssertTrue(retained.nodes[0].lessonIDs.isEmpty)
+        XCTAssertEqual(Set(retained.nodes[0].graphNodeIDs),
+                       Set([KnowledgePageGraph.nodeID(concept.binding), KnowledgePageGraph.nodeID(copy.binding)]))
+        XCTAssertEqual(retained.practicedNodes, 0)
+        XCTAssertEqual(retained.availableDetail, 1)
+        let combined = build([one], pages: [concept, copy])
+        XCTAssertEqual(combined.nodes.count, 1)
+        XCTAssertEqual(combined.nodes[0].id, retained.nodes[0].id)
+        XCTAssertEqual(combined.nodes[0].graphNodeIDs.count, 3)
+        XCTAssertEqual(combined.duplicateKnowledgePages, 2)
+        let practiced = build([one], [receipt(one)], pages: [concept, copy])
+        XCTAssertEqual(practiced.nodes[0].id, combined.nodes[0].id)
+        XCTAssertEqual(practiced.reviewedApplicationCount, 1)
+        XCTAssertNotEqual(practiced.nodes[0].supportDigest, combined.nodes[0].supportDigest)
+        XCTAssertTrue(build([], pages: [page("Draft", state: .draft), page("Withdrawn", state: .withdrawn)]).nodes.isEmpty)
+    }
+
+    @MainActor func testTypedRelationshipRecordsKeepIdentityAndNeverBecomeApplicationReceipts() {
+        let person = page("Same words", relationship: .init(kind: .person))
+        let otherPerson = page("Same words", relationship: .init(kind: .person))
+        let encounter = page("Same words", relationship: .init(kind: .encounter, person: person.binding))
+        let commitment = page("Same words", relationship: .init(kind: .commitment,
+            person: person.binding, commitmentStatus: .completed))
+        let first = build([], pages: [person, otherPerson, encounter, commitment])
+        XCTAssertEqual(first.nodes.count, 4)
+        XCTAssertEqual(first.practicedNodes, 0, "User-reported completion is not an observed application receipt")
+        XCTAssertEqual(first.reviewedApplicationCount, 0)
+        let revisedPerson = page("Corrected words", id: person.id, revision: 2, relationship: .init(kind: .person))
+        let before = build([], pages: [person])
+        let after = build([], pages: [revisedPerson])
+        XCTAssertEqual(before.nodes[0].id, after.nodes[0].id)
+        XCTAssertNotEqual(before.nodes[0].graphNodeIDs, after.nodes[0].graphNodeIDs)
+        XCTAssertNotEqual(before.nodes[0].supportDigest, after.nodes[0].supportDigest)
+        XCTAssertTrue(build([], pages: [person, person]).nodes.isEmpty, "Caller must supply unique current heads")
+    }
+
+    @MainActor func testSourceOwnerCorrectionWithdrawalAndRestartControlProjectedKnowledgePages() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("memory-page-development-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("sources.json")
+        let library = ReadingSourceLibrary(url: url)
+        let source = try library.keep(title: "Evidence", text: "An original source passage.")
+        let anchor = try library.makeAnchor(sourceID: source.id, range: NSRange(location: 0, length: 11))
+        func projection(_ owner: ReadingSourceLibrary) -> LiminalFormDevelopment.Snapshot {
+            LiminalFormDevelopment.build(originDigest: origin, lessons: [], currentLessonIDs: [],
+                receipts: [], evidenceOrigin: origin, now: Date().addingTimeInterval(1),
+                currentKnowledgePages: owner.latestKnowledgePages.filter { owner.availability(of: $0) == nil })
+        }
+        XCTAssertTrue(projection(library).nodes.isEmpty, "A kept raw source does not create a semantic memory node")
+        let draft = try library.saveKnowledgePage(title: "Concept", body: "An explicitly reviewed concept.", kind: .concept, anchors: [anchor])
+        XCTAssertTrue(projection(library).nodes.isEmpty)
+        let reviewed = try library.reviewKnowledgePage(id: draft.id, expectedRevision: draft.revision)
+        let saved = projection(library)
+        XCTAssertEqual(saved.nodes.count, 1)
+        XCTAssertEqual(saved, projection(ReadingSourceLibrary(url: url)))
+        _ = try library.withdrawKnowledgePage(id: reviewed.id, expectedRevision: reviewed.revision)
+        XCTAssertTrue(projection(library).nodes.isEmpty)
+        let replacement = try library.saveKnowledgePage(title: "New concept", body: "Another reviewed concept.", kind: .concept, anchors: [anchor])
+        _ = try library.reviewKnowledgePage(id: replacement.id, expectedRevision: replacement.revision)
+        XCTAssertEqual(projection(library).nodes.count, 1)
+        _ = try library.replace(id: source.id, title: "Corrected source", text: "Changed source passage.")
+        XCTAssertTrue(projection(library).nodes.isEmpty)
+        XCTAssertTrue(projection(ReadingSourceLibrary(url: url)).nodes.isEmpty)
+    }
+
     @MainActor func testCorrectionExpiryUnavailableSourceAndUnboundHistoryRemoveOnlyCurrentSupport() {
         var one = lesson(1)
         let old = receipt(one)
@@ -85,8 +249,9 @@ final class LiminalFormDevelopmentTests: XCTestCase {
 
     @MainActor func testDeterministicNodePositionsAndPhysicsDoNotDependOnFrameCountOrPixels() throws {
         let lessons = (0..<6).map(lesson)
-        let snapshot = build(lessons, lessons.prefix(3).map { receipt($0) })
-        XCTAssertEqual(snapshot, build(lessons.reversed(), lessons.prefix(3).reversed().map { receipt($0) }))
+        let receipts = lessons.prefix(3).map { receipt($0) }
+        let snapshot = build(lessons, receipts)
+        XCTAssertEqual(snapshot, build(lessons.reversed(), receipts.reversed()))
         for form in LiminalFormDevelopment.Form.allCases {
             let shape = LiminalFormDevelopment.structure(snapshot, form: form, requestedDetail: 3)
             let particle = try XCTUnwrap(shape.particles.first)

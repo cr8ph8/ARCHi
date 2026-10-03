@@ -52,7 +52,11 @@ struct LiminalPointStructure: Codable, Equatable, Sendable {
         // Include exact current references and support, including non-visible nodes.
         // Only this digest crosses the boundary; lesson text and titles do not.
         let evidence = [LiminalFormDevelopment.revision, snapshot.originDigest, String(snapshot.evidenceAvailable)]
-            + snapshot.nodes.flatMap { [$0.id, String($0.applications)] + $0.lessonIDs.sorted() + $0.graphNodeIDs.sorted() }
+            + snapshot.nodes.flatMap {
+                [$0.id, String($0.applications), String($0.reviewedApplicationCount),
+                 $0.evidenceState.rawValue, $0.supportDigest ?? "unrecorded"]
+                    + $0.lessonIDs.sorted() + $0.graphNodeIDs.sorted()
+            }
         let value = Self(schemaVersion: 1, recipeVersion: version, sessionID: sessionID,
                          originDigest: snapshot.originDigest, manifestSHA256: manifestSHA256,
                          evidenceDigest: LiminalKnowledgeBindings.sha256(Data(evidence.map { "\($0.utf8.count):\($0)" }.joined().utf8)),
@@ -111,10 +115,19 @@ struct LiminalPointStructure: Codable, Equatable, Sendable {
 }
 
 private struct LiminalStructureKey: EnvironmentKey { static let defaultValue: LiminalPointStructure? = nil }
+private struct CompanionMemoryDevelopmentKey: EnvironmentKey {
+    static let defaultValue: LiminalFormDevelopment.Snapshot? = nil
+}
 extension EnvironmentValues {
     var liminalPointStructure: LiminalPointStructure? {
         get { self[LiminalStructureKey.self] }
         set { self[LiminalStructureKey.self] = newValue }
+    }
+    /// Shared derived knowledge support for every native form. Asset availability
+    /// decides how it is drawn; it does not decide whether the record exists.
+    var companionMemoryDevelopment: LiminalFormDevelopment.Snapshot? {
+        get { self[CompanionMemoryDevelopmentKey.self] }
+        set { self[CompanionMemoryDevelopmentKey.self] = newValue }
     }
 }
 
@@ -122,11 +135,26 @@ extension EnvironmentValues {
 @MainActor struct LiminalStructureScope: ViewModifier {
     @ObservedObject var store: CompanionStore
     @State private var sessionID = UUID().uuidString
+    @State private var recheckedAt = Date()
     func body(content: Content) -> some View {
-        TimelineView(.periodic(from: .now, by: 2)) { tick in
-            content.environment(\.liminalPointStructure, LiminalV008Runtime.asset.flatMap {
-                store.liminalPointStructure(sessionID: sessionID, asset: $0, at: tick.date)
-            })
+        let snapshot = store.liminalFormDevelopment(at: recheckedAt)
+        let structure = LiminalV008Runtime.asset.flatMap { asset -> LiminalPointStructure? in
+            guard store.preferences.visualTreatment == .liminalV008, let snapshot else { return nil }
+            return LiminalPointStructure.make(snapshot, sessionID: sessionID,
+                manifestSHA256: asset.manifestSHA256, lowDetailIDs: asset.lowDetailIDs)
         }
+        // Keep the artwork in the ordinary view tree so explicit ImageRenderer
+        // snapshots never capture a TimelineView placeholder. The task expires
+        // with this presentation and refreshes file-backed support while visible.
+        content.environment(\.companionMemoryDevelopment, snapshot)
+            .environment(\.liminalPointStructure, structure)
+            .task {
+                recheckedAt = Date()
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: .seconds(2)) } catch { return }
+                    guard !Task.isCancelled else { return }
+                    recheckedAt = Date()
+                }
+            }
     }
 }

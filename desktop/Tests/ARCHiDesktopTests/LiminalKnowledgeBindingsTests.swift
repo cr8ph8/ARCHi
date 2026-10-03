@@ -151,6 +151,64 @@ final class LiminalKnowledgeBindingsTests: XCTestCase {
         XCTAssertThrowsError(try map.project(oversized, sessionID: session, originDigest: origin))
     }
 
+    func testRealDocumentVerificationDetailsRemainInspectable() throws {
+        let text = "Please keep all 12 items at https://example.test/items"
+        let selection = try XCTUnwrap(DocumentSelection(range: NSRange(location: 0, length: text.utf16.count),
+            text: text, sourceRevision: 3))
+        let target = try XCTUnwrap(RevisionTarget(text: text, sourceRevision: 3, selection: selection))
+        let proposal = PassageRevisionProposal(target: target, decision: .propose,
+            replacement: "12 items: https://example.test/items", explanation: "Synthetic mechanical-check fixture.",
+            sourceIDs: [], memoryIDs: [])
+        let verified = DocumentWorkCapability.verify(proposal: proposal, text: text, sourceRevision: 3,
+            requirements: .init(mustBeShorter: true, preserveNumbersAndLinks: true))
+        XCTAssertTrue(verified.canApply)
+        XCTAssertEqual(verified.checks.count, 8)
+        let graph = documentGraph(checks: verified.checks.map { .init(id: $0.id, title: $0.title, passed: $0.passed) })
+        let task = try XCTUnwrap(graph.nodes.first { $0.id.hasPrefix("document-work-") })
+        XCTAssertEqual(task.details.count, 33, "25 owner metadata fields plus eight real mechanical checks")
+        var map = try LiminalKnowledgeBindings(manifestSHA256: digest, lowDetailIDs: Array(0..<96))
+        let sidecar = try map.project(graph, sessionID: session, originDigest: origin)
+        let bound = try XCTUnwrap(sidecar.bindings.first { $0.nodeID == task.id })
+        let now = Date()
+        let pick = LiminalKnowledgeSelection(schemaVersion: 1, sessionID: session, originDigest: origin,
+            revision: 1, manifestSHA256: digest, graphDigest: sidecar.graphDigest, nodeID: task.id,
+            artParticleID: bound.anchorID, sequence: 1, updatedAtUnix: now.timeIntervalSince1970)
+        XCTAssertEqual(pick.resolves(in: sidecar, graph: graph, revisions: [1], after: 0, now: now), task)
+    }
+
+    func testDocumentDetailAllowanceIsBoundedToTheExistingOwnerShape() throws {
+        let projected = documentGraph(checks: (0..<24).map {
+            .init(id: "check-\($0)", title: "Synthetic check \($0)", passed: true)
+        })
+        let task = try XCTUnwrap(projected.nodes.first { $0.id.hasPrefix("document-work-") })
+        XCTAssertEqual(task.details.count, 49, "DocumentWorkGraph's maximum25+24 details")
+        var map = try LiminalKnowledgeBindings(manifestSHA256: digest, lowDetailIDs: Array(0..<96))
+        XCTAssertNoThrow(try map.project(projected, sessionID: session, originDigest: origin))
+        func changed(id: String? = nil, kind: CompanionGraphKind? = nil,
+                     target: CompanionGraphTarget = .context, details: [CompanionGraphDetail]? = nil) -> CompanionGraphSnapshot {
+            .init(nodes: [.init(id: id ?? task.id, title: task.title, subtitle: task.subtitle,
+                kind: kind ?? task.kind, status: task.status, details: details ?? task.details,
+                target: target)], edges: [], truncatedCount: 0)
+        }
+        for invalid in [
+            changed(id: "document-work-not-a-digest"), changed(kind: .knowledge), changed(target: .memory),
+            changed(details: task.details + [.init(label: "Over budget", value: "one more")]),
+            changed(details: [.init(label: "Oversized", value: String(repeating: "x", count: 8_193))])
+        ] {
+            XCTAssertThrowsError(try map.project(invalid, sessionID: session, originDigest: origin)) {
+                XCTAssertEqual($0 as? LiminalKnowledgeBindings.BindingError, .invalidGraph)
+            }
+        }
+    }
+
+    private func documentGraph(checks: [DocumentWorkAuditCheck]) -> CompanionGraphSnapshot {
+        var record = DocumentWorkRecord(id: "00000000-0000-4000-8000-000000000001-Qwen",
+            requestID: "00000000-0000-4000-8000-000000000001", provider: "Qwen", targetID: UUID().uuidString,
+            sourceDigest: digest, sourceRevision: 3, selectionStart: 0, selectionLength: 20)
+        record.checks = checks; record.state = .ready
+        return DocumentWorkGraph.append(to: graph(["companion-archi"]), records: [record], accountingTaskIDs: [])
+    }
+
     func testCorrectionsPreserveParticleIdentityButInvalidateOldNavigation() throws {
         let original = graph(["a", "b"])
         let node = original.nodes[0]

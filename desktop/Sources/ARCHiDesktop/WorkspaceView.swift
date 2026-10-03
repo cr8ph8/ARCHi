@@ -523,16 +523,7 @@ private struct AppearanceWorkspace: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            WorkspaceCard {
-                WorkspaceAppearancePicker(selection: $store.preferences.workspaceAppearance)
-                Button("Keep appearance for next time", systemImage: "bookmark") { store.open(.memory) }
-                    .buttonStyle(.borderless).font(.system(size: 11)).padding(.top, 6)
-                    .accessibilityHint("Open Memories to save your preferences on this Mac.")
-            }
-            PersonalContextCard(store: store)
-            SeedDesignTestCard(store: store)
             SeedAppearanceCard(store: store)
-            VelaEvolutionCard(store: store)
             QiMonCard(store: store)
             if !store.hasPersonalQiMon {
             HStack(spacing: 24) {
@@ -551,13 +542,7 @@ private struct AppearanceWorkspace: View {
                 Spacer()
             }
             }
-            if store.keptQiMon?.character == .kin {
-                ProtoAppearanceCard(store: store)
-            }
             LiminalV008AppearanceCard(store: store)
-            if store.preferences.seedAppearance == .hamptonLiminal {
-                LiminalCubSheetPreview(store: store)
-            }
             LiminalDevelopmentCard(store: store, evolution: store.evolution)
             CompanionWardrobeCard(store: store)
             if store.activeQiMon != nil {
@@ -599,30 +584,24 @@ private struct AppearanceWorkspace: View {
             }
             }
             WorkspaceCard {
-                if store.canChooseStartingForm && store.presentationForm == .companion && store.presentationFamily == nil {
-                    SettingsRow(title: "Companion finish", detail: "Choose the original, soft Pearl or long-eared aqua Proto.", icon: "paintpalette") {
-                        Picker("Companion finish", selection: $store.preferences.visualTreatment) {
-                            ForEach(CompanionVisualTreatment.allCases.filter { $0 != .liminalV008 }) { treatment in
-                                Text(treatment.rawValue).tag(treatment)
-                            }
-                        }
-                        .pickerStyle(.menu).labelsHidden().frame(width: 180)
-                        .accessibilityIdentifier("companion-visual-treatment")
-                    }
-                    if store.preferences.visualTreatment == .pearlStudy && CompanionVisualAsset.image == nil {
-                        Text("Pearl study is unavailable. Your original is shown.")
-                            .font(.system(size: 12)).foregroundStyle(.secondary)
-                    }
-                    if store.preferences.visualTreatment == .protoStudy && CompanionVisualAsset.protoImage == nil {
-                        Text("Proto is unavailable. Your original is shown.").font(.system(size: 12)).foregroundStyle(.secondary)
-                    }
-                    Divider().padding(.vertical, 10)
-                }
                 Button("Size & movement settings", systemImage: "accessibility") { store.open(.accessibility) }
                     .buttonStyle(.borderless)
                     .accessibilityIdentifier("companion.comfort-settings")
                 Text("Adjust desktop size and Reduce Motion in Settings → Comfort.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            DisclosureGroup("Personal context & design studies") {
+                PersonalContextCard(store: store)
+                SeedDesignTestCard(store: store)
+                if store.preferences.seedAppearance == .hamptonLiminal {
+                    LiminalCubSheetPreview(store: store)
+                }
+            }
+            WorkspaceCard {
+                WorkspaceAppearancePicker(selection: $store.preferences.workspaceAppearance)
+                Button("Keep workspace appearance", systemImage: "bookmark") { store.open(.memory) }
+                    .buttonStyle(.borderless).font(.system(size: 11)).padding(.top, 6)
+                    .accessibilityHint("Open Memories to save your preferences on this Mac.")
             }
             PreferenceFootnote(store: store)
         }

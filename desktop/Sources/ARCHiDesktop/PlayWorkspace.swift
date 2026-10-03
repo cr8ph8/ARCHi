@@ -6,6 +6,7 @@ struct PlayWorkspace: View {
     @ObservedObject var host: HostedPlayHost
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.liminalPointStructure) private var pointStructure
+    @Environment(\.companionMemoryDevelopment) private var memoryDevelopment
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -67,9 +68,14 @@ struct PlayWorkspace: View {
         .onChange(of: store.reactor.frameRevision) { _, _ in updateAppearance() }
         .onChange(of: systemReduceMotion) { _, _ in updateAppearance() }
         .onChange(of: pointStructure) { _, _ in updateAppearance() }
+        .onChange(of: memoryDevelopment) { _, _ in updateAppearance() }
     }
 
     private func updateAppearance() {
+        let memoryApplies = CompanionMemoryParticles.applies(form: store.presentationForm,
+            family: store.presentationFamily, treatment: store.preferences.visualTreatment)
+            && !(store.presentationForm == .hamptonSeed && store.presentationFamily == nil
+                && store.preferences.visualTreatment == .liminalV008)
         host.updateAppearance(form: store.presentationForm, family: store.presentationFamily,
             reduceMotion: store.preferences.reduceMotion || store.preferences.quiet || systemReduceMotion,
             treatment: store.preferences.visualTreatment,
@@ -77,6 +83,7 @@ struct PlayWorkspace: View {
             expressionRevision: store.reactor.frameRevision,
             recipe: store.presentationRecipe, naturalVariation: store.presentationNaturalVariation,
             equipment: store.preferences.equipment, seedColor: store.preferences.seedColor,
-            pointProgress: store.preferences.liminalPointProgress, pointStructure: pointStructure)
+            pointProgress: store.preferences.liminalPointProgress, pointStructure: pointStructure,
+            memoryDevelopment: memoryApplies ? store.liminalFormDevelopment() : nil)
     }
 }

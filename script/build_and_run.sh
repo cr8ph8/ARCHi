@@ -132,6 +132,14 @@ require_selected_app_stopped
 cp "$BIN_DIR/ARCHiDesktop" "$BUNDLE_DIR/Contents/MacOS/ARCHiDesktop"
 # The native art loader uses this packaged location, never a development fallback.
 cp -R "$REPO_ROOT/desktop/Sources/ARCHiDesktop/Resources/CompanionArt" "$BUNDLE_DIR/Contents/Resources/CompanionArt"
+# Curated source omits some local artwork. Preserve only the two qualified
+# portraits from an explicit local source or the installed app, never arbitrary
+# directory contents. A changed/missing explicit source stops before install.
+COMPANION_SUPPLEMENT_ARGS=(--destination "$BUNDLE_DIR/Contents/Resources/CompanionArt")
+if [[ -n "${ARCHI_COMPANION_ART_SOURCE:-}" ]]; then
+    COMPANION_SUPPLEMENT_ARGS+=(--source "$ARCHI_COMPANION_ART_SOURCE")
+fi
+python3 "$REPO_ROOT/script/package_companion_supplement.py" "${COMPANION_SUPPLEMENT_ARGS[@]}"
 python3 "$REPO_ROOT/script/verify_preserved_liminal_seed.py" --app "$BUNDLE_DIR"
 test -f "$BUNDLE_DIR/Contents/Resources/CompanionArt/archi-pearl-study-v1.png"
 cp -R "$REPO_ROOT/desktop/Sources/ARCHiDesktop/Resources/Branding" "$BUNDLE_DIR/Contents/Resources/Branding"

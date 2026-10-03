@@ -29,7 +29,7 @@ struct QiMonCard: View {
                     if form == .kin && CompanionVisualAsset.usesProto(store.preferences.visualTreatment) {
                         Text("Proto expression").font(.system(size: 11)).foregroundStyle(accent)
                     }
-                    Text("Desktop cursor · \(kin.stageTitle)").font(.system(size: 11))
+                    Text("Desktop cursor · \(store.preferences.seedAppearance.title)").font(.system(size: 11))
                         .foregroundStyle(.white.opacity(0.7))
                         .accessibilityIdentifier("kin-cursor-form")
                     Text(store.kinLightExpression.label)

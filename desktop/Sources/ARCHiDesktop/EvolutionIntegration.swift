@@ -93,6 +93,7 @@ struct CompanionPresenceArt: View {
     var snapshotOnly = false
     var pointSnapshotImage: NSImage? = nil
     @Environment(\.liminalPointStructure) private var pointStructure
+    @Environment(\.companionMemoryDevelopment) private var memoryDevelopment
     @Environment(\.liminalPointProgress) private var pointProgress
     @Environment(\.liminalLightExpression) private var inheritedLightExpression
     private var effectiveLightExpression: KinLightExpression { lightExpression ?? inheritedLightExpression }
@@ -114,12 +115,14 @@ struct CompanionPresenceArt: View {
     static func png(form: CompanionForm, family: EvolutionFamily?, treatment: CompanionVisualTreatment = .original,
                     recipe: CompanionAppearanceRecipe? = nil, naturalVariation: CompanionNaturalVariation? = nil,
                     equipment: CompanionEquipment = .empty, seedColor: CompanionSeedColor = .original,
-                    pointProgress: Double = LiminalV008Runtime.orbProgress, pointStructure: LiminalPointStructure? = nil) -> Data? {
+                    pointProgress: Double = LiminalV008Runtime.orbProgress, pointStructure: LiminalPointStructure? = nil,
+                    memoryDevelopment: LiminalFormDevelopment.Snapshot? = nil) -> Data? {
         let usesPoints = LiminalV008Runtime.applies(form: form, family: family, treatment: treatment)
         let pointImage = usesPoints ? LiminalV008Runtime.snapshot(progress: pointProgress, seedColor: seedColor, structure: pointStructure) : nil
         guard !usesPoints || pointImage != nil else { return nil }
         let renderer = ImageRenderer(content: CompanionPresenceArt(form: form, family: family, size: 256, reduceMotion: true,
-            treatment: treatment, recipe: recipe, naturalVariation: naturalVariation, equipment: equipment, seedColor: seedColor, snapshotOnly: true, pointSnapshotImage: pointImage))
+            treatment: treatment, recipe: recipe, naturalVariation: naturalVariation, equipment: equipment, seedColor: seedColor, snapshotOnly: true, pointSnapshotImage: pointImage)
+            .environment(\.companionMemoryDevelopment, memoryDevelopment))
         renderer.scale = 2
         guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
@@ -197,6 +200,14 @@ struct CompanionPresenceArt: View {
                     lightExpression: [.kinSeed, .kin, .corePearl, .particleSeed, .hamptonSeed, .velaSeed, .velaLantern].contains(form) ? effectiveLightExpression : .resting, treatment: treatment, seedColor: seedColor)
             }
         }.frame(width: size, height: size)
+            .overlay {
+                if !LiminalV008Runtime.applies(form: form, family: family, treatment: treatment),
+                   CompanionMemoryParticles.applies(form: form, family: family, treatment: treatment),
+                   let memoryDevelopment {
+                    CompanionMemoryParticleField(snapshot: memoryDevelopment,
+                        reduceMotion: snapshotOnly || reduceMotion || systemReduceMotion)
+                }
+            }
     }
 
     private func personalizedImage(_ image: NSImage, recipe: CompanionAppearanceRecipe, phase: Double) -> some View {

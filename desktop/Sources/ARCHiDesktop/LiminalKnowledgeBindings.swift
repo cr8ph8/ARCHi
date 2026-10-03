@@ -122,6 +122,18 @@ struct LiminalKnowledgeBindings {
             && !text.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) })
     }
 
+    private static func detailLimit(for node: CompanionGraphNode) -> Int {
+        // Document work owns a larger, already bounded metadata projection:
+        // even the ordinary eight checks follow twenty-five retained fields.
+        // Preserve those checks without relaxing other node or text limits.
+        let prefix = "document-work-"
+        if node.kind == .context, node.target == .context, node.id.hasPrefix(prefix),
+           isDigest(String(node.id.dropFirst(prefix.count))) {
+            return DocumentWorkGraph.maximumTaskDetails
+        }
+        return 32
+    }
+
     fileprivate static func validate(_ graph: CompanionGraphSnapshot) throws {
         guard graph.nodes.count <= CompanionGraph.maximumNodes,
               graph.edges.count <= CompanionGraph.maximumEdges, graph.truncatedCount >= 0,
@@ -140,7 +152,7 @@ struct LiminalKnowledgeBindings {
             return true
         }
         for node in graph.nodes {
-            guard node.details.count <= 32,
+            guard node.details.count <= detailLimit(for: node),
                   [node.id, node.title, node.subtitle, node.status].allSatisfy(textFits),
                   node.details.allSatisfy({ textFits($0.label) && textFits($0.value) }) else { throw BindingError.invalidGraph }
             let target = targetPieces(node.target)

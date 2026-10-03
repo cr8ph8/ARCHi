@@ -75,19 +75,54 @@ struct ArchiLightSeedArt: View {
     }
 }
 
+/// The three supported presentation families share the existing companion owner.
+/// Archived seed preferences still decode, but are not promoted as new identities.
 struct SeedAppearanceCard: View {
     @ObservedObject var store: CompanionStore
     var body: some View {
         WorkspaceCard {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Choose your light").font(.system(size: 23, weight: .medium, design: .rounded))
-                Text("One core. Many forms. Your light stays with you as your companion takes shape.")
+                Text("Companion form").font(.system(size: 23, weight: .medium, design: .rounded))
+                Text("Proto, KIN and Liminal are forms of your continuing companion. Choose its presentation here; its identity, memories and reviewed outcomes stay together.")
                     .font(.system(size: 13)).foregroundStyle(.secondary)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 14)], spacing: 14) {
-                    ForEach(CompanionSeedAppearance.allCases) { appearance in
-                        choice(appearance)
+                    ForEach(CompanionPresentationStyle.allCases) { style in
+                        choice(style)
                     }
                 }
+                if store.companionPresentationStyle == nil {
+                    Text("Your saved appearance is still in use. Choose Proto, KIN or Liminal when you want to change it; no saved form has been replaced.")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("companion-form.saved-appearance")
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Picker("Presentation", selection: Binding(
+                        get: { store.companionPresentationPose },
+                        set: { store.chooseCompanionPresentationPose($0) })) {
+                        ForEach(CompanionPresentationPose.allCases) { pose in
+                            Text(pose.title).tag(pose)
+                                .disabled(pose == .body && !store.canPresentCompanionBody)
+                        }
+                    }
+                    .pickerStyle(.segmented).frame(maxWidth: 330)
+                    .disabled(store.companionPresentationStyle == nil)
+                    .accessibilityIdentifier("companion-form.pose")
+                    Text(store.canPresentCompanionBody
+                         ? "Seed is the compact form and desktop cursor. Body previews the same companion in its body form; choosing it does not award growth."
+                         : "Seed is the compact form and desktop cursor. Body preview is unavailable for the current form. Your kept development stays in QiMon development.")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                    if store.companionPresentationStyle == .liminal {
+                        Text("Choose Liminal’s curled or beast shape in Living constellation below.")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Button("QiMon development & forms") { store.open(.evolution) }
+                            .accessibilityIdentifier("companion-form.open-development")
+                        Button("Room & Arena") { store.open(.unity) }
+                            .accessibilityIdentifier("companion-form.open-worlds")
+                    }.buttonStyle(.borderless)
+                }
+                Divider()
                 VStack(alignment: .leading, spacing: 8) {
                     Picker("Seed color", selection: Binding(get: { store.preferences.seedColor }, set: { store.chooseSeedColor($0) })) {
                         ForEach(CompanionSeedColor.allCases) { color in
@@ -96,43 +131,26 @@ struct SeedAppearanceCard: View {
                     }
                     .frame(maxWidth: 330)
                     .accessibilityIdentifier("seed-color.picker")
-                    Text("Applies to every Seed look and your desktop cursor. Original restores each design’s authored colors. Working and response cues keep their own meaning.")
+                    Text("Color follows your Seed and cursor. Original keeps the artwork’s colors. Color and form choices do not award experience.")
                         .font(.system(size: 12)).foregroundStyle(.secondary)
-                    Button("Keep Seed color for next time") { store.rememberPreferences = true; store.savePreferences() }
+                    Button("Keep appearance for next time") { store.rememberPreferences = true; store.savePreferences() }
                         .accessibilityIdentifier("seed-color.keep")
                     Text(store.status).font(.caption).foregroundStyle(.secondary)
-                }
-                if store.activeQiMon != nil {
-                    HStack {
-                        Text(store.presentationForm == .kin
-                             ? "Your Seed cursor uses this light. Your kept body stays with you."
-                             : "Your desktop companion and Seed cursor share this light.")
-                            .font(.system(size: 12)).foregroundStyle(.secondary)
-                        Spacer()
-                        if store.presentationForm == .kin {
-                            Button("Show as light") { store.returnKinToSeed() }
-                                .accessibilityIdentifier("seed-appearance.show-light")
-                        } else if store.activeQiMon?.character == .kin && store.evolution.kinGrowthRecord != nil {
-                            Button("Resume First Light") { _ = store.resumeKinFirstLight() }
-                                .accessibilityIdentifier("seed-appearance.resume-body")
-                        }
-                    }
                 }
             }
         }.accessibilityIdentifier("seed-appearance.card")
     }
-    private func choice(_ appearance: CompanionSeedAppearance) -> some View {
-        let selected = store.activeQiMon != nil ? store.preferences.seedAppearance == appearance
-            : store.presentationFamily == nil && store.presentationForm == appearance.starterForm
-        return Button { store.chooseSeedAppearance(appearance) } label: {
+    private func choice(_ style: CompanionPresentationStyle) -> some View {
+        let selected = store.companionPresentationStyle == style
+        return Button { store.chooseCompanionPresentationStyle(style) } label: {
             VStack(spacing: 8) {
-                CompanionPresenceArt(form: appearance.starterForm, family: nil, size: 144, reduceMotion: true,
-                    seedColor: store.preferences.seedColor)
+                CompanionPresenceArt(form: style.seedForm, family: nil, size: 144, reduceMotion: true,
+                    treatment: style.treatment, seedColor: store.preferences.seedColor)
                     .accessibilityHidden(true)
-                Label(appearance.title, systemImage: selected ? "checkmark.circle.fill" : "circle")
+                Label(style.title, systemImage: selected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 14, weight: .medium))
                     .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-                Text(appearance.detail).font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(style.detail).font(.system(size: 11)).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity).padding(.vertical, 16).padding(.horizontal, 10)
@@ -141,9 +159,9 @@ struct SeedAppearanceCard: View {
         }
         .buttonStyle(.plain)
         .disabled(store.hasPersonalQiMon && store.activeQiMon == nil)
-        .accessibilityLabel("Choose \(appearance.title)")
-        .accessibilityHint("Changes the light's appearance while keeping the same companion.")
+        .accessibilityLabel("Choose \(style.title) form")
+        .accessibilityHint("Keeps the same companion, memories and reviewed outcomes.")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
-        .accessibilityIdentifier("seed-appearance.\(appearance.rawValue)")
+        .accessibilityIdentifier("companion-form.\(style.id)")
     }
 }

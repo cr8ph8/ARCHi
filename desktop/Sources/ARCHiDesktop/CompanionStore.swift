@@ -47,6 +47,8 @@ struct CompanionPreferences: Codable, Equatable {
     var seedAppearance: CompanionSeedAppearance = .kinParticles
     var seedColor: CompanionSeedColor = .original
     var visualTreatment: CompanionVisualTreatment = .original
+    /// Explicit visual pose; nil retains the saved historical growth behavior.
+    var companionPose: CompanionPresentationPose? = nil
     var liminalPointProgress: Double = 107.0 / 119.0
     var equipment: CompanionEquipment = .empty
     var tone = "Calm"
@@ -77,6 +79,7 @@ extension CompanionPreferences {
         seedAppearance = try values.decodeIfPresent(CompanionSeedAppearance.self, forKey: .seedAppearance) ?? .kinParticles
         seedColor = try values.decodeIfPresent(CompanionSeedColor.self, forKey: .seedColor) ?? .original
         visualTreatment = try values.decodeIfPresent(CompanionVisualTreatment.self, forKey: .visualTreatment) ?? .original
+        companionPose = try values.decodeIfPresent(CompanionPresentationPose.self, forKey: .companionPose)
         liminalPointProgress = try values.decodeIfPresent(Double.self, forKey: .liminalPointProgress) ?? 107.0 / 119.0
         equipment = try values.decodeIfPresent(CompanionEquipment.self, forKey: .equipment) ?? .empty
         tone = try values.decode(String.self, forKey: .tone)
@@ -3799,7 +3802,7 @@ extension CompanionStore {
     }
 
     func liminalFormDevelopment(at now: Date = Date()) -> LiminalFormDevelopment.Snapshot? {
-        guard let individual = activeQiMon, individual.isValid, individual.character == .hampton,
+        guard let individual = activeQiMon, individual.isValid,
               profileRecoveryBlock == nil, !isShuttingDown,
               let disk = try? NativePreferencePersistence.read(preferenceURL), disk.baseline == preferenceBaseline,
               evolution.observedJourneyOriginDigest == nil || evolution.observedJourneyOriginDigest == individual.originDigest,
@@ -3818,13 +3821,14 @@ extension CompanionStore {
             })
         return LiminalFormDevelopment.build(originDigest: individual.originDigest, lessons: keptLessons,
             currentLessonIDs: available, receipts: evolution.usefulReceipts.filter { !withdrawn.contains($0.requestID) },
-            evidenceOrigin: feedbackCurrent ? evolution.practiceJourneyOriginDigest : nil, now: now)
+            evidenceOrigin: feedbackCurrent ? evolution.practiceJourneyOriginDigest : nil, now: now,
+            currentKnowledgePages: readingSources.latestKnowledgePages.filter { readingSources.availability(of: $0) == nil })
     }
 
     /// Explicit user action. The study can use the current profile's reviewed
     /// references without inventing per-receipt individual attribution.
     @discardableResult func connectLiminalLearningStudy() -> Bool {
-        guard !isWorking, let individual = activeQiMon, individual.character == .hampton,
+        guard !isWorking, let individual = activeQiMon,
               liminalFormDevelopment(at: wallClock()) != nil,
               evolution.persistenceBlockedReason == nil,
               documentWork.isCurrentOnDisk, tokenSteward.isCurrentOnDisk else { return false }

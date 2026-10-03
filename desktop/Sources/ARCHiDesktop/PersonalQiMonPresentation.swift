@@ -19,6 +19,13 @@ extension CompanionStore {
             // The Seed persists as the individual's cursor even after a body is kept.
             // Use the same active-identity check as body presentation.
             if role == .cursor { return preferences.seedAppearance.personalForm }
+            // A chosen Liminal form cannot be overridden by an earlier KIN body.
+            // That growth record remains retained; this only resolves appearance.
+            if preferences.seedAppearance == .hamptonLiminal { return .hamptonSeed }
+            if let pose = preferences.companionPose,
+               let style = CompanionPresentationStyle.resolve(preferences) {
+                return pose == .seed ? preferences.seedAppearance.personalForm : style.bodyForm
+            }
             if kin.character == .kin, let growth = evolution.kinGrowthRecord,
                growth.originDigest == kin.originDigest, growth.active { return .kin }
             return preferences.seedAppearance.personalForm
@@ -33,9 +40,11 @@ extension CompanionStore {
     var presentationTitle: String { activeQiMon?.name ?? presentationFamily?.title ?? presentationForm.rawValue }
     var kinBodyTitle: String {
         switch presentationForm {
-        case .kin: "First Light"
+        case .kin: preferences.visualTreatment == .protoStudy ? "Proto body"
+            : preferences.companionPose == .body ? "KIN body" : "First Light"
         case .corePearl: "Ball of Light"
-        case .hamptonSeed: "Liminal Seed"
+        case .hamptonSeed: preferences.visualTreatment == .liminalV008
+            && companionPresentationPose == .body ? "Liminal body" : "Liminal Seed"
         case .velaSeed: "Opal Seed"
         case .velaLantern: "Lantern Wing"
         default: "Particle Seed"
@@ -72,6 +81,7 @@ extension CompanionStore {
         guard !isShuttingDown, !hasPersonalQiMon || activeQiMon != nil else { return }
         stopKinLightPreview()
         preferences.seedAppearance = appearance
+        preferences.companionPose = nil
         if !hasPersonalQiMon { chooseStartingForm(appearance.starterForm) }
     }
 

@@ -4,6 +4,10 @@ import CryptoKit
 /// A pure view of retained document-task metadata. It neither reads the working
 /// copy nor applies an edit, reruns checks, infers meaning, or updates a journal.
 enum DocumentWorkGraph {
+    static let maximumProjectedChecks = 24
+    /// Twenty-five retained metadata fields plus the bounded mechanical checks.
+    /// Particle inspection consumes this same projection contract.
+    static let maximumTaskDetails = 25 + maximumProjectedChecks
     static func nodeID(recordID: String) -> String { "document-work-" + key(recordID) }
 
     static func append(to base: CompanionGraphSnapshot, records: [DocumentWorkRecord],
@@ -80,13 +84,13 @@ enum DocumentWorkGraph {
             if record.checks.isEmpty {
                 details.append(.init(label: "Mechanical checks", value: "No checks recorded."))
             } else {
-                details.append(contentsOf: record.checks.prefix(24).map { check in
+                details.append(contentsOf: record.checks.prefix(maximumProjectedChecks).map { check in
                     .init(label: limited(check.title, to: 160), value: check.passed ? "Passed (mechanical)" : "Did not pass (mechanical)")
                 })
             }
             guard add(.init(id: taskID, title: "Document revision", subtitle: "Selected passage · " + limited(record.provider, to: 128),
                             kind: .context, status: record.state.rawValue, details: details, target: .context)) else { continue }
-            omitted += max(0, record.checks.count - 24)
+            omitted += max(0, record.checks.count - maximumProjectedChecks)
             connect("companion-archi", taskID, "retained document task")
 
             // Immutable references survive withdrawal without reconstructing old
