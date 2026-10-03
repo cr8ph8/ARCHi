@@ -1,13 +1,13 @@
 {
   "schema": "archi-image-region-workflow/v1",
   "date": "2026-10-03",
-  "status": "SIGNED_CANDIDATE_READY_INSTALL_AND_WALKTHROUGH_PENDING",
+  "status": "INSTALLED_FOCUSED_CHECKS_PASSED_LIVE_WALKTHROUGH_PENDING",
   "scope": "Native image selection, crop-only local OCR, current memory particles and reviewed-text handoff through existing work owners",
   "newPersistentOwners": 0,
   "modelCalls": 0,
   "puzzleRuns": 0,
   "phoneAppChanged": false,
-  "installedAppReplaced": false,
+  "installedAppReplaced": true,
   "owners": {
     "sharedContract": "shared/ARCHiSpatial",
     "records": "Existing ARCHi native records",
@@ -60,11 +60,16 @@
       "reviewedResourcePinPairs": 4,
       "unresolvedUnrelatedQiMonPaths": 4,
       "fullParityPassed": false
+    },
+    "finalUIRecheck": {
+      "passed": 19,
+      "failed": 0,
+      "scope": "Import/navigation guards, bounded particles and synthetic native rendering after repeated-query preservation fix; overlaps with main suite"
     }
   },
   "remaining": [
-    "Guarded installation and installed region selection/inspector/working-copy walkthrough",
-    "Native screen capture currently fails with ScreenCaptureKit -3811; current app session remains open",
+    "Installed region selection/inspector/working-copy walkthrough",
+    "Native screen capture still fails with ScreenCaptureKit -3811 after reset; installed app process running",
     "iPhone consumer, photo/file picker and device validation",
     "Qualified phone particle package/rendering and measured performance",
     "ARKit/RealityKit placement/tracking/interruption tests",
@@ -73,20 +78,17 @@
   ],
   "limits": "Component and native synthetic rendering checks are not evidence of Hampton theory validation, model training, live AR, sync, or a completed real-world learning outcome.",
   "delivery": {
-    "status": "SIGNED_CANDIDATE_READY_INSTALL_AND_WALKTHROUGH_PENDING",
-    "candidate": {
-      "binarySHA256": "0129fc72022536e62afcf7eb7ad098794ff7df6beabc53cafcdd6ce464c3cad9",
-      "uuid": "288E52E5-DA25-3E82-B821-E80873675C49"
-    },
-    "compiledUUIDMatches": true,
+    "status": "INSTALLED_FOCUSED_CHECKS_PASSED_LIVE_WALKTHROUGH_PENDING",
+    "installedUUID": "BE5837B6-1178-3CDE-985D-0461BBE77809",
+    "compiledUUID": "BE5837B6-1178-3CDE-985D-0461BBE77809",
+    "installedBinarySHA256": "e97beae4d09988c1a2607e193cf89a69b234320c9ed6cf3fac57b1db706178a6",
     "strictSigningPassed": true,
-    "installedAppUnchanged": true,
-    "version": "0.7.0",
-    "build": "1",
-    "nativeCaptureFailure": "ScreenCaptureKit -3811",
-    "candidateLaunched": false,
+    "monitoredProfileFiles": 23,
+    "changedProfileFiles": [],
+    "rollbackRetained": true,
     "installedWalkthroughPassed": false,
-    "compiledUUID": "288E52E5-DA25-3E82-B821-E80873675C49",
-    "priorInstalledUUID": "269F2296-2208-3FFE-9EA7-99A36FA4A486"
+    "processRunningAfterLaunchRequest": true,
+    "nativeCaptureFailure": "ScreenCaptureKit -3811 after tool reset and final installed launch request",
+    "postLaunchChangedProfileFiles": []
   }
 }

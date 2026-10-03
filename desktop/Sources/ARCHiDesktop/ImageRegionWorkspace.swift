@@ -295,7 +295,11 @@ struct ImageRegionMemoryView: View {
             let result = try KnowledgeRetrieval.search(query: query, sources: library.sources,
                 pages: library.knowledgePages, links: library.knowledgeLinks,
                 libraryIsCurrent: library.isCurrentOnDisk, maximumResults: 6, pagesOnly: true)
-            hits = result.hits.filter { $0.pageBinding != nil }; selectedID = nil; progress = 0
+            let nextHits = result.hits.filter { $0.pageBinding != nil }
+            // Repeating the same query must not rewind a completed arc: the
+            // identity-keyed animation task restarts only when IDs change.
+            if nextHits.map(\.id) != hits.map(\.id) { progress = 0 }
+            hits = nextHits; selectedID = nil
             message = hits.isEmpty ? "No reviewed concepts matched. Your existing memories are unchanged."
                 : "\(hits.count) concept matches · select to inspect · no connection saved"
         } catch { reset(); message = error.localizedDescription }
