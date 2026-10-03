@@ -1,4 +1,6 @@
 import XCTest
+import SwiftUI
+import AppKit
 @testable import ARCHiDesktop
 
 final class KnowledgeParticleFieldTests: XCTestCase {
@@ -133,6 +135,76 @@ final class KnowledgeParticleFieldTests: XCTestCase {
         XCTAssertEqual(decoded.nodes.map(\.nodeID), field.particles.map(\.nodeID))
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("Private"))
         XCTAssertEqual(decoded.schema, "archi-knowledge-particles/v1")
+    }
+
+    func testSharedDisplayProjectionDoesNotChangeAnchorsWhenFiltering() {
+        let field = KnowledgeParticleField(snapshot: .init(nodes: [node("core", .companion), node("a"), node("b", .lesson)],
+            edges: [], truncatedCount: 0))
+        let frame = KnowledgeParticleField.framing(particles: field.particles, spread: 0, reduceMotion: true)
+        let compact = KnowledgeParticleField.displayPositions(particles: field.particles, frame: frame,
+            spread: 0, reduceMotion: true, width: 256, height: 256)
+        let map = KnowledgeParticleField.displayPositions(particles: field.particles, frame: frame,
+            spread: 0, reduceMotion: false, width: 256, height: 256)
+        XCTAssertEqual(compact, map, "The map at the Seed endpoint must preserve each record's exact anchor.")
+        let visible = field.particles.filter { $0.nodeID == "b" }
+        let filtered = KnowledgeParticleField.displayPositions(particles: visible, frame: frame,
+            spread: 0, reduceMotion: true, width: 256, height: 256)
+        XCTAssertEqual(filtered["b"], compact["b"])
+        XCTAssertEqual(Set(compact.keys), Set(field.particles.map(\.nodeID)))
+    }
+
+    func testReviewedMotifsAreBoundedAndRequireSupport() {
+        XCTAssertEqual(KnowledgeParticleField.reviewedSatelliteCount(applications: 0, reviewedApplicationCount: 0), 0)
+        XCTAssertEqual(KnowledgeParticleField.reviewedSatelliteCount(applications: 4, reviewedApplicationCount: 0), 0)
+        XCTAssertEqual(KnowledgeParticleField.reviewedSatelliteCount(applications: -1, reviewedApplicationCount: 20), 0)
+        XCTAssertEqual(KnowledgeParticleField.reviewedSatelliteCount(applications: 2, reviewedApplicationCount: 20), 2)
+        XCTAssertEqual(KnowledgeParticleField.reviewedSatelliteCount(applications: 9, reviewedApplicationCount: 3), 3)
+        XCTAssertEqual(KnowledgeParticleField.reviewedSatelliteCount(applications: Int.max, reviewedApplicationCount: Int.max), 6)
+    }
+
+    func testSeedKeepsAuthoredCenterAndExistingAnchorsWhenMemoryGrows() throws {
+        let one = KnowledgeParticleField(snapshot: .init(nodes: [node("first", .lesson)], edges: [], truncatedCount: 0))
+        let two = KnowledgeParticleField(snapshot: .init(nodes: [node("first", .lesson), node("second", .source)], edges: [], truncatedCount: 0))
+        func points(_ field: KnowledgeParticleField) -> [String: KnowledgeParticleField.Vector] {
+            let frame = KnowledgeParticleField.framing(particles: field.particles, spread: 0, reduceMotion: true)
+            XCTAssertEqual(frame.center, .zero)
+            return KnowledgeParticleField.displayPositions(particles: field.particles, frame: frame,
+                spread: 0, reduceMotion: true, width: 256, height: 256)
+        }
+        XCTAssertEqual(points(one)["first"], points(two)["first"])
+        let point = try XCTUnwrap(points(one)["first"])
+        XCTAssertGreaterThan(hypot(point.x - 128, point.y - 128), 30, "The first memory must not cover the original Seed pearl")
+    }
+
+    @MainActor func testReducedMotionSeedCanvasRendersAndAddsOnlySupportedMotifs() throws {
+        let nodes = [node("lesson", .lesson)]
+        let field = KnowledgeParticleField(snapshot: .init(nodes: nodes, edges: [], truncatedCount: 0))
+        func render(_ growth: [String: CompanionParticleScene.Growth]) throws -> NSBitmapImageRep {
+            let view = KnowledgeParticleView(field: field, nodes: nodes, selectedID: nil,
+                spread: 0, pulses: true, reduceMotion: true, tint: .cyan,
+                compact: true, interactive: false, growthByRecordID: growth, onSelect: { _ in
+                    XCTFail("Snapshot rendering must not select a record.")
+                }).frame(width: 256, height: 256)
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 1
+            return NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage))
+        }
+        func visiblePixels(_ bitmap: NSBitmapImageRep) -> Int {
+            var count = 0
+            for y in 0..<bitmap.pixelsHigh {
+                for x in 0..<bitmap.pixelsWide where (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.1 {
+                    count += 1
+                }
+            }
+            return count
+        }
+        let retained = try render([:])
+        let supported = try render(["lesson": .init(contentID: "content-1", applications: 3, reviewedApplicationCount: 3)])
+        let unrelated = try render(["absent": .init(contentID: "content-1", applications: 3, reviewedApplicationCount: 3)])
+        XCTAssertGreaterThan(visiblePixels(retained), 10, "A paused/reduced snapshot must contain the actual record anchor.")
+        XCTAssertGreaterThan(visiblePixels(supported), visiblePixels(retained))
+        XCTAssertEqual(visiblePixels(unrelated), visiblePixels(retained), "Support for an absent record cannot create a particle.")
+        XCTAssertLessThan(visiblePixels(supported), 400, "Compact Seed rendering must not introduce a diffuse halo.")
     }
 
     func testExportFixtureForHoudiniAdapter() throws {

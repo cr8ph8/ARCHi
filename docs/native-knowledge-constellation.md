@@ -1,5 +1,19 @@
 # Knowledge as a particle constellation
 
+## 3 October 2026 — one native Seed and memory projection
+
+The native companion and Memory map now consume `CompanionParticleScene`, a disposable projection of the current profile's bounded memory graph. `KnowledgeParticleView` draws both compact Seed and expanded-map anchors using the same graph-record IDs, positions, type colors and reviewed-support motifs. **Gather into Seed / Unfold memory** changes presentation; the selected record and inspector remain available. My companion's Memory & experience card opens the exact current record from its Seed lights. Returning from the map can highlight that record in the native Seed.
+
+The existing native records remain authoritative. Sources, saved methods, exact versions and directed relationships remain in the graph even when they are not retained learning or have no reviewed application. Content deduplication is only optional reinforcement metadata: it never replaces or merges graph records. Multiple records referring to the same content do not multiply earned experience. A profile, version or source change invalidates an old pick and cached image. Original art, equipment, personal colors and saved milestones are preserved.
+
+The compact camera keeps the authored Seed center fixed, including with only one memory. New memories do not relocate existing Seed anchors. Expanded layout remains a bounded presentation over recorded edges. Filtering hides records without recomputing their field. Reviewed-use satellites are finite art motifs, not additional memories, automatic truth, battle power or capability measurements. Imported/distilled knowledge can acquire stronger support through an attributable reviewed experience; visual density alone never grants that support.
+
+PNG exports, hosted companion images and Reactor reference caches consume the same graph-and-support digest. Reduced Motion uses a directly renderable static Canvas. Hidden or inactive particle animation pauses. The projection is transient, contains no new saved ledger, performs no model calls and makes no source/learning writes.
+
+**Integration boundary:** this increment unifies the native compact Seed and memory map plus their common image exports. Qualified Liminal v008 retains its original point package and existing exact-record inspection sidecar. Its content-group growth motif still needs to be joined to those same authored anchors. Unity Proto/KIN need an ID-aware consumer on the existing bridge; the 3D body-to-map morph, iPhone delivery, and installed cross-runtime frame-rate acceptance remain unfinished. These are explicit next gates, not claims of completed integration.
+
+The sections below preserve the original 27 September map implementation and authoring boundary. Later v008 installation receipts supersede their historical statement that native point rendering was still absent.
+
 ARCHi's existing **Activity map → Particles** draws one selectable light particle per record in its bounded graph snapshot. The same inspector, search, record-type filter, incoming links/backlinks, outgoing links and local-neighbourhood focus remain available. The accessible List view is retained. The companion's selected Seed color tints the central record; record types retain their own colors.
 
 The **Orb → Connections** slider gathers or spreads that same set of IDs. Hover or select a particle to highlight its actual recorded links. Slow pulse is presentation only and can be switched off. App Reduce Motion and system Reduce Motion suppress pulse and curved travel. No background model calls, memory writes, growth updates or simulation jobs are caused by browsing.

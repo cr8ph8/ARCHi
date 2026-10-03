@@ -115,19 +115,10 @@ struct LiminalPointStructure: Codable, Equatable, Sendable {
 }
 
 private struct LiminalStructureKey: EnvironmentKey { static let defaultValue: LiminalPointStructure? = nil }
-private struct CompanionMemoryDevelopmentKey: EnvironmentKey {
-    static let defaultValue: LiminalFormDevelopment.Snapshot? = nil
-}
 extension EnvironmentValues {
     var liminalPointStructure: LiminalPointStructure? {
         get { self[LiminalStructureKey.self] }
         set { self[LiminalStructureKey.self] = newValue }
-    }
-    /// Shared derived knowledge support for every native form. Asset availability
-    /// decides how it is drawn; it does not decide whether the record exists.
-    var companionMemoryDevelopment: LiminalFormDevelopment.Snapshot? {
-        get { self[CompanionMemoryDevelopmentKey.self] }
-        set { self[CompanionMemoryDevelopmentKey.self] = newValue }
     }
 }
 
@@ -146,7 +137,8 @@ extension EnvironmentValues {
         // Keep the artwork in the ordinary view tree so explicit ImageRenderer
         // snapshots never capture a TimelineView placeholder. The task expires
         // with this presentation and refreshes file-backed support while visible.
-        content.environment(\.companionMemoryDevelopment, snapshot)
+        content.environment(\.companionParticleScene, store.companionParticleScene(at: recheckedAt))
+            .environment(\.companionParticleSelection, store.memoryParticleSelection)
             .environment(\.liminalPointStructure, structure)
             .task {
                 recheckedAt = Date()

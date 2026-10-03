@@ -140,7 +140,34 @@ struct KnowledgeParticleField {
         let radius = max(high.x - low.x, high.y - low.y) * 0.5
         // Keep particle centers inside 72% of the frame, with extra space for
         // halos and nearby labels. A minimum extent avoids single-node zoom.
-        return .init(center: center, halfExtent: radius / 0.72 + 0.04)
+        let t = spread.isFinite ? min(1, max(0, spread)) : 1
+        // The Seed has an authored center. A single memory must not be recentered
+        // over its pearl, and adding a record must not move existing Seed lights.
+        let mapExtent = max(0.24, radius / 0.72 + 0.04)
+        let cameraCenter = center * t
+        let requiredExtent = positions.map { max(abs($0.x - cameraCenter.x), abs($0.y - cameraCenter.y)) }.max() ?? 0
+        return .init(center: cameraCenter,
+            halfExtent: max(0.54 * (1 - t) + mapExtent * t, requiredExtent / 0.72 + 0.04))
+    }
+
+    /// The Seed overlay and expanded map share this exact projection. Display
+    /// filtering changes visibility only; use the complete field for framing.
+    static func displayPositions(particles: [Particle], frame: Frame, spread: Double,
+                                 reduceMotion: Bool, width: Double, height: Double) -> [String: Vector] {
+        let width = width.isFinite ? max(0, width) : 0
+        let height = height.isFinite ? max(0, height) : 0
+        let scale = max(0, min(width, height) * 0.43 - 12)
+        let center = Vector(x: width / 2, y: height / 2)
+        return particles.reduce(into: [:]) { points, particle in
+            let point = frame.normalize(position(particle, spread: spread, reduceMotion: reduceMotion))
+            points[particle.nodeID] = center + point * scale
+        }
+    }
+
+    /// A bounded visual motif for current reviewed support, never another record
+    /// or an experience score. Unknown or inconsistent support adds no satellites.
+    static func reviewedSatelliteCount(applications: Int, reviewedApplicationCount: Int) -> Int {
+        min(6, max(0, min(applications, reviewedApplicationCount)))
     }
 
     private static func finitePosition(_ position: Vector) -> Vector? {

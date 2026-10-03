@@ -140,6 +140,10 @@ final class CompanionStore: ObservableObject {
     /// Navigation focus is transient and never enters a profile or usage journal.
     @Published private(set) var selectedStewardTaskID: String?
     @Published private(set) var selectedGraphNodeID: String?
+    /// Transient cross-surface focus, never persisted as identity or learning.
+    @Published private(set) var memoryParticleSelection: CompanionParticleSelection?
+    /// Disposable projection cache; rebuilt whenever owner evidence changes.
+    var particleSceneCache: CompanionParticleScene?
     @Published var inspectedDocumentMethod: DocumentMethodInspectionSelection?
     /// Chosen method for the document-side preview; never persisted or sent.
     @Published private(set) var documentMethodToTry: DocumentMethodInspectionSelection?
@@ -876,6 +880,17 @@ final class CompanionStore: ObservableObject {
               graph.nodes.contains(where: { $0.id == nodeID }) else { return false }
         selectedGraphNodeID = nodeID
         open(.nodeLab)
+        return true
+    }
+
+    /// Revalidate a displayed Seed/map binding before highlighting or opening it.
+    @discardableResult
+    func selectMemoryParticle(_ id: String, in scene: CompanionParticleScene, openInspector: Bool = false) -> Bool {
+        guard let current = companionParticleScene(),
+              scene.isCurrent(graph: current.graph, originDigest: current.originDigest),
+              current.graph.nodes.contains(where: { $0.id == id }) else { return false }
+        memoryParticleSelection = .init(originDigest: current.originDigest, graphDigest: current.graphDigest, nodeID: id)
+        if openInspector { selectedGraphNodeID = id; open(.nodeLab) }
         return true
     }
 

@@ -52,22 +52,37 @@ final class CompanionPresentationStyleTests: XCTestCase {
                 .init(id: id, lessonIDs: ["lesson"], graphNodeIDs: ["lesson:lesson"], title: "Retained lesson", applications: applications)
             ], unavailableLessons: 0, duplicateLessons: 0, evidenceAvailable: true)
         }
-        let kept = snapshot(0), used = snapshot(2)
-        let a = try XCTUnwrap(CompanionMemoryParticles.anchors(kept).first)
-        let b = try XCTUnwrap(CompanionMemoryParticles.anchors(used).first)
-        XCTAssertEqual(a.id, b.id); XCTAssertEqual(a.x, b.x); XCTAssertEqual(a.y, b.y)
-        XCTAssertEqual(b.applications, 2)
-        XCTAssertNotEqual(CompanionMemoryParticles.identity(kept), CompanionMemoryParticles.identity(used))
+        let graph = CompanionGraphSnapshot(nodes: [
+            .init(id: "lesson:lesson", title: "Retained lesson", subtitle: "Current record", kind: .lesson,
+                  status: "Retained", details: [], target: .memory)
+        ], edges: [], truncatedCount: 0)
+        let kept = try XCTUnwrap(CompanionParticleScene.build(originDigest: snapshot(0).originDigest,
+            graph: graph, development: snapshot(0)))
+        let used = try XCTUnwrap(CompanionParticleScene.build(originDigest: snapshot(2).originDigest,
+            graph: graph, development: snapshot(2)))
+        let a = try XCTUnwrap(kept.field.particles.first)
+        let b = try XCTUnwrap(used.field.particles.first)
+        XCTAssertEqual(a.nodeID, "lesson:lesson")
+        XCTAssertEqual(a, b, "Practice strengthens the same record without relocating it")
+        XCTAssertEqual(used.growthByRecordID[b.nodeID]?.applications, 2)
+        XCTAssertNotEqual(kept.digest, used.digest)
         for (form, treatment) in [(CompanionForm.corePearl, CompanionVisualTreatment.protoStudy), (.particleSeed, .original), (.kin, .protoStudy), (.hamptonSeed, .original)] {
             let plain = try XCTUnwrap(CompanionPresenceArt.png(form: form, family: nil, treatment: treatment))
-            let grown = try XCTUnwrap(CompanionPresenceArt.png(form: form, family: nil, treatment: treatment, memoryDevelopment: used))
+            let grown = try XCTUnwrap(CompanionPresenceArt.png(form: form, family: nil, treatment: treatment, particleScene: used))
             XCTAssertNotEqual(plain, grown, "Real memory projection must reach \(form), not just a card counter")
             let image = try XCTUnwrap(NSBitmapImageRep(data: grown))
             XCTAssertEqual(image.pixelsWide, 512); XCTAssertTrue(image.hasAlpha)
             let original = try XCTUnwrap(NSBitmapImageRep(data: plain))
             // The new layer must preserve the authored center, rather than
             // succeeding by replacing the body with an empty timeline raster.
-            XCTAssertEqual(image.colorAt(x: 256, y: 256), original.colorAt(x: 256, y: 256))
+            let center = try XCTUnwrap(image.colorAt(x: 256, y: 256))
+            let reference = try XCTUnwrap(original.colorAt(x: 256, y: 256))
+            // Raster compositing can round a color channel by one 8-bit step.
+            // Preserve the authored center and opacity, not rounding noise.
+            XCTAssertEqual(center.redComponent, reference.redComponent, accuracy: 1.1 / 255, "\(form)")
+            XCTAssertEqual(center.greenComponent, reference.greenComponent, accuracy: 1.1 / 255, "\(form)")
+            XCTAssertEqual(center.blueComponent, reference.blueComponent, accuracy: 1.1 / 255, "\(form)")
+            XCTAssertEqual(center.alphaComponent, reference.alphaComponent, accuracy: 1.1 / 255, "\(form)")
             XCTAssertGreaterThan(image.colorAt(x: 256, y: 256)?.alphaComponent ?? 0, 0)
             if let path = ProcessInfo.processInfo.environment["ARCHI_COMPANION_REVIEW_DIR"] {
                 let directory = URL(fileURLWithPath: path)

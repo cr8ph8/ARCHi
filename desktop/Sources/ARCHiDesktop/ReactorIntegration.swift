@@ -12,7 +12,7 @@ extension CompanionStore {
             form: presentationForm, family: selectedFamily, treatment: preferences.visualTreatment,
             recipe: recipe, naturalVariation: presentationNaturalVariation, equipment: preferences.equipment, seedColor: preferences.seedColor,
             pointProgress: preferences.liminalPointProgress, pointStructure: reference.structure,
-            memoryDevelopment: reference.memory)
+            particleScene: reference.scene)
         reactor.updateReference(id: reference.id,
             label: CompanionVisualAsset.label(form: presentationForm, family: selectedFamily,
                 treatment: preferences.visualTreatment, recipe: recipe, naturalVariation: presentationNaturalVariation,
@@ -31,24 +31,24 @@ extension CompanionStore {
     /// Capture current origin-bound evidence once so the cache key and pixels
     /// describe the same records. A failed replacement retires the old reference
     /// through Reactor's existing identity-change cancellation.
-    private func currentReactorReference(family: EvolutionFamily?) -> (id: String, structure: LiminalPointStructure?, memory: LiminalFormDevelopment.Snapshot?) {
+    private func currentReactorReference(family: EvolutionFamily?) -> (id: String, structure: LiminalPointStructure?, scene: CompanionParticleScene?) {
         let usesPoints = LiminalV008Runtime.applies(form: presentationForm, family: family, treatment: preferences.visualTreatment)
         let memoryApplies = !usesPoints && CompanionMemoryParticles.applies(form: presentationForm, family: family,
             treatment: preferences.visualTreatment)
-        let snapshot = usesPoints || memoryApplies ? liminalFormDevelopment() : nil
+        let snapshot = usesPoints ? liminalFormDevelopment() : nil
         let structure = usesPoints ? LiminalV008Runtime.asset.flatMap { asset -> LiminalPointStructure? in
             guard let snapshot else { return nil }
             return LiminalPointStructure.make(snapshot, sessionID: liminalStructureSessionID,
                 manifestSHA256: asset.manifestSHA256, lowDetailIDs: asset.lowDetailIDs)
         } : nil
-        let memory = memoryApplies ? snapshot : nil
+        let scene = memoryApplies ? companionParticleScene() : nil
         let id = CompanionVisualAsset.appearanceID(form: presentationForm, family: family,
             treatment: preferences.visualTreatment, recipe: presentationRecipe,
             naturalVariation: presentationNaturalVariation, equipment: preferences.equipment, seedColor: preferences.seedColor,
             pointProgress: preferences.liminalPointProgress)
             + (structure.map { "-structure-" + $0.digest } ?? "")
-            + (memory.map { "-memory-" + CompanionMemoryParticles.identity($0) } ?? "")
-        return (id, structure, memory)
+            + (scene.map { "-memory-" + $0.digest } ?? "")
+        return (id, structure, scene)
     }
 }
 

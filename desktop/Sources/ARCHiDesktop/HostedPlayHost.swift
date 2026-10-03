@@ -17,7 +17,7 @@ typealias HostedPlayAppearanceRenderer = @MainActor (CompanionForm, EvolutionFam
 typealias HostedPlayPointSnapshotRenderer = @MainActor (CompanionEquipment, CompanionSeedColor, Double) -> Data?
 typealias HostedPlayStructureSnapshotRenderer = @MainActor (CompanionEquipment, CompanionSeedColor, Double, LiminalPointStructure) -> Data?
 typealias HostedPlayMemorySnapshotRenderer = @MainActor (CompanionForm, EvolutionFamily?, CompanionVisualTreatment,
-    CompanionAppearanceRecipe?, CompanionNaturalVariation?, CompanionEquipment, CompanionSeedColor, LiminalFormDevelopment.Snapshot) -> Data?
+    CompanionAppearanceRecipe?, CompanionNaturalVariation?, CompanionEquipment, CompanionSeedColor, CompanionParticleScene) -> Data?
 
 @MainActor
 final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, WKDownloadDelegate {
@@ -104,7 +104,7 @@ final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WK
                 equipment: equipment, seedColor: seedColor, pointProgress: progress, pointStructure: structure)
          }, memorySnapshotRenderer: @escaping HostedPlayMemorySnapshotRenderer = { form, family, treatment, recipe, natural, equipment, seedColor, memory in
              CompanionPresenceArt.png(form: form, family: family, treatment: treatment, recipe: recipe,
-                naturalVariation: natural, equipment: equipment, seedColor: seedColor, memoryDevelopment: memory)
+                naturalVariation: natural, equipment: equipment, seedColor: seedColor, particleScene: memory)
          }) {
         self.profile = profile; self.assetDirectory = assetDirectory; self.appearanceRenderer = appearanceRenderer
         self.pointSnapshotRenderer = pointSnapshotRenderer
@@ -249,12 +249,12 @@ final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WK
                           recipe: CompanionAppearanceRecipe? = nil, naturalVariation: CompanionNaturalVariation? = nil,
                           equipment: CompanionEquipment = .empty, seedColor: CompanionSeedColor = .original,
                           pointProgress: Double = 107.0 / 119.0, pointStructure: LiminalPointStructure? = nil,
-                          memoryDevelopment: LiminalFormDevelopment.Snapshot? = nil) {
-        // v008 already carries the same evidence through its authenticated
-        // structure. Do not draw a second memory field over its source particles.
+                          particleScene: CompanionParticleScene? = nil) {
+        // v008 retains its authenticated source geometry and structure path.
+        // Do not draw the common record scene over its source particles.
         let usesPoints = form == .hamptonSeed && family == nil && treatment == .liminalV008
         let memory = !usesPoints && CompanionMemoryParticles.applies(form: form, family: family, treatment: treatment)
-            ? memoryDevelopment : nil
+            ? particleScene : nil
         let usingExpression = expressionPNG != nil && !reduceMotion && memory == nil
         let baseID = CompanionVisualAsset.appearanceID(form: form, family: family, treatment: treatment,
             recipe: recipe, naturalVariation: naturalVariation, equipment: equipment, seedColor: seedColor,
@@ -262,7 +262,7 @@ final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WK
             + (usingExpression ? "-expression-\(expressionRevision)" : "")
         let id: String
         if let memory {
-            id = "memory-live-" + LiminalKnowledgeBindings.sha256(Data((baseID + ":" + CompanionMemoryParticles.identity(memory)).utf8))
+            id = "memory-live-" + LiminalKnowledgeBindings.sha256(Data((baseID + ":" + memory.digest).utf8))
         } else {
             id = pointStructure.map { "liminal-live-" + LiminalKnowledgeBindings.sha256(Data((baseID + ":" + $0.digest).utf8)) } ?? baseID
         }
@@ -316,7 +316,7 @@ final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WK
                 self?.updateAppearance(form: form, family: family, reduceMotion: reduceMotion,
                     treatment: treatment, expressionPNG: expressionPNG, expressionRevision: expressionRevision,
                     recipe: recipe, naturalVariation: naturalVariation, equipment: equipment, seedColor: seedColor,
-                    pointProgress: pointProgress, pointStructure: pointStructure, memoryDevelopment: memoryDevelopment)
+                    pointProgress: pointProgress, pointStructure: pointStructure, particleScene: particleScene)
             }
             return
         }

@@ -1,77 +1,96 @@
 import SwiftUI
 
-/// One anchor per retained memory. Satellites show reviewed use of that same
-/// memory, never additional records or an inferred capability score.
+/// Record identity, layout and support come from the same projection as the map.
+/// Original art remains the companion's body, not a memory store.
 enum CompanionMemoryParticles {
-    struct Anchor: Equatable, Identifiable {
-        let id: String
-        let x: Double
-        let y: Double
-        let applications: Int
-    }
-    static func anchors(_ snapshot: LiminalFormDevelopment.Snapshot) -> [Anchor] {
-        snapshot.visibleNodes.map { node in
-            let phase = Double(UInt32(node.id.prefix(8), radix: 16) ?? 0) / Double(UInt32.max) * 2 * .pi
-            return Anchor(id: node.id, x: 0.5 + 0.40 * cos(phase), y: 0.5 + 0.40 * sin(phase),
-                          applications: min(8, max(0, node.applications)))
-        }
-    }
-    @MainActor static func identity(_ snapshot: LiminalFormDevelopment.Snapshot?) -> String {
-        guard let snapshot else { return "memory-unavailable" }
-        let value = snapshot.originDigest + "\n" + snapshot.nodes.map {
-            "\($0.id):\($0.reviewedApplicationCount):\($0.supportDigest ?? "")"
-        }.joined(separator: "\n")
-        return LiminalKnowledgeBindings.sha256(Data(value.utf8))
-    }
     static func applies(form: CompanionForm, family: EvolutionFamily?, treatment: CompanionVisualTreatment) -> Bool {
         family == nil && (form == .kin || form == .kinSeed || form == .particleSeed || form == .corePearl
             || form == .hamptonSeed || (form == .companion && treatment == .protoStudy))
     }
 }
 
+struct CompanionParticleSelection: Equatable {
+    let originDigest: String
+    let graphDigest: String
+    let nodeID: String
+
+    func selectedID(in scene: CompanionParticleScene) -> String? {
+        guard scene.originDigest == originDigest, scene.graphDigest == graphDigest,
+              scene.graph.nodes.contains(where: { $0.id == nodeID }) else { return nil }
+        return nodeID
+    }
+}
+
 struct CompanionMemoryParticleField: View {
-    let snapshot: LiminalFormDevelopment.Snapshot
+    let scene: CompanionParticleScene
     let reduceMotion: Bool
-    @State private var visible = false
-    @Environment(\.scenePhase) private var scenePhase
+    var seedColor: CompanionSeedColor = .original
+    var selectedID: String?
+    var onSelect: ((String) -> Void)?
+
     var body: some View {
-        Group {
-            if reduceMotion {
-                drawing(phase: 0)
-            } else {
-                TimelineView(.animation(minimumInterval: 1 / 30, paused: !visible || scenePhase != .active)) { tick in
-                    drawing(phase: !visible || scenePhase != .active ? 0 : tick.date.timeIntervalSinceReferenceDate)
-                }
-            }
-        }
-        .onAppear { visible = true }.onDisappear { visible = false }
-        .allowsHitTesting(false).accessibilityHidden(true)
+        KnowledgeParticleView(field: scene.field, nodes: scene.graph.nodes, selectedID: selectedID,
+            spread: 0, pulses: !reduceMotion, reduceMotion: reduceMotion, tint: seedColor.accent,
+            showsLabels: false, compact: true, interactive: onSelect != nil,
+            growthByRecordID: scene.growthByRecordID, onSelect: { onSelect?($0) })
+    }
+}
+
+/// Captures presentation choices for unfolding the current Seed into its map.
+/// Folding never changes saved identity, form, equipment or personal color.
+struct CompanionParticleAppearance {
+    let form: CompanionForm
+    let family: EvolutionFamily?
+    let treatment: CompanionVisualTreatment
+    let recipe: CompanionAppearanceRecipe?
+    let naturalVariation: CompanionNaturalVariation?
+    let equipment: CompanionEquipment
+    let seedColor: CompanionSeedColor
+
+    @MainActor init(store: CompanionStore) {
+        form = store.presentationForm(for: store.preferences, role: .cursor)
+        family = store.presentationFamily
+        treatment = store.preferences.visualTreatment
+        recipe = store.presentationRecipe
+        naturalVariation = store.presentationNaturalVariation
+        equipment = store.preferences.equipment
+        seedColor = store.preferences.seedColor
     }
 
-    private func drawing(phase: Double) -> some View {
-        let anchors = CompanionMemoryParticles.anchors(snapshot)
-        return Canvas { context, size in
-                let side = min(size.width, size.height)
-                for anchor in anchors {
-                    let center = CGPoint(x: anchor.x * side + (size.width - side) / 2,
-                                         y: anchor.y * side + (size.height - side) / 2)
-                    let radius = side * (anchor.applications > 0 ? 0.012 : 0.008)
-                    let brightness = phase == 0 ? 0.85 : 0.78 + 0.12 * sin(phase * 0.8 + anchor.x * 9)
-                    let color = anchor.applications > 0 ? Color(red: 1, green: 0.73, blue: 0.32)
-                        : Color(red: 0.64, green: 0.68, blue: 0.75)
-                    context.fill(Path(ellipseIn: CGRect(x: center.x - radius * 2, y: center.y - radius * 2,
-                                                       width: radius * 4, height: radius * 4)), with: .color(color.opacity(0.12)))
-                    context.fill(Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius,
-                                                       width: radius * 2, height: radius * 2)), with: .color(color.opacity(brightness)))
-                    for index in 0..<anchor.applications {
-                        let angle = Double(index) / Double(anchor.applications) * 2 * .pi
-                        let point = CGPoint(x: center.x + cos(angle) * side * 0.025,
-                                            y: center.y + sin(angle) * side * 0.025)
-                        let dot = side * 0.0035
-                        context.fill(Path(ellipseIn: CGRect(x: point.x - dot, y: point.y - dot, width: dot * 2, height: dot * 2)),
-                                     with: .color(color.opacity(0.65)))
-                    }
-                }
-        }
+    @MainActor func art(size: CGFloat, reduceMotion: Bool) -> some View {
+        CompanionPresenceArt(form: form, family: family, size: size, reduceMotion: reduceMotion,
+            treatment: treatment, recipe: recipe, naturalVariation: naturalVariation,
+            equipment: equipment, seedColor: seedColor)
+            .environment(\.companionParticleScene, nil)
+            .environment(\.liminalPointStructure, nil)
+            .environment(\.liminalPointProgress, LiminalV008Runtime.orbProgress)
+            .allowsHitTesting(false).accessibilityHidden(true)
     }
+}
+
+private struct CompanionParticleSceneKey: EnvironmentKey { static let defaultValue: CompanionParticleScene? = nil }
+private struct CompanionParticleSelectionKey: EnvironmentKey { static let defaultValue: CompanionParticleSelection? = nil }
+extension EnvironmentValues {
+    var companionParticleScene: CompanionParticleScene? {
+        get { self[CompanionParticleSceneKey.self] }
+        set { self[CompanionParticleSceneKey.self] = newValue }
+    }
+    var companionParticleSelection: CompanionParticleSelection? {
+        get { self[CompanionParticleSelectionKey.self] }
+        set { self[CompanionParticleSelectionKey.self] = newValue }
+    }
+}
+
+@MainActor extension CompanionStore {
+    func companionParticleScene(at date: Date = Date()) -> CompanionParticleScene? {
+        guard let development = liminalFormDevelopment(at: date) else { particleSceneCache = nil; return nil }
+        let graph = memoryMapSnapshot(at: date)
+        guard let digest = CompanionParticleScene.fingerprint(originDigest: development.originDigest,
+            graph: graph, development: development) else { particleSceneCache = nil; return nil }
+        if particleSceneCache?.digest == digest { return particleSceneCache }
+        particleSceneCache = CompanionParticleScene.build(originDigest: development.originDigest,
+            graph: graph, development: development)
+        return particleSceneCache
+    }
+
 }

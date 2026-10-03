@@ -31,6 +31,9 @@ struct LiminalDevelopmentCard: View {
                         Text("Kept knowledge adds a memory node. Reviewing a helpful application strengthens that same node with support. Later direct experience can build on that knowledge through its own recorded and reviewed outcome.")
                             .font(.callout).foregroundStyle(.secondary)
                         if let snapshot = store.liminalFormDevelopment(at: tick.date) {
+                            if let scene = store.companionParticleScene(at: tick.date) {
+                                seedMemory(scene)
+                            }
                             content(snapshot)
                         } else {
                             Text("Current learning is unavailable. Your chosen body and Seed remain yours; reopen the current profile after resolving any source or recovery issue.")
@@ -42,6 +45,24 @@ struct LiminalDevelopmentCard: View {
                 .onAppear { visible = true }
                 .onDisappear { visible = false; stopped = true }
         }
+    }
+
+    private func seedMemory(_ scene: CompanionParticleScene) -> some View {
+        let reduced = systemReduceMotion || store.preferences.reduceMotion || store.preferences.quiet
+        return VStack(spacing: 8) {
+            ZStack {
+                CompanionParticleAppearance(store: store).art(size: 280, reduceMotion: reduced)
+                CompanionMemoryParticleField(scene: scene, reduceMotion: reduced, seedColor: store.preferences.seedColor,
+                    selectedID: store.memoryParticleSelection?.selectedID(in: scene), onSelect: { id in
+                        if store.selectMemoryParticle(id, in: scene, openInspector: true) { inspectionNotice = nil }
+                        else { inspectionNotice = "That record changed. Select its current light again." }
+                    })
+            }.frame(width: 280, height: 280)
+            Text("Your Seed holds the same \(scene.graph.nodes.count) records as your memory map, including their sources and saved methods.")
+                .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            Button("Unfold memory map", systemImage: "point.3.connected.trianglepath.dotted") { store.open(.nodeLab) }
+                .buttonStyle(.bordered).accessibilityIdentifier("companion-memory.unfold")
+        }.frame(maxWidth: .infinity).accessibilityIdentifier("companion-memory.seed")
     }
 
     private func content(_ snapshot: LiminalFormDevelopment.Snapshot) -> some View {

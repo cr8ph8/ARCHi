@@ -204,11 +204,11 @@ final class KinCursorPresentationTests: XCTestCase {
         let cursor = try render(LiveCompanionPresence(store: store, size: 128, role: .cursor))
         let body = try render(LiveCompanionPresence(store: store, size: 128))
         let floating = try render(FloatingCompanionBody(store: store).frame(width: 128, height: 154))
-        let memory = store.liminalFormDevelopment()
+        let memory = store.companionParticleScene()
         let seedReference = try render(CompanionPresenceArt(form: .kinSeed, family: nil, size: 128, reduceMotion: true)
-            .environment(\.companionMemoryDevelopment, memory))
+            .environment(\.companionParticleScene, memory))
         let bodyReference = try render(CompanionPresenceArt(form: .kin, family: nil, size: 128, reduceMotion: true)
-            .environment(\.companionMemoryDevelopment, memory))
+            .environment(\.companionParticleScene, memory))
         for (first, second, label) in [(cursorBefore, cursor, "cursor before and after growth"),
                                         (cursor, seedReference, "live cursor and Core Seed"),
                                         (body, bodyReference, "live body and First Light"),

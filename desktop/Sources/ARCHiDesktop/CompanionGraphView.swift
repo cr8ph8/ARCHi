@@ -188,6 +188,9 @@ struct CompanionGraphView: View {
     var canAsk: (CompanionGraphNode) -> Bool = { _ in false }
     var lightExpression: KinLightExpression = .resting
     var preparedNodeIDs: Set<String> = []
+    var particleScene: CompanionParticleScene?
+    var seedAppearance: CompanionParticleAppearance?
+    var onSelectParticle: ((String) -> Void)?
     var onCreateMethod: ((CompanionGraphNode) -> Void)?
     var canCreateMethod: (CompanionGraphNode) -> Bool = { _ in false }
 
@@ -216,13 +219,18 @@ struct CompanionGraphView: View {
          canAsk: @escaping (CompanionGraphNode) -> Bool = { _ in false },
          lightExpression: KinLightExpression = .resting, preparedNodeIDs: Set<String> = [],
          onCreateMethod: ((CompanionGraphNode) -> Void)? = nil,
-         canCreateMethod: @escaping (CompanionGraphNode) -> Bool = { _ in false }) {
+         canCreateMethod: @escaping (CompanionGraphNode) -> Bool = { _ in false },
+         particleScene: CompanionParticleScene? = nil,
+         seedAppearance: CompanionParticleAppearance? = nil,
+         onSelectParticle: ((String) -> Void)? = nil) {
         self.snapshot = snapshot
         self.onOpen = onOpen
         self.reduceMotion = reduceMotion; self.seedColor = seedColor
         self.onAsk = onAsk; self.canAsk = canAsk
         self.lightExpression = lightExpression; self.preparedNodeIDs = preparedNodeIDs
         self.onCreateMethod = onCreateMethod; self.canCreateMethod = canCreateMethod
+        self.particleScene = particleScene; self.seedAppearance = seedAppearance
+        self.onSelectParticle = onSelectParticle
         _layout = State(initialValue: initialLayout)
         _selectedID = State(initialValue: initialSelectionID)
         _isShowcase = State(initialValue: initialShowcase)
@@ -406,6 +414,15 @@ struct CompanionGraphView: View {
                     systemImage: showsList ? "list.bullet" : "point.3.connected.trianglepath.dotted")
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(WorkspaceTheme.accent)
                 Spacer(minLength: 8)
+                if layout == .particles && !showsList && seedAppearance != nil {
+                    Button(particleSpread < 0.5 ? "Unfold memory" : "Gather into Seed",
+                           systemImage: particleSpread < 0.5 ? "arrow.up.left.and.arrow.down.right" : "circle.dotted") {
+                        focusID = nil; focusHistory = []; zoom = 1
+                        particleSpread = particleSpread < 0.5 ? 1 : 0
+                    }
+                    .accessibilityIdentifier("companion-graph.seed-map")
+                    .help("The same records in your Seed or as a connected map. Selection and saved memory stay intact.")
+                }
                 if !showsList {
                     Button("Fit map") { fitRevision += 1 }
                         .accessibilityLabel("Fit and center graph")
@@ -506,12 +523,12 @@ struct CompanionGraphView: View {
             } else if layout == .particles {
                 Divider()
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("Particle spacing").fontWeight(.medium)
+                    Text("Unfold memory").fontWeight(.medium)
                     Slider(value: $particleSpread, in: 0...1)
                         .accessibilityLabel("Spread knowledge particles from orb to constellation")
                         .accessibilityIdentifier("companion-graph.particle-spread")
                     HStack {
-                        Text("Orb")
+                        Text(seedAppearance == nil ? "Orb" : "Your Seed")
                         Spacer()
                         Text("Connections")
                     }.font(.system(size: 11)).foregroundStyle(.secondary)
@@ -543,7 +560,7 @@ struct CompanionGraphView: View {
 
     private var layoutHint: String {
         switch layout {
-        case .particles: "Select a light to inspect its record. Lines are saved relationships; orbiting motes are artwork."
+        case .particles: "Each light keeps its record as the Seed unfolds. Lines are saved relationships; gold satellites show reviewed helpful use."
         case .constellation: "Grouped by type. Select a record; scroll or zoom to explore."
         case .radial: "Rings follow recorded links from the companion; unlinked records sit outside."
         case .flow: "Columns group record types. Arrows show recorded direction."
@@ -554,13 +571,24 @@ struct CompanionGraphView: View {
         return GeometryReader { viewport in
             ScrollViewReader { scroll in
                 ScrollView([.horizontal, .vertical]) {
-                    if let field = particleField {
+                    if let field = particleScene?.field ?? particleField {
+                        ZStack {
+                        if let seedAppearance {
+                            seedAppearance.art(size: min(viewport.size.width, viewport.size.height),
+                                reduceMotion: reduceMotion || systemReduceMotion)
+                                .opacity(max(0, 1 - particleSpread * 1.6))
+                                .animation(reduceMotion || systemReduceMotion ? nil : .easeInOut(duration: 0.65), value: particleSpread)
+                        }
                         KnowledgeParticleView(field: field, nodes: visibleNodes, selectedID: selectedID,
                             spread: particleSpread, pulses: particlePulses, reduceMotion: reduceMotion || systemReduceMotion,
                             tint: seedColor.accent, expression: lightExpression, preparedIDs: preparedNodeIDs,
                             focusIDs: focusID == nil ? nil : Set(CompanionGraphNavigation.visibleNodes(in: snapshot,
                                 query: "", kindFilter: nil, focusID: focusID).map(\.id)),
+                            compact: seedAppearance != nil && particleSpread == 0,
+                            growthByRecordID: particleScene?.growthByRecordID ?? [:],
                             onSelect: { selectNode($0) })
+                            .animation(reduceMotion || systemReduceMotion ? nil : .easeInOut(duration: 0.65), value: particleSpread)
+                        }
                             .frame(width: max(viewport.size.width, viewport.size.width * zoom),
                                    height: max(viewport.size.height, viewport.size.height * zoom))
                             .overlay { Color.clear.frame(width: 1, height: 1).id("particle-center").allowsHitTesting(false) }
@@ -812,6 +840,7 @@ struct CompanionGraphView: View {
         guard snapshot.nodes.contains(where: { $0.id == id }) else { return }
         if clearFilters { query = ""; kindFilter = nil }
         selectedID = id
+        onSelectParticle?(id)
         if focusID != nil && focusID != id { focus(on: id) }
     }
 
