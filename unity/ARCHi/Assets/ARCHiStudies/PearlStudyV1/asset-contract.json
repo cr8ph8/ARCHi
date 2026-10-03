@@ -1,8 +1,8 @@
 {
-  "source": "desktop/Sources/ARCHiDesktop/Resources/CompanionArt/archi-pearl-study-v1.png",
-  "sha256": "698cac349f8d2c2eb184fee0b6d08761cce310f05e5cbafd7cc461bc5a6d4c03",
-  "width": 512,
   "height": 512,
+  "publicExport": "Metadata removed in candidate; image payload unchanged.",
   "review": "Blender source visual inspection complete; Unity readability pending",
-  "publicExport": "File text metadata removed; image payload unchanged."
+  "sha256": "b47816dc3c72078b2456f4e1b42de071d12f23a4782048f1a7b0ab48e3029198",
+  "source": "desktop/Sources/ARCHiDesktop/Resources/CompanionArt/archi-pearl-study-v1.png",
+  "width": 512
 }

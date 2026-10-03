@@ -4,18 +4,19 @@ import SwiftUI
 @MainActor
 extension CompanionStore {
     func refreshReactorReference(family: EvolutionFamily? = nil, usesExplicitFamily: Bool = false) {
+        reactor.refreshCurrentReference = { [weak self] in self?.refreshReactorReference() }
         let selectedFamily = hasPersonalQiMon ? nil : (usesExplicitFamily ? family : evolution.activeFamily)
         let recipe = presentationRecipe
-        let id = CompanionVisualAsset.appearanceID(form: presentationForm, family: selectedFamily,
-            treatment: preferences.visualTreatment, recipe: recipe, naturalVariation: presentationNaturalVariation,
-            equipment: preferences.equipment)
-        let bytes = reactor.appearanceID == id ? reactor.referencePNG : CompanionPresenceArt.png(
+        let reference = currentReactorReference(family: selectedFamily)
+        let bytes = reactor.appearanceID == reference.id && reactor.referencePNG != nil ? reactor.referencePNG : CompanionPresenceArt.png(
             form: presentationForm, family: selectedFamily, treatment: preferences.visualTreatment,
-            recipe: recipe, naturalVariation: presentationNaturalVariation, equipment: preferences.equipment)
-        reactor.updateReference(id: id,
+            recipe: recipe, naturalVariation: presentationNaturalVariation, equipment: preferences.equipment, seedColor: preferences.seedColor,
+            pointProgress: preferences.liminalPointProgress, pointStructure: reference.structure,
+            particleScene: reference.scene)
+        reactor.updateReference(id: reference.id,
             label: CompanionVisualAsset.label(form: presentationForm, family: selectedFamily,
                 treatment: preferences.visualTreatment, recipe: recipe, naturalVariation: presentationNaturalVariation,
-                equipment: preferences.equipment),
+                equipment: preferences.equipment, seedColor: preferences.seedColor),
             png: bytes,
             motionAllowed: !preferences.quiet && !preferences.reduceMotion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
             visible: isVisible && !(NSApp?.isHidden ?? false))
@@ -24,9 +25,25 @@ extension CompanionStore {
     /// A candidate frame is usable only for the current body and equipped item.
     /// Preference changes may redraw SwiftUI before the reference observer runs.
     var reactorReferenceMatchesCurrentAppearance: Bool {
-        reactor.appearanceID == CompanionVisualAsset.appearanceID(form: presentationForm, family: presentationFamily,
+        reactor.referencePNG != nil && reactor.appearanceID == currentReactorReference(family: presentationFamily).id
+    }
+
+    /// Capture current origin-bound evidence once so the cache key and pixels
+    /// describe the same records. A failed replacement retires the old reference
+    /// through Reactor's existing identity-change cancellation.
+    private func currentReactorReference(family: EvolutionFamily?) -> (id: String, structure: LiminalPointStructure?, scene: CompanionParticleScene?) {
+        let usesPoints = LiminalV008Runtime.applies(form: presentationForm, family: family, treatment: preferences.visualTreatment)
+        let memoryApplies = !usesPoints && CompanionMemoryParticles.applies(form: presentationForm, family: family,
+            treatment: preferences.visualTreatment)
+        let structure = usesPoints ? liveLiminalPointStructure : nil
+        let scene = memoryApplies ? companionParticleScene() : nil
+        let id = CompanionVisualAsset.appearanceID(form: presentationForm, family: family,
             treatment: preferences.visualTreatment, recipe: presentationRecipe,
-            naturalVariation: presentationNaturalVariation, equipment: preferences.equipment)
+            naturalVariation: presentationNaturalVariation, equipment: preferences.equipment, seedColor: preferences.seedColor,
+            pointProgress: preferences.liminalPointProgress)
+            + (structure.map { "-structure-" + $0.digest } ?? "")
+            + (scene.map { "-memory-" + $0.digest } ?? "")
+        return (id, structure, scene)
     }
 }
 
@@ -50,15 +67,17 @@ struct LiveCompanionPresence: View {
                     .accessibilityLabel("ARCHi · " + CompanionVisualAsset.label(form: form,
                         family: store.presentationFamily, treatment: store.preferences.visualTreatment,
                         recipe: store.presentationRecipe, naturalVariation: store.presentationNaturalVariation,
-                        equipment: store.preferences.equipment) + " · " + store.reactor.state.title)
+                        equipment: store.preferences.equipment, seedColor: store.preferences.seedColor) + " · " + store.reactor.state.title)
             } else {
                 CompanionPresenceArt(form: form, family: store.presentationFamily,
                     size: size, reduceMotion: store.preferences.reduceMotion || systemReduceMotion || store.preferences.quiet,
                     treatment: store.preferences.visualTreatment, recipe: store.presentationRecipe,
                     naturalVariation: store.presentationNaturalVariation, equipment: store.preferences.equipment,
-                    lightExpression: store.kinLightExpression)
+                    lightExpression: store.kinLightExpression, seedColor: store.preferences.seedColor)
+                    .environment(\.liminalPointProgress, role == .cursor ? LiminalV008Runtime.orbProgress : store.preferences.liminalPointProgress)
             }
         }.frame(width: size, height: size)
+        .modifier(LiminalStructureScope(store: store))
         .accessibilityValue(store.activeQiMon == nil ? "" : store.kinLightExpression.label)
     }
 }

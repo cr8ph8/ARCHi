@@ -168,7 +168,8 @@ struct SharedDocumentView: NSViewRepresentable {
             text.layoutSubtreeIfNeeded()
             manager.ensureLayout(for: container)
             inspectGeometry()
-            // Layout can synchronously resize/scroll the source and invalidate it.
+            // Layout may retire geometry-bound work. The source range itself
+            // remains current unless its bytes, revision or selection changed.
             guard store.isCurrent(ticket, requireVisible: false), store.textSelection == selection,
                   sourceRevision == revision, window === text.window,
                   window.isVisible, !window.isMiniaturized,
@@ -259,6 +260,14 @@ struct SharedDocumentView: NSViewRepresentable {
             applying = false
         }
 
+        private func invalidateGeometry(reason: String) {
+            guard !applying, !detached, store.selectedPassageObserverID == observerID,
+                  sourceRevision == store.sourceRevision else { return }
+            applying = true
+            store.invalidateDocumentGeometry(reason: reason)
+            applying = false
+        }
+
         private func resetGeometryBaseline() {
             lastViewportSize = scrollView?.contentView.bounds.size
             lastScreenFrame = screenFrame()
@@ -287,7 +296,7 @@ struct SharedDocumentView: NSViewRepresentable {
             let moved = lastScreenFrame.flatMap { previous in currentFrame.map { $0 != previous } } ?? false
             lastViewportSize = size
             lastScreenFrame = currentFrame
-            if resized || moved { invalidate(reason: "Document layout moved. Select the passage again.") }
+            if resized || moved { invalidateGeometry(reason: "Document layout moved. Preview pointing again.") }
         }
 
         private func refreshObservers() {
@@ -325,7 +334,7 @@ struct SharedDocumentView: NSViewRepresentable {
             let id = ObjectIdentifier(clip)
             let previous = clipOrigins[id]
             clipOrigins[id] = clip.bounds.origin
-            if completedInitialLayout, let previous, previous != clip.bounds.origin { invalidate(reason: "Document scrolled. Select the passage again.") }
+            if completedInitialLayout, let previous, previous != clip.bounds.origin { invalidateGeometry(reason: "Document scrolled. Preview pointing again.") }
             inspectGeometry()
         }
 
@@ -333,7 +342,7 @@ struct SharedDocumentView: NSViewRepresentable {
             guard let window = observedWindow, notification.object as? NSWindow === window else { return }
             let changed = lastWindowFrame.map { $0 != window.frame } ?? false
             lastWindowFrame = window.frame
-            if completedInitialLayout && changed { invalidate(reason: "Window moved or resized. Select the passage again.") }
+            if completedInitialLayout && changed { invalidateGeometry(reason: "Window moved or resized. Preview pointing again.") }
             inspectGeometry()
         }
     }

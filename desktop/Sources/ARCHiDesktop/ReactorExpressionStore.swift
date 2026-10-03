@@ -50,6 +50,9 @@ final class ReactorExpressionStore: ObservableObject {
     @Published private(set) var controlsAvailable = true
     private(set) var referencePNG: Data?
     private(set) var appearanceID = ""
+    /// Re-read the native evidence owner immediately before preview or dispatch.
+    /// A cached reference alone does not establish that its support is current.
+    var refreshCurrentReference: (@MainActor () -> Void)?
     private var cue = "idle"
     private var worker: (any ReactorWorkerPort)?
     private var owner: UUID?
@@ -101,6 +104,7 @@ final class ReactorExpressionStore: ObservableObject {
     }
 
     func prepare() {
+        refreshCurrentReference?()
         guard canPrepare else { return }
         resetAttempt(); state = .checking; status = "Checking the local transport and public price. No session is started."
         quote = nil; runtimeReady = false
@@ -109,6 +113,7 @@ final class ReactorExpressionStore: ObservableObject {
     }
 
     func startLocalPreview() {
+        refreshCurrentReference?()
         guard canPreview, let reference = referencePNG else { return }
         resetAttempt(); state = .previewing; status = "Local motion preview · no Reactor session or model call."
         let id = UUID(); owner = id; startedAt = now()
@@ -135,6 +140,7 @@ final class ReactorExpressionStore: ObservableObject {
     }
 
     func startLive(apiKey: String, reviewedQuote: ReactorTrialQuote) {
+        refreshCurrentReference?()
         guard canStart, quote == reviewedQuote, let reference = referencePNG,
               reviewedQuote.referenceDigest == Self.digest(reference),
               apiKey.hasPrefix("rk_"), (10...512).contains(apiKey.utf8.count),

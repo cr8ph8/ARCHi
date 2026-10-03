@@ -4,8 +4,11 @@ import SwiftUI
 struct WorkspaceView: View {
     @ObservedObject var store: CompanionStore
     let playHost: HostedPlayHost
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @State private var showsRetention = false
+    @State private var showsWikiOSExchangeReview = false
+    @State private var showsSidebar = true
+    @State private var showsMoreTools = false
 
     /// The native window owns its chosen size and minimum. Reply length must
     /// not publish a new intrinsic or minimum size back into that window.
@@ -21,26 +24,66 @@ struct WorkspaceView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            sidebar
-                .navigationSplitViewColumnWidth(min: 205, ideal: 220, max: 260)
-        } detail: {
+        HSplitView {
+            if showsSidebar {
+                sidebar
+                    .frame(minWidth: 205, idealWidth: 220, maxWidth: 250)
+                    .frame(maxHeight: .infinity)
+            }
             VStack(spacing: 0) {
                 workspaceHeader
                 Divider().opacity(0.6)
-                if store.section == .context {
+                ARCActiveWorkBar(store: store)
+                if case .incoming(let file) = store.wikiOSExchangeReview {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("WikiOS task waiting: " + file.request.taskTitle).lineLimit(1)
+                            if let reason = store.wikiOSExchangeBlockReason { Text(reason).foregroundStyle(.secondary) }
+                        }
+                        Spacer()
+                        Button("Dismiss") { store.wikiOSExchangeReview = nil }
+                        Button("Review task") { showsWikiOSExchangeReview = true }
+                            .disabled(store.wikiOSExchangeBlockReason != nil)
+                            .accessibilityIdentifier("wikios.incoming.open")
+                    }.font(.caption).padding(12).background(WorkspaceTheme.panel)
+                }
+                if let notice = store.workspaceRoutingNotice {
+                    HStack(alignment: .top, spacing: 10) {
+                        Label(notice, systemImage: "info.circle")
+                            .font(.callout).foregroundStyle(WorkspaceTheme.muted)
+                        Spacer(minLength: 0)
+                        Button { store.dismissWorkspaceRoutingNotice() } label: { Image(systemName: "xmark") }
+                            .buttonStyle(.plain).accessibilityLabel("Dismiss navigation notice")
+                    }.padding(14).background(WorkspaceTheme.panel)
+                        .accessibilityIdentifier("workspace.routing-notice")
+                }
+                if store.section == .home {
+                    HomeWorkspace(store: store)
+                } else if store.section == .context {
                     WorkTogetherWorkspace(store: store)
                 } else if store.section == .assistant {
                     AssistantWorkspace(store: store)
                 } else if store.section == .marketplace {
                     MarketplaceWorkspace(store: store)
+                } else if store.section == .unity {
+                    UnityWorkspace(store: store)
                 } else if store.section == .nodeLab {
                     CompanionGraphWorkspace(store: store)
+                } else if store.section == .steward {
+                    TokenStewardWorkspace(store: store.tokenSteward, notice: store.stewardMessage, onRetry: store.retryStewardAccounting,
+                        selectedTaskID: store.selectedStewardTaskID,
+                        onOpenEvidence: { _ = store.openARCEvidenceForUsage(taskID: $0) },
+                        canOpenEvidence: store.canOpenARCEvidenceForUsage)
+                } else if store.section == .capabilities {
+                    ReasoningWorkspace(store: store, session: store.arc3)
                 } else if store.section == .play && store.allowsPlay {
                     PlayWorkspace(store: store, host: playHost)
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 24) {
+                            if !WorkspaceNavigation.tabs(for: store.section).isEmpty {
+                                WorkspaceSectionTabs(store: store)
+                            }
                             sectionHeading
                             sectionContent
                         }
@@ -52,75 +95,130 @@ struct WorkspaceView: View {
                 Divider().opacity(0.5)
                 statusBar
             }
-            .background {
-                LinearGradient(colors: [ArchiPalette.lilac.opacity(colorScheme == .dark ? 0.05 : 0.15), ArchiPalette.peach.opacity(0.045), .clear], startPoint: .topTrailing, endPoint: .bottomLeading)
-            }
+            .background(WorkspaceTheme.background)
         }
-        .navigationSplitViewStyle(.balanced)
-        .tint(ArchiPalette.violet)
-        .preferredColorScheme(.light)
+        // Body consumers share the selected authored pose. Cursor surfaces keep
+        // their explicit Seed-orb override outside this workspace.
+        .environment(\.liminalPointProgress, store.preferences.liminalPointProgress)
+        .environment(\.liminalLightExpression, store.kinLightExpression)
+        .modifier(LiminalStructureScope(store: store))
+        .preferredColorScheme(store.preferences.workspaceAppearance.colorScheme)
+        .tint(WorkspaceTheme.accent)
         // The native window owns the 880 × 640 content minimum.
         .frame(minWidth: 880)
         .sheet(isPresented: $showsRetention) {
             DesktopRetentionSummary(store: store) { showsRetention = false }
         }
+        .sheet(isPresented: $showsWikiOSExchangeReview, onDismiss: { store.wikiOSExchangeReview = nil }) {
+            if let review = store.wikiOSExchangeReview {
+                switch review {
+                case .incoming(let file): WikiOSTaskImportView(store: store, file: file)
+                case .outgoing(let preview): WikiOSTaskReturnView(store: store, preview: preview)
+                }
+            }
+        }
+        .onChange(of: store.wikiOSExchangeReview?.id) { _, id in
+            if id == nil { showsWikiOSExchangeReview = false }
+            else if store.wikiOSExchangeBlockReason == nil && !showsRetention { showsWikiOSExchangeReview = true }
+        }
+        .onChange(of: store.section, initial: true) { _, section in
+            if WorkspaceNavigation.tools.contains(section) { showsMoreTools = true }
+        }
     }
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 9) {
-                if let mark = QuotientBranding.mark {
-                    Image(nsImage: mark).resizable().scaledToFit().frame(width: 36, height: 36)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .accessibilityLabel("Quotient Intelligent")
-                }
-                Text("ARCHi").font(.system(size: 24, weight: .medium, design: .rounded))
+            VStack(alignment: .leading, spacing: 4) {
+                ARCHiWordmark()
+                Text("Your desktop companion")
+                    .font(.system(size: 9))
+                    .foregroundStyle(WorkspaceTheme.muted)
             }
-            .padding(.horizontal, 18).padding(.top, 20).padding(.bottom, 24)
+            .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 22)
 
-            List(selection: $store.section) {
-                Section("YOUR WORKSPACE") {
-                    ForEach(store.allowsPlay ? [WorkspaceSection.context, .assistant, .nodeLab, .play] : [.context, .assistant, .nodeLab]) { section in sidebarRow(section) }
-                }
-                Section("MAKE IT YOURS") {
-                    ForEach([WorkspaceSection.appearance, .marketplace, .evolution, .rhythm, .memory]) { section in sidebarRow(section) }
-                }
-                Section("PREFERENCES") {
-                    ForEach([WorkspaceSection.connections, .accessibility, .advanced]) { section in sidebarRow(section) }
-                }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    navigationGroup("EVERYDAY", sections: WorkspaceNavigation.work)
+                    navigationGroup("YOUR COMPANION", sections: WorkspaceNavigation.companion)
+                    navigationGroup("PLAY & CREATE", sections: WorkspaceNavigation.explore)
+                    DisclosureGroup(isExpanded: $showsMoreTools) {
+                        VStack(spacing: 4) {
+                            ForEach(WorkspaceNavigation.tools) { section in sidebarRow(section) }
+                        }.padding(.top, 8)
+                    } label: {
+                        Label("More tools", systemImage: "ellipsis.circle")
+                            .font(.system(size: 12)).foregroundStyle(WorkspaceTheme.muted)
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("workspace.more-tools")
+                    .padding(.horizontal, 12)
+                }.padding(.horizontal, 12).padding(.bottom, 16)
             }
-            .listStyle(.sidebar)
+            .scrollIndicators(.automatic)
             Spacer(minLength: 0)
-            VStack(alignment: .leading, spacing: 9) {
-                QuotientBrandSignature().frame(maxWidth: .infinity).padding(.bottom, 4)
-                Label("On your desktop", systemImage: "desktopcomputer")
-                    .font(.system(size: 12, weight: .medium))
-                Text("A little presence.\nRoom for everything else.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary).lineSpacing(3)
-            }.padding(22)
+            VStack(alignment: .leading, spacing: 12) {
+                Rectangle().fill(WorkspaceTheme.line).frame(height: 1)
+                sidebarRow(.connections)
+            }.padding(.horizontal, 22).padding(.bottom, 19).padding(.top, 5)
+        }
+        .background(WorkspaceTheme.sidebar)
+    }
+
+    private func navigationGroup(_ title: String, sections: [WorkspaceSection]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.system(size: 9, weight: .medium)).tracking(1.4)
+                .foregroundStyle(WorkspaceTheme.muted.opacity(0.75))
+                .padding(.horizontal, 12).padding(.bottom, 7)
+            ForEach(sections) { section in sidebarRow(section) }
         }
     }
 
     private func sidebarRow(_ section: WorkspaceSection) -> some View {
-        Label(store.hasPersonalQiMon && section == .appearance ? "My QiMon"
-            : store.hasPersonalQiMon && section == .evolution ? "Life with KIN" : section.rawValue,
-            systemImage: section.icon)
-            .font(.system(size: 13))
-            .padding(.vertical, 5)
-            .tag(section)
+        let selected = WorkspaceNavigation.parent(of: store.section) == section
+        let title = WorkspaceNavigation.title(for: section)
+        return Button {
+            // Native accessibility actions can arrive during a SwiftUI layout
+            // callback. Navigate on the next event turn, after that update ends.
+            DispatchQueue.main.async {
+                section == .nodeLab ? store.openMemoryMap() : store.open(section)
+            }
+        } label: {
+            HStack(spacing: 11) {
+                Image(systemName: section == .connections ? "gearshape" : section.icon)
+                    .font(.system(size: 14, weight: .light)).frame(width: 19)
+                Text(title).font(.system(size: 13, weight: selected ? .medium : .regular))
+                Spacer(minLength: 0)
+                if selected { Circle().fill(WorkspaceTheme.accent).frame(width: 4, height: 4) }
+            }
+        }
+        .buttonStyle(WorkspaceNavigationStyle(selected: selected,
+            reduceMotion: systemReduceMotion || store.preferences.reduceMotion || store.preferences.quiet))
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier(section == .home ? "workspace.nav.home" : "workspace.nav.\(section.id)")
     }
 
     private var workspaceHeader: some View {
-        HStack {
-            Label("Your personal workspace", systemImage: "sparkle")
-                .font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+        HStack(spacing: 14) {
+            Button { showsSidebar.toggle() } label: {
+                Image(systemName: "sidebar.left")
+            }
+            .buttonStyle(.plain).foregroundStyle(WorkspaceTheme.muted)
+            .accessibilityLabel(showsSidebar ? "Hide navigation" : "Show navigation")
+            .accessibilityIdentifier("workspace.toggle-navigation")
+            HStack(spacing: 9) {
+                Image(systemName: store.section.icon).foregroundStyle(WorkspaceTheme.accent)
+                Text(workspaceTitle).fontWeight(.medium)
+            }
+            .font(.system(size: 12))
+            .accessibilityLabel("ARCHi view: \(store.section.displayTitle(companionName: store.activeQiMon?.name ?? store.keptQiMon?.name))")
             Spacer()
             Button {
                 store.isVisible ? store.hideCompanion() : store.showCompanion()
             } label: {
                 Label(store.isVisible ? "Hide companion" : "Show companion", systemImage: store.isVisible ? "eye.slash" : "eye")
             }.buttonStyle(.borderless)
-            Button("Return to desktop", systemImage: "arrow.up.right") {
+            Button("Back to desktop", systemImage: "arrow.up.right") {
                 let workspace = NSApplication.shared.keyWindow
                 playHost.setVisible(false)
                 store.invalidateTextSelection(reason: "Workspace hidden; passage reference cleared.")
@@ -128,15 +226,24 @@ struct WorkspaceView: View {
                 workspace?.orderOut(nil)
             }.buttonStyle(.bordered)
         }
-        .padding(.horizontal, 28).padding(.vertical, 15)
+        .padding(.horizontal, 24).padding(.vertical, 15)
+        .background(WorkspaceTheme.sidebar.opacity(0.55))
+    }
+
+    private var workspaceTitle: String {
+        switch WorkspaceNavigation.parent(of: store.section) {
+        case .appearance: "Companion · \(WorkspaceNavigation.tabTitle(store.section))"
+        case .connections: "Settings · \(WorkspaceNavigation.tabTitle(store.section))"
+        default: store.section.displayTitle(companionName: store.activeQiMon?.name ?? store.keptQiMon?.name)
+        }
     }
 
     private var sectionHeading: some View {
         VStack(alignment: .leading, spacing: 7) {
             Text(store.section.eyebrow.uppercased())
-                .font(.system(size: 10, weight: .semibold)).tracking(2).foregroundStyle(ArchiPalette.violet)
+                .font(.system(size: 10, weight: .semibold)).tracking(2).foregroundStyle(WorkspaceTheme.accent)
             Text(store.hasPersonalQiMon && store.section == .appearance ? "Your QiMon"
-                : store.hasPersonalQiMon && store.section == .evolution ? "Life with KIN" : store.section.heading)
+                : store.hasPersonalQiMon && store.section == .evolution ? "Life with \(store.activeQiMon?.name ?? "your companion")" : store.section.heading)
                 .font(.system(size: 30, weight: .medium, design: .rounded))
             Text(store.hasPersonalQiMon && store.section == .appearance ? "One companion, growing alongside you."
                 : store.hasPersonalQiMon && store.section == .evolution ? "His beginning, your shared experiences, and what comes next." : store.section.subtitle)
@@ -146,9 +253,12 @@ struct WorkspaceView: View {
 
     @ViewBuilder private var sectionContent: some View {
         switch store.section {
+        case .home: EmptyView() // The overview owns its responsive scrolling.
         case .assistant: EmptyView() // The assistant keeps its composer below its reply scroll.
         case .marketplace: EmptyView()
+        case .unity: EmptyView() // The Unity area observes the existing presentation owner.
         case .nodeLab: EmptyView() // The native graph owns its canvas and inspector scrolling.
+        case .steward, .capabilities: EmptyView()
         case .play: EmptyView() // Hosted separately so the game owns its scrolling and focus.
         case .appearance: AppearanceWorkspace(store: store)
         case .evolution: EvolutionWorkspace(store: store, evolution: store.evolution)
@@ -163,10 +273,11 @@ struct WorkspaceView: View {
 
     private var statusBar: some View {
         HStack(spacing: 7) {
-            Circle().fill(ArchiPalette.violet.opacity(0.65)).frame(width: 5, height: 5)
+            Circle().fill(store.connectionState == .ready ? WorkspaceTheme.positive : WorkspaceTheme.muted)
+                .frame(width: 5, height: 5)
             Text(store.status).lineLimit(1)
             Spacer()
-            Button("Saved & this visit", systemImage: "externaldrive") { showsRetention = true }
+            Button("Saved on this Mac", systemImage: "externaldrive") { showsRetention = true }
                 .buttonStyle(.borderless)
                 .fixedSize()
                 .accessibilityIdentifier("desktop-retention.open")
@@ -179,35 +290,41 @@ struct WorkspaceView: View {
 }
 
 @MainActor
-private struct AssistantWorkspace: View {
+struct AssistantWorkspace: View {
     @ObservedObject var store: CompanionStore
+    var compact = false
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    if !compact {
                     HStack(spacing: 14) {
                         CompanionPresenceArt(form: store.presentationForm, family: store.presentationFamily,
                             size: 52, reduceMotion: store.preferences.reduceMotion || store.preferences.quiet,
                             treatment: store.preferences.visualTreatment, recipe: store.presentationRecipe,
                             naturalVariation: store.presentationNaturalVariation, equipment: store.preferences.equipment,
-                            lightExpression: store.kinLightExpression)
+                            lightExpression: store.kinLightExpression, seedColor: store.preferences.seedColor)
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(store.activeQiMon == nil ? "Here, with you." : "KIN is here, with you.")
+                            Text(AskARCHiBrand.title)
                                 .font(.system(size: 23, weight: .medium, design: .rounded))
-                            if store.activeQiMon != nil {
-                                Button("Life with KIN") { store.open(.evolution) }
-                                    .buttonStyle(.borderless).font(.system(size: 11))
-                            } else {
-                                Text("Start with a thought. Add a document when it helps.")
-                                    .font(.system(size: 12)).foregroundStyle(.secondary)
-                            }
+                                .accessibilityIdentifier("assistant.title")
+                            Text(AskARCHiBrand.companionLine(name: store.activeQiMon?.name))
+                                .font(.system(size: 12, weight: .medium)).foregroundStyle(WorkspaceTheme.accent)
+                                .accessibilityIdentifier("assistant.companion")
+                            Text("Think something through, draw on memory, or work with a document.")
+                                .font(.system(size: 12)).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer(minLength: 0)
                         AssistantTaskCue(activity: store.assistantActivity, quiet: store.preferences.quiet,
                             reduceMotion: store.preferences.reduceMotion)
                     }
-                    attachmentSummary
+                    }
+                    if !compact && showsStartingPoints { startingPoints }
+                    if store.selectedKnowledgePages.isEmpty { attachmentSummary }
+                    KnowledgeChatContextView(store: store)
+                    PreparedDocumentProcedureView(store: store)
                     VoiceTranscriptPreview(voice: store.voiceInput)
                     AssistantReplyContent(store: store)
                 }
@@ -226,20 +343,63 @@ private struct AssistantWorkspace: View {
         .frame(minHeight: 0, maxHeight: .infinity)
     }
 
-    private var attachmentSummary: some View {
-        WorkspaceCard(inset: 12) {
+    // Existing owners establish whether there is any work or result to present.
+    // Never classify replies by their text: status and error messages stay visible.
+    private var showsStartingPoints: Bool {
+        !store.isWorking && store.assistantActivity == .idle && store.compareResults.isEmpty
+            && !store.showsARC3Reply && store.activeARCAnswer == nil
+            && store.localConversation.exchanges.isEmpty && store.sourceName == nil
+            && store.selectedKnowledgePages.isEmpty && store.preparedDocumentProcedure == nil
+            && store.textSelection == nil && store.replySourceSelection == nil && !store.voiceInput.isActive
+    }
+
+    private var startingPoints: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) { memoryStartingPoint; workStartingPoint }
+            VStack(alignment: .leading, spacing: 10) { memoryStartingPoint; workStartingPoint }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("assistant.starting-points")
+    }
+
+    private var memoryStartingPoint: some View {
+        Button("Memory map", systemImage: "point.3.connected.trianglepath.dotted") { store.openMemoryMap() }
+            .buttonStyle(WorkspaceActionStyle())
+            .accessibilityHint("Explore retained sources, linked knowledge and lessons.")
+            .accessibilityIdentifier("assistant.open-memory-map")
+    }
+
+    private var workStartingPoint: some View {
+        Button("Work together", systemImage: "doc.text.viewfinder") { store.open(.context) }
+            .buttonStyle(WorkspaceActionStyle())
+            .accessibilityHint("Open your document workspace and review tools.")
+            .accessibilityIdentifier("assistant.start-work")
+    }
+
+    @ViewBuilder private var attachmentSummary: some View {
+        if store.sourceName == nil {
             HStack(spacing: 10) {
-                Image(systemName: "doc.text").foregroundStyle(ArchiPalette.violet)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(store.sourceName ?? "Add a document")
-                        .font(.system(size: 12, weight: .medium)).lineLimit(1)
-                        .help(store.sourceName ?? "Choose a UTF-8 text file")
-                        .accessibilityIdentifier("assistant.attachment-name")
-                    Text(store.sourceName == nil ? "Optional · UTF-8 text" : "Full working copy shared with your next message")
-                        .font(.system(size: 10)).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-                if store.sourceName != nil {
+                Label("Add a document", systemImage: "paperclip")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("assistant.attachment-name")
+                Text("Optional · UTF-8 text").font(.system(size: 10)).foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Button("Choose…") { store.chooseDocument() }.buttonStyle(.borderless)
+                    .accessibilityLabel("Choose document")
+                    .accessibilityIdentifier("assistant.choose-document")
+            }.padding(.horizontal, 4).padding(.vertical, 3)
+            DesktopInterestSharingNotice(store: store)
+        } else if let name = store.sourceName {
+            WorkspaceCard(inset: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: "doc.text").foregroundStyle(WorkspaceTheme.accent)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(name).font(.system(size: 12, weight: .medium)).lineLimit(1)
+                            .help(name).accessibilityIdentifier("assistant.attachment-name")
+                        Text("Full working copy shared with your next message")
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
                     Button("Work together", systemImage: "doc.text.viewfinder") { store.section = .context }
                         .buttonStyle(.bordered).controlSize(.small)
                         .accessibilityIdentifier("assistant.open-document")
@@ -249,12 +409,9 @@ private struct AssistantWorkspace: View {
                     } label: { Image(systemName: "ellipsis.circle") }
                     .menuStyle(.borderlessButton).fixedSize()
                     .accessibilityLabel("Shared document actions")
-                } else {
-                    Button("Choose…") { store.chooseDocument() }.buttonStyle(.bordered).controlSize(.small)
-                        .accessibilityLabel("Choose document")
                 }
+                DesktopInterestSharingNotice(store: store)
             }
-            DesktopInterestSharingNotice(store: store)
         }
     }
 }
@@ -278,7 +435,10 @@ private struct AssistantReplyComposer: View {
                     .help(store.nextReplySettings.summary)
                     .popover(isPresented: $showsSettings) { AssistantComposerSettingsView(store: store) }
             }
-            WorkReplyModePicker(store: store).frame(maxWidth: 280)
+            HStack {
+                WorkReplyModePicker(store: store).frame(maxWidth: 280)
+                ARCActiveAssistantActions(store: store)
+            }
             AssistantComposerConnections(store: store)
             TextField(store.requestsRevision ? "How should this passage change?" : "What would you like to work on?",
                       text: $store.prompt, axis: .vertical)
@@ -320,31 +480,37 @@ private struct AssistantReplyContent: View {
             if let selection = store.replySourceSelection ?? store.textSelection {
                 VStack(alignment: .leading, spacing: 7) {
                     Label("Source passage for this reply", systemImage: "text.quote")
-                        .font(.system(size: 11, weight: .medium)).foregroundStyle(ArchiPalette.violet)
+                        .font(.system(size: 11, weight: .medium)).foregroundStyle(WorkspaceTheme.accent)
                     Text(selection.quote).font(.system(size: 12)).lineSpacing(4)
                         .lineLimit(4).textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading).help(selection.quote)
                 }
                 .padding(12)
-                .background(ArchiPalette.lilac.opacity(0.17), in: RoundedRectangle(cornerRadius: 10))
+                .background(WorkspaceTheme.accent.opacity(0.17), in: RoundedRectangle(cornerRadius: 10))
             }
-            if store.compareResults.values.contains(where: { $0.revision != nil }) {
-                Button("Review passage changes", systemImage: "doc.text.viewfinder") { store.section = .context }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("assistant.open-revision-review")
-            }
-            if store.route == .compare {
+            if store.showsARC3Reply {
+                        ARC3AssistantReply(store: store, session: store.arc3)
+                    } else if store.activeARCAnswer != nil {
+                ARCActiveAssistantReply(store: store)
+            } else if store.compareResults.values.contains(where: { $0.revision != nil }) {
+                ForEach(AssistantProvider.allCases) { provider in
+                    if let result = store.compareResults[provider] {
+                        WorkTogetherReplyLane(store: store, provider: provider, result: result)
+                    }
+                }
+            } else if store.route == .compare {
                 ComparisonReplyPanels(store: store)
             } else {
                 Text(store.reply).font(.system(size: 14)).lineSpacing(5)
                 if store.assistantProvider == .qwen { HamptonReplyReferences(snapshot: store.hamptonSnapshot) }
+                DocumentReadingFeedback(store: store, provider: store.assistantProvider)
                 EvolutionReplyFeedback(store: store, provider: store.assistantProvider)
                 LessonReplyControls(store: store, provider: store.assistantProvider)
                 if let receipt = store.compareResults[store.assistantProvider]?.receipt {
                     AssistantReceiptDetails(receipt: receipt, onOpenGraph: { store.open(.nodeLab) })
                 }
             }
-            Text("Moving ARCHi or changing shared context stops the current reply.")
+            Text("Changing shared text or its selected passage stops the current reply. Moving ARCHi clears pointing cues and stops Point and explain.")
                 .font(.system(size: 10)).foregroundStyle(.secondary)
         }
         .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .topLeading)
@@ -357,12 +523,13 @@ private struct AppearanceWorkspace: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
+            SeedAppearanceCard(store: store)
             QiMonCard(store: store)
             if !store.hasPersonalQiMon {
             HStack(spacing: 24) {
-                CompanionPresenceArt(form: store.presentationForm, family: store.presentationFamily, size: 152, reduceMotion: store.preferences.reduceMotion || store.preferences.quiet, treatment: store.preferences.visualTreatment, recipe: store.presentationRecipe, naturalVariation: store.presentationNaturalVariation, equipment: store.preferences.equipment)
+                CompanionPresenceArt(form: store.presentationForm, family: store.presentationFamily, size: 152, reduceMotion: store.preferences.reduceMotion || store.preferences.quiet, treatment: store.preferences.visualTreatment, recipe: store.presentationRecipe, naturalVariation: store.presentationNaturalVariation, equipment: store.preferences.equipment, seedColor: store.preferences.seedColor)
                     .frame(width: 200, height: 180)
-                    .background(ArchiPalette.lilac.opacity(0.17), in: RoundedRectangle(cornerRadius: 28))
+                    .background(WorkspaceTheme.accent.opacity(0.17), in: RoundedRectangle(cornerRadius: 28))
                 VStack(alignment: .leading, spacing: 9) {
                     StatusPill(text: "Your current form", icon: "checkmark")
                     Text(store.presentationFamily?.title ?? store.presentationForm.rawValue).font(.system(size: 25, weight: .medium, design: .rounded))
@@ -375,85 +542,66 @@ private struct AppearanceWorkspace: View {
                 Spacer()
             }
             }
-            if store.hasPersonalQiMon {
-                DisclosureGroup("Tools & accessories") { CompanionWardrobeCard(store: store).padding(.top, 12) }
-            } else {
-                CompanionWardrobeCard(store: store)
-            }
+            LiminalV008AppearanceCard(store: store)
+            LiminalDevelopmentCard(store: store, evolution: store.evolution)
+            CompanionWardrobeCard(store: store)
             if store.activeQiMon != nil {
-                personalLightAbilities
+                DisclosureGroup("Light & sound") { personalLightAbilities.padding(.top, 14) }
             }
             if store.canChooseStartingForm {
-            Text("Starting forms. Always yours to return to.").font(.system(size: 15, weight: .medium))
+            DisclosureGroup("Explore more forms") {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 124, maximum: 190), spacing: 12)], spacing: 12) {
-                ForEach(CompanionForm.starterChoices) { form in
+                ForEach(CompanionForm.additionalFormChoices) { form in
                     Button {
                         store.chooseStartingForm(form)
                     } label: {
                         VStack(spacing: 9) {
                             if form.isStillArtwork {
-                                CompanionPresenceArt(form: form, family: nil, size: 86, reduceMotion: true)
+                                CompanionPresenceArt(form: form, family: nil, size: 86, reduceMotion: true, seedColor: store.preferences.seedColor)
                             } else {
                                 CompanionArt(form: form, size: 86, reduceMotion: true)
                             }
                             HStack(spacing: 5) {
                                 Text(form.rawValue).font(.system(size: 12, weight: .medium))
                                     .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-                                if store.presentationFamily == nil && form == store.presentationForm { Image(systemName: "checkmark.circle.fill").font(.system(size: 11)).foregroundStyle(ArchiPalette.violet) }
+                                if store.presentationFamily == nil && form == store.presentationForm { Image(systemName: "checkmark.circle.fill").font(.system(size: 11)).foregroundStyle(WorkspaceTheme.accent) }
                             }
                             .frame(minHeight: 30)
-                            Text(form.isStillArtwork ? "Still artwork" : " ")
+                            Text(form == .velaLantern ? "Visual form study" : form.isStillArtwork ? "Still artwork" : " ")
                                 .font(.system(size: 10)).foregroundStyle(.secondary)
-                                .accessibilityHidden(!form.isStillArtwork)
+                                .accessibilityHidden(!form.isStillArtwork && form != .velaLantern)
                         }
                         .frame(maxWidth: .infinity).padding(.horizontal, 8).padding(.vertical, 14)
-                        .background(store.presentationFamily == nil && form == store.presentationForm ? ArchiPalette.lilac.opacity(0.30) : ArchiPalette.lilac.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
-                        .overlay(RoundedRectangle(cornerRadius: 18).stroke(store.presentationFamily == nil && form == store.presentationForm ? ArchiPalette.violet.opacity(0.65) : .secondary.opacity(0.12), lineWidth: 1))
+                        .background(store.presentationFamily == nil && form == store.presentationForm ? WorkspaceTheme.accent.opacity(0.30) : WorkspaceTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
+                        .overlay(RoundedRectangle(cornerRadius: 18).stroke(store.presentationFamily == nil && form == store.presentationForm ? WorkspaceTheme.accent.opacity(0.65) : .secondary.opacity(0.12), lineWidth: 1))
                     }.buttonStyle(.plain)
                         .accessibilityLabel("Choose \(form.rawValue) form")
-                        .accessibilityHint(form.isStillArtwork ? "Still artwork for the same companion." : "Change the companion’s starting form.")
+                        .accessibilityHint(form == .velaLantern ? "Try a visual form study. This does not award growth."
+                            : form.isStillArtwork ? "Still artwork for the same companion." : "Change the companion’s starting form.")
                         .accessibilityAddTraits(store.presentationFamily == nil && form == store.presentationForm ? [.isSelected] : [])
                 }
             }
             }
+            }
             WorkspaceCard {
-                if store.canChooseStartingForm && store.presentationForm == .companion && store.presentationFamily == nil {
-                    SettingsRow(title: "Companion finish", detail: "A softer, sculpted look. Your original stays available.", icon: "paintpalette") {
-                        Picker("Companion finish", selection: $store.preferences.visualTreatment) {
-                            ForEach(CompanionVisualTreatment.allCases) { treatment in
-                                Text(treatment.rawValue).tag(treatment)
-                            }
-                        }
-                        .pickerStyle(.segmented).labelsHidden().frame(width: 220)
-                        .accessibilityIdentifier("companion-visual-treatment")
-                    }
-                    if store.preferences.visualTreatment == .pearlStudy && CompanionVisualAsset.image == nil {
-                        Text("Pearl study is unavailable. Your original is shown.")
-                            .font(.system(size: 12)).foregroundStyle(.secondary)
-                    }
-                    Divider().padding(.vertical, 10)
+                Button("Size & movement settings", systemImage: "accessibility") { store.open(.accessibility) }
+                    .buttonStyle(.borderless)
+                    .accessibilityIdentifier("companion.comfort-settings")
+                Text("Adjust desktop size and Reduce Motion in Settings → Comfort.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            DisclosureGroup("Personal context & design studies") {
+                PersonalContextCard(store: store)
+                SeedDesignTestCard(store: store)
+                if store.preferences.seedAppearance == .hamptonLiminal {
+                    LiminalCubSheetPreview(store: store)
                 }
-                SettingsRow(title: "Desktop size", detail: "Make a little room, or a little more.", icon: "arrow.up.left.and.arrow.down.right") {
-                    Slider(value: $store.preferences.size, in: 0.65...1.6)
-                        .frame(width: 170).accessibilityLabel("Companion size")
-                    Text(store.preferences.size, format: .percent.precision(.fractionLength(0)))
-                        .font(.system(size: 12).monospacedDigit()).frame(width: 43, alignment: .trailing)
-                }
-                Divider().padding(.vertical, 10)
-                SettingsRow(title: "Gentle movement", detail: "Let the companion float softly while idle.", icon: "wind") {
-                    Toggle("Gentle movement", isOn: Binding(get: { !store.preferences.reduceMotion }, set: { store.preferences.reduceMotion = !$0 })).labelsHidden().toggleStyle(.switch)
-                }
-                Divider().padding(.vertical, 10)
-                HStack(alignment: .top, spacing: 14) {
-                    Image(systemName: "sparkles").foregroundStyle(ArchiPalette.violet).frame(width: 24)
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(store.hasPersonalQiMon ? "Growing together" : "Adaptive appearance").font(.system(size: 13, weight: .medium))
-                        Text(store.hasPersonalQiMon ? "KIN’s current stage belongs to him. His future development will continue from the same core and Journey." : "Shared experiences can inform development. Outfits add their own expression and tools; your starting forms stay available.")
-                            .font(.system(size: 12)).foregroundStyle(.secondary).lineSpacing(3)
-                    }
-                    Spacer()
-                    Button(store.hasPersonalQiMon ? "Life with KIN" : "Explore evolution") { store.open(.evolution) }.buttonStyle(.borderless)
-                }
+            }
+            WorkspaceCard {
+                WorkspaceAppearancePicker(selection: $store.preferences.workspaceAppearance)
+                Button("Keep workspace appearance", systemImage: "bookmark") { store.open(.memory) }
+                    .buttonStyle(.borderless).font(.system(size: 11)).padding(.top, 6)
+                    .accessibilityHint("Open Memories to save your preferences on this Mac.")
             }
             PreferenceFootnote(store: store)
         }
@@ -503,12 +651,12 @@ private struct AppearanceWorkspace: View {
                 }
             }
             .padding(14)
-            .background(ArchiPalette.lilac.opacity(0.09), in: RoundedRectangle(cornerRadius: 16))
+            .background(WorkspaceTheme.accent.opacity(0.09), in: RoundedRectangle(cornerRadius: 16))
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 178, maximum: 260), spacing: 12)], spacing: 12) {
                 ForEach(KinLightMode.allCases.filter { $0 != .rest }) { mode in
                     VStack(alignment: .leading, spacing: 9) {
-                        CompanionPresenceArt(form: .kinSeed, family: nil, size: 116, reduceMotion: true,
-                            lightExpression: .init(mode: mode, isPreview: true))
+                        CompanionPresenceArt(form: store.cursorPresentationForm, family: nil, size: 116, reduceMotion: true,
+                            lightExpression: .init(mode: mode, isPreview: true), seedColor: store.preferences.seedColor)
                             .frame(maxWidth: .infinity)
                             .accessibilityHidden(true)
                         Text(mode.title).font(.system(size: 14, weight: .medium))
@@ -521,16 +669,16 @@ private struct AppearanceWorkspace: View {
                         Button("Preview for 5 seconds") { _ = store.previewKinLight(mode) }
                             .buttonStyle(.bordered).controlSize(.small)
                             .disabled(!store.canPreviewKinLight)
-                            .accessibilityLabel("Preview KIN’s \(mode.title) light for 5 seconds")
+                            .accessibilityLabel("Preview \(store.activeQiMon?.name ?? "your companion")’s \(mode.title) light for 5 seconds")
                             .accessibilityHint("Try this light around his current body. No request or saved change.")
                             .accessibilityIdentifier("kin-light-preview-\(mode.rawValue)")
                     }
                     .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(ArchiPalette.lilac.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
+                    .background(WorkspaceTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
                     .overlay(RoundedRectangle(cornerRadius: 18).stroke(.secondary.opacity(0.16)))
                 }
             }
-            Text("A passage focus takes priority, then an active reply. Previews last five seconds. Stop returns KIN to rest; Quiet mode keeps his original light, and Reduce Motion keeps every effect still.")
+            Text("A passage focus takes priority, then an active reply. Previews last five seconds. Stop returns your companion to rest; Quiet mode keeps the original light, and Reduce Motion keeps every effect still.")
                 .font(.system(size: 11)).foregroundStyle(.secondary).lineSpacing(3)
             Button("Focus on a passage", systemImage: "doc.text.viewfinder") { store.open(.context) }
                 .buttonStyle(.borderless).font(.system(size: 12))
@@ -588,6 +736,9 @@ private struct MemoryWorkspace: View {
             }
             .buttonStyle(.bordered)
             .accessibilityIdentifier("memory.open-graph")
+            RelationshipMemoryCard(store: store)
+            RecordLookupCard(store: store)
+            KnowledgePagesCard(store: store)
             KeptLessonsCard(store: store)
             WorkspaceCard {
                 SettingsRow(title: "Temporary session context", detail: "Let local Qwen refer to useful excerpts from earlier questions during this visit.", icon: "text.bubble") {
@@ -598,7 +749,7 @@ private struct MemoryWorkspace: View {
                     .font(.system(size: 11)).foregroundStyle(.secondary).lineSpacing(3).padding(.top, 10)
                 if store.route == .codex {
                     Text("Use Local Qwen or Compare both to include these excerpts. Codex never receives them.")
-                        .font(.system(size: 11)).foregroundStyle(ArchiPalette.violet).padding(.top, 6)
+                        .font(.system(size: 11)).foregroundStyle(WorkspaceTheme.accent).padding(.top, 6)
                 }
                 Divider().padding(.vertical, 12)
                 HStack {
@@ -644,7 +795,7 @@ private struct MemoryWorkspace: View {
             WorkspaceCard {
                 Label("Your choices are the starting point", systemImage: "hand.raised")
                     .font(.system(size: 15, weight: .medium))
-                Text("ARCHi saves the appearance, rhythm and lessons you explicitly keep in its settings file. Kept lessons go only to local Qwen when their scope matches. Temporary session context is separate. Send shares your message, the full shared document copy, and any selected passage with your connected assistant.")
+                Text("ARCHi saves the appearance, rhythm and lessons you explicitly keep in its settings file. Kept lessons go only to local Qwen when their scope matches. Temporary session context is separate. Send uses the context shown in Chat. With selected knowledge pages, only those pages and their passages supply source material to local Qwen; otherwise your shared document and selected passage accompany the message.")
                     .font(.system(size: 13)).foregroundStyle(.secondary).lineSpacing(5).padding(.top, 7)
                 Text("Turning the switch off does not erase saved choices. Forget saved preferences removes saved appearance and rhythm; withdraw lessons individually above.")
                     .font(.system(size: 11)).foregroundStyle(.secondary).padding(.top, 8)
@@ -666,7 +817,7 @@ struct PlacementPreviewCard: View {
                 Spacer(minLength: 0)
                 Text(store.isRecordingSpatial ? "RECORDING" : store.spatialPreview == nil ? "LOCAL" : "PREVIEW")
                     .font(.system(size: 9, weight: .medium)).tracking(0.8)
-                    .foregroundStyle(ArchiPalette.violet)
+                    .foregroundStyle(WorkspaceTheme.accent)
             }
             Text(message).font(.system(size: 12)).foregroundStyle(.secondary)
                 .lineSpacing(2).lineLimit(2)
@@ -715,7 +866,7 @@ private struct ConnectionsWorkspace: View {
             WorkspaceCard {
                 Text("Qwen at the core. Your choice of help.")
                     .font(.system(size: 21, weight: .medium, design: .rounded))
-                Text("Local Qwen is the default. Use Codex deliberately for an external reference, second opinion or alternative. A local failure never sends your work outside this Mac. Changing the route sends nothing.")
+                Text("Qwen runs locally. Choose a local-only route, Qwen-first fallback, or a comparison with Codex. The route description below explains what may leave this Mac. Changing the route sends nothing.")
                     .font(.system(size: 13)).foregroundStyle(.secondary).lineSpacing(4).padding(.top, 6)
                 Divider().padding(.vertical, 12)
                 AssistantRouteSelector(store: store)
@@ -791,7 +942,7 @@ private struct AdvancedWorkspace: View {
             WorkspaceCard {
                 HStack(alignment: .top, spacing: 18) {
                     Image(systemName: "point.3.connected.trianglepath.dotted")
-                        .font(.system(size: 34, weight: .light)).foregroundStyle(ArchiPalette.violet)
+                        .font(.system(size: 34, weight: .light)).foregroundStyle(WorkspaceTheme.accent)
                     VStack(alignment: .leading, spacing: 8) {
                         Text("ARCHi Node Lab").font(.system(size: 20, weight: .medium, design: .rounded))
                         Text("Explore the sources, kept lessons and request steps connected to ARCHi's current work.")
@@ -870,8 +1021,7 @@ struct WorkspaceCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) { content }
             .padding(inset).frame(maxWidth: .infinity, maxHeight: fillsHeight ? .infinity : nil, alignment: .topLeading)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(.primary.opacity(0.065), lineWidth: 1))
+            .modifier(WorkspaceSurface())
     }
 }
 
@@ -882,7 +1032,7 @@ private struct SettingsRow<Control: View>: View {
     @ViewBuilder let control: Control
     var body: some View {
         HStack(spacing: 15) {
-            Image(systemName: icon).foregroundStyle(ArchiPalette.violet).frame(width: 24)
+            Image(systemName: icon).foregroundStyle(WorkspaceTheme.accent).frame(width: 24)
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(.system(size: 13, weight: .medium))
                 Text(detail).font(.system(size: 12)).foregroundStyle(.secondary).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
@@ -898,9 +1048,9 @@ private struct StatusPill: View {
     let icon: String
     var body: some View {
         Label(text, systemImage: icon).font(.system(size: 10, weight: .medium))
-            .foregroundStyle(ArchiPalette.violet)
+            .foregroundStyle(WorkspaceTheme.accent)
             .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(ArchiPalette.lilac.opacity(0.25), in: Capsule())
+            .background(WorkspaceTheme.accent.opacity(0.25), in: Capsule())
     }
 }
 
@@ -912,7 +1062,7 @@ private struct QuoteCard: View {
             Text(text).font(.system(size: 20, weight: .regular, design: .rounded)).lineSpacing(4)
             Text(detail).font(.system(size: 11)).foregroundStyle(.secondary)
         }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
-            .background(ArchiPalette.lilac.opacity(0.16), in: RoundedRectangle(cornerRadius: 20))
+            .background(WorkspaceTheme.accent.opacity(0.16), in: RoundedRectangle(cornerRadius: 20))
     }
 }
 
@@ -949,14 +1099,14 @@ private struct ConnectionRow: View {
     let available: Bool
     var body: some View {
         HStack(spacing: 15) {
-            Image(systemName: icon).font(.system(size: 19, weight: .light)).foregroundStyle(ArchiPalette.violet).frame(width: 32)
+            Image(systemName: icon).font(.system(size: 19, weight: .light)).foregroundStyle(WorkspaceTheme.accent).frame(width: 32)
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(.system(size: 14, weight: .medium))
                 Text(detail).font(.system(size: 12)).foregroundStyle(.secondary).lineSpacing(3)
             }
             Spacer(minLength: 20)
             Label(status, systemImage: available ? "checkmark.circle" : "circle.dashed")
-                .font(.system(size: 11)).foregroundStyle(available ? ArchiPalette.violet : .secondary)
+                .font(.system(size: 11)).foregroundStyle(available ? WorkspaceTheme.accent : .secondary)
         }.padding(.vertical, 6)
     }
 }
@@ -988,7 +1138,11 @@ private extension CompanionForm {
         case .companion: "A soft, familiar presence beside your work."
         case .light: "A small glow, with just enough personality."
         case .particle: "A mint-white cloud of light, gathered into a quiet floating orb."
-        case .corePearl: "A luminous pearl with a mint glass edge. A quiet beginning, with room to become."
+        case .corePearl: "A translucent aqua ball of light. One continuing core, with room to become."
+        case .particleSeed: "Gold and garnet particles gather around a steady ivory core."
+        case .hamptonSeed: "A sea-glass core and open gold arcs, with room to become."
+        case .velaSeed: "An opal light holds a warm core within folded, translucent lantern wings."
+        case .velaLantern: "Vela’s Lantern Wing study: open opal wings shelter the same warm core. A visual possibility for a later form."
         case .orbitField: "A fine green-blue orbit gathers around a small pearl, with sparks tracing its field."
         case .lightForm: "Translucent mint petals open around a luminous pearl, held within a delicate orbit of light."
         case .ribbon: "A fluid line that gives your desk a little movement."
@@ -1007,10 +1161,19 @@ private extension CompanionForm {
 }
 
 private extension WorkspaceSection {
+    func displayTitle(companionName: String?) -> String {
+        if let companionName, self == .evolution { return "Life with \(companionName)" }
+        return WorkspaceNavigation.title(for: self)
+    }
+
     var icon: String {
         switch self {
+        case .home: "house"
         case .assistant: "bubble.left.and.bubble.right"
         case .nodeLab: "point.3.connected.trianglepath.dotted"
+        case .steward: "chart.bar.doc.horizontal"
+        case .capabilities: "square.grid.3x3"
+        case .unity: "gamecontroller"
         case .play: "gamecontroller"
         case .marketplace: "bag"
         case .appearance: "paintpalette"
@@ -1025,18 +1188,25 @@ private extension WorkspaceSection {
     }
     var eyebrow: String {
         switch self {
+        case .home: ARCHiIdentity.descriptor
         case .assistant: "A little space to think"
         case .nodeLab: "Connected knowledge"
+        case .steward, .capabilities: "Work and evidence"
+        case .unity: "Explore & create"
         case .play: "Your world of play"
         case .marketplace, .appearance, .evolution, .rhythm: "Make it yours"
         case .memory, .context: "Always your choice"
-        case .connections, .accessibility, .advanced: "Your workspace"
+        case .connections, .accessibility, .advanced: "ARCHi preferences"
         }
     }
     var heading: String {
         switch self {
+        case .home: "Here, with you."
         case .assistant: "Here, with you."
         case .nodeLab: "Your connections, in view."
+        case .steward: "Understand the work."
+        case .capabilities: "Capabilities, with evidence."
+        case .unity: "More room to be."
         case .play: "A little room to play."
         case .marketplace: "A little more you."
         case .appearance: "A familiar presence. Your style."
@@ -1051,8 +1221,12 @@ private extension WorkspaceSection {
     }
     var subtitle: String {
         switch self {
+        case .home: "Your companion, context, and kept memories."
         case .assistant: "Your thoughts, your context, and a companion close by."
         case .nodeLab: "Follow the sources, lessons and work behind each answer."
+        case .steward: "Measured usage, explicit outcomes and spending boundaries."
+        case .capabilities: "Review locally checked ARC evidence."
+        case .unity: "Bring your companion into Unity, with the same identity and chosen appearance."
         case .play: "Return to your Habitat, continue your Journey, and meet in the Practice Arena."
         case .marketplace: "Discover, make and exchange local companion items."
         case .appearance: "Choose how ARCHi shows up on your desktop."

@@ -1,0 +1,25 @@
+{
+  "schema": "archi-arc-checker-replay-config/v1",
+  "operation": "rescore-fixed-synthetic-predictions",
+  "input": "arc/fixtures/portable/smoke-evaluation-v1.json",
+  "golden": "arc/fixtures/golden/smoke-evidence-v1.json",
+  "scorerVersion": "archi-arc-exact-v1",
+  "canonicalization": "archi-canonical-json-v1",
+  "moduleTransform": "node-strip-types-and-explicit-local-mjs-imports/v1",
+  "dependencies": "node-builtins-only",
+  "timeoutMilliseconds": 10000,
+  "maximumOldSpaceMiB": 128,
+  "expectedCounts": {
+    "exact": 1,
+    "incorrect": 1,
+    "missing": 0,
+    "invalid": 0,
+    "unscored": 0,
+    "totalExamples": 2,
+    "exactTasks": 0,
+    "totalTasks": 1
+  },
+  "solverExecution": false,
+  "inferenceCalls": 0,
+  "stateWriteAuthority": false
+}

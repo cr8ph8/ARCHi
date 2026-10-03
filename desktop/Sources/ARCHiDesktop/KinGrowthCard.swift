@@ -11,7 +11,7 @@ struct KinGrowthCard: View {
     @State private var saveNotice: String?
 
     private var matchingRecord: KinGrowthRecord? {
-        guard let kin = store.activeQiMon,
+        guard let kin = store.activeQiMon, kin.character == .kin,
               let record = evolution.kinGrowthRecord, record.originDigest == kin.originDigest else { return nil }
         return record
     }
@@ -21,7 +21,13 @@ struct KinGrowthCard: View {
             VStack(alignment: .leading, spacing: 14) {
                 Label("A first unfolding", systemImage: "leaf")
                     .font(.system(size: 18, weight: .medium))
-                if let record = matchingRecord {
+                if store.activeQiMon?.character == .hampton {
+                    Text("Liminal Seed · a new beginning")
+                        .font(.system(size: 14, weight: .medium))
+                    Text("Potential is room to develop through shared experience. This Seed has no earned later body yet; KIN’s First Light belongs to KIN.")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                    Button("Review kept lessons") { store.open(.memory) }.buttonStyle(.borderless)
+                } else if let record = matchingRecord {
                     Text(record.active ? "First Light · kept for KIN" : "Core Seed · First Light is still yours to use")
                         .font(.system(size: 14, weight: .medium))
                     Text("Your teaching helped, and you chose this body. His Seed remains your desktop cursor presence. Using the Seed as his body keeps this milestone.")
@@ -85,15 +91,16 @@ struct KinGrowthCard: View {
     private var preview: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                CompanionPresenceArt(form: .kinSeed, family: nil, size: 116, reduceMotion: true)
+                CompanionPresenceArt(form: .kinSeed, family: nil, size: 116, reduceMotion: true, seedColor: store.preferences.seedColor)
                     .accessibilityLabel("KIN Core Seed, unchanged beginning")
                 Image(systemName: "arrow.right").accessibilityHidden(true)
                 CompanionPresenceArt(form: .kin, family: nil, size: 144,
-                    reduceMotion: store.preferences.reduceMotion || store.preferences.quiet)
+                    reduceMotion: store.preferences.reduceMotion || store.preferences.quiet,
+                    treatment: store.preferences.visualTreatment, seedColor: store.preferences.seedColor)
                     .accessibilityLabel("First Light body preview, not kept")
                 Spacer(minLength: 0)
             }
-            Text("First Light unfolds KIN’s garnet body around the same ivory core. His Seed stays on the desktop for pointing and chat. Both share his lessons, items and abilities.")
+            Text("First Light unfolds the body expression you have chosen around the same ivory core. His Seed stays on the desktop for pointing and chat. Both share his lessons, items and abilities.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
             if let proposal = evolution.kinGrowthProposal, let use = proposal.receipt.lessonUse {
                 reason(use, requestID: proposal.receipt.requestID)

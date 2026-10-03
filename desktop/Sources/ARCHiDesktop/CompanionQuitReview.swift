@@ -15,6 +15,15 @@ extension CompanionStore {
         reviewWorkingCopy: (() -> Bool)? = nil,
         chooseEvolution: (() -> EvolutionQuitDecision)? = nil
     ) -> Bool {
+        guard !isImageRegionImportPresented else {
+            status = "Use or close the image region draft before quitting. Your draft is still open."
+            return false
+        }
+        guard !pastedDocumentDraft.hasContent else {
+            status = "Use or discard your pasted text draft before quitting. Your draft is still open."
+            open(.context)
+            return false
+        }
         let reviewedSource = QuitSourceSnapshot(store: self)
         guard (reviewWorkingCopy ?? confirmQuitWithWorkingCopy)() else { return false }
         guard reviewedSource.matches(self) else { return keepChangedSourceOpen() }
@@ -102,7 +111,7 @@ private struct QuitSourceSnapshot {
     }
 
     func matches(_ store: CompanionStore) -> Bool {
-        revision == store.sourceRevision && name == store.sourceName
+        !store.isImageRegionImportPresented && !store.pastedDocumentDraft.hasContent && revision == store.sourceRevision && name == store.sourceName
             && bytes == Data(store.sharedText.utf8)
     }
 }

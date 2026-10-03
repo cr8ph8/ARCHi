@@ -1,0 +1,77 @@
+{
+  "changes": [
+    "Current and restarted review surfaces show the exact method version used by the edit.",
+    "Kept origin relationships survive feedback reversal, withdrawal, counterexamples and supersession.",
+    "Stale profile/journal/library and missing exact version cannot fall through to creating a new method.",
+    "Existing method history, feedback and reuse guidance retained; no new store or data migration."
+  ],
+  "checks": {
+    "broadSuiteRun": false,
+    "curatedBuild": "passed",
+    "failures": 0,
+    "focusedOwnerTests": 6,
+    "modelCalls": 0,
+    "nativeCaptureLifecycleRerun": 1,
+    "nativeFixture": "NSHostingView capture, 520-point width, disposable profile and scripted review; visually inspected",
+    "puzzleRuns": 0,
+    "review": "Found and repaired withdrawn-origin Keep fallback before validation."
+  },
+  "installation": {
+    "compiledTextSHA256": "f0bb551fa2bdce40b07d9677125fe1ce791235a535337b534d875e32a274b841",
+    "compiledUUID": "46919D65-7C58-3D3E-B539-CE67A3FC8259",
+    "guardedUpdater": true,
+    "installedExecutableSHA256": "323c2e8c77733b97f9335c7293cef5664e1dd474417d5ad586192cadd412530f",
+    "installedTextSHA256": "f0bb551fa2bdce40b07d9677125fe1ce791235a535337b534d875e32a274b841",
+    "installedUUID": "46919D65-7C58-3D3E-B539-CE67A3FC8259",
+    "profileFileCount": 22,
+    "profileFilesUnchanged": true,
+    "recordedAt": "2026-09-30T17:04:21.262424+00:00",
+    "resources": {
+      "LiminalV008": {
+        "fileCount": 82,
+        "unchanged": true
+      },
+      "RecordReader": {
+        "fileCount": 1,
+        "unchanged": true
+      },
+      "RepresentationBridge": {
+        "fileCount": 10,
+        "unchanged": true
+      },
+      "UnityCompanion.app": {
+        "fileCount": 324,
+        "unchanged": true
+      }
+    },
+    "rollbackRetained": true,
+    "signaturePassed": true
+  },
+  "installedObservation": {
+    "homeReviewQueueToWorkTogether": true,
+    "localQwenConnectedNothingSent": true,
+    "personalMethodsAndReviewQueueEmpty": true,
+    "populatedMethodInteraction": "Not performed in personal profile. Lifecycle and render use disposable owners.",
+    "reopened": true
+  },
+  "limits": [
+    "No owner-rated useful task or general transfer established.",
+    "No model quality, token savings, skill certification or whole-Hampton-stack validation claimed.",
+    "Phone method parity, paired world actions, broader developmental consumers and calibrated general representation adaptation remain open.",
+    "Existing release-scope, historical receipt, visual acceptance, notarization and beta blockers remain open."
+  ],
+  "privacy": {
+    "personalDataPublished": false,
+    "profileAndSourcePassagesInReceipt": false
+  },
+  "publicationBase": "d688fcccd5c77ea1c336d6982954df14b38fb2c7",
+  "recordedAt": "2026-09-30T17:05:56.262772+00:00",
+  "schema": "archi-method-follow-through-delivery/v1",
+  "sourceScope": {
+    "desktop/Sources/ARCHiDesktop/DocumentMethodFollowThrough.swift": "55daa55da19c839143581d05d479564dbec77c3c80b097968f21c58315a03591",
+    "desktop/Sources/ARCHiDesktop/DocumentOutcomeView.swift": "318441e24fde9a8b91fa3e2a2baf37977d5efc1577f5d28a9d3345145bf0ff82",
+    "desktop/Sources/ARCHiDesktop/DocumentReviewQueueView.swift": "46d1776617fb130830d60b265df7b53be6b42fcd56d6b6f6bb24322eb157eeec",
+    "desktop/Tests/ARCHiDesktopTests/DocumentMethodFollowThroughTests.swift": "d3c147a79cc40c5276200a83e29b4db1e4d0697ca3036b4402e9783def00ab8b"
+  },
+  "status": "implemented-installed-focused"
+}

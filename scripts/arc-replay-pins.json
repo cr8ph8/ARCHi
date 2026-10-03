@@ -1,0 +1,52 @@
+{
+  "schema": "archi-arc-checker-replay-pins/v1",
+  "revision": "synthetic-smoke-checker-2026-09-17-v1",
+  "reviewBoundary": "Exact checker implementation and synthetic fixture only; no solver attestation",
+  "environment": {
+    "node": "v24.18.0",
+    "platform": "darwin",
+    "architecture": "arm64",
+    "versions": {
+      "node": "24.18.0",
+      "acorn": "8.16.0",
+      "ada": "3.4.4",
+      "amaro": "1.1.9",
+      "ares": "1.34.6",
+      "brotli": "1.2.0",
+      "cldr": "48.0",
+      "icu": "78.3",
+      "llhttp": "9.4.2",
+      "merve": "1.2.2",
+      "modules": "137",
+      "napi": "10",
+      "nbytes": "0.1.4",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.69.0",
+      "nghttp3": "",
+      "ngtcp2": "",
+      "openssl": "3.5.7",
+      "simdjson": "4.6.4",
+      "simdutf": "6.4.0",
+      "sqlite": "3.53.1",
+      "tz": "2026b",
+      "undici": "7.28.0",
+      "unicode": "17.0",
+      "uv": "1.52.1",
+      "uvwasi": "0.0.23",
+      "v8": "13.6.233.17-node.50",
+      "zlib": "1.3.1-e00f703",
+      "zstd": "1.5.7"
+    },
+    "executableSHA256": "sha256:bf0cea6ab3631b6b53a9709ed54d62608dd0725187426d34d4d6af6644c5197f"
+  },
+  "files": {
+    "arc/src/contract.ts": "sha256:9e1a9331b63c9479ab1251325d59bb0a4d0cca7088f2f0ea3a034442e1ec4908",
+    "arc/src/evaluate.ts": "sha256:3e0cf86c67ba869a2751f1cbb805e4cc19a2f27e61a5fd56574fbd534eb59c32",
+    "arc/src/portable.ts": "sha256:393dbc366a78ca81fc0a6d20fda9357c56b32430dc74c4e2585a0145af80343b",
+    "arc/fixtures/portable/smoke-evaluation-v1.json": "sha256:650eae09adbf41ac9f8fd41ead4b96206e982a4ea61a3435606d2b5b5b5c30d0",
+    "arc/fixtures/golden/smoke-evidence-v1.json": "sha256:4fec0f0cace49a819a34086630ec9ba75525fcf46f419e9c4f96645c25f39778",
+    "scripts/arc-replay-config.json": "sha256:4f3138906ec8409fa4fbf7ca6dbbcdbe68c379a16a9ffbf62222e2fd03cefe63",
+    "scripts/arc-replay-worker.mjs": "sha256:6f8383311c1a8144055a72deaffe3c3119205b81740761633f5bb498b90f241e",
+    "scripts/arc-replay.mjs": "sha256:860c6485e8738beaa13e26978bf0207de0426f1399fbe1c04c878893eb53b40b"
+  }
+}

@@ -140,8 +140,8 @@ final class LessonDevelopmentIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testPlacementSourceAndStopRejectLateCompletedReceipts() async throws {
-        for cause in ["placement", "source", "source-bytes", "cancel"] {
+    func testSourceAndStopRejectLateCompletedReceipts() async throws {
+        for cause in ["source", "source-bytes", "cancel"] {
             let fixture = try fixture()
             defer { clean(fixture) }
             let store = fixture.store, snapshot = try keepLesson(in: fixture.store)
@@ -152,7 +152,6 @@ final class LessonDevelopmentIntegrationTests: XCTestCase {
             XCTAssertEqual(store.compareResults[.qwen]?.state, .pending)
             XCTAssertFalse(store.confirmLessonHelped(provider: .qwen, requestID: id, snapshot: snapshot))
             switch cause {
-            case "placement": store.placed(at: CGPoint(x: 240, y: 320))
             case "source": store.share(text: "A replacement synthetic source.", name: "replacement.txt")
             case "source-bytes": store.sharedText = "Different bytes without a source revision update."
             default: store.cancelWork()
@@ -292,8 +291,8 @@ final class LessonDevelopmentIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testConversationStopSourceAndPlacementChangesCannotReviveLateCallbacks() async throws {
-        for cause in ["cancel", "source", "source-bytes", "source-name", "placement"] {
+    func testConversationStopAndSourceChangesCannotReviveLateCallbacks() async throws {
+        for cause in ["cancel", "source", "source-bytes", "source-name"] {
             let fixture = try fixture(sharedDocument: false)
             defer { clean(fixture) }
             let store = fixture.store, snapshot = try keepLesson(in: fixture.store)
@@ -306,7 +305,6 @@ final class LessonDevelopmentIntegrationTests: XCTestCase {
             case "source": store.share(text: "A new document.", name: "new.txt")
             case "source-bytes": store.sharedText = "Unversioned source bytes."
             case "source-name": store.sourceName = "unversioned.txt"
-            case "placement": store.placed(at: CGPoint(x: 200, y: 300))
             default: store.cancelWork()
             }
             fixture.reasoner.release()

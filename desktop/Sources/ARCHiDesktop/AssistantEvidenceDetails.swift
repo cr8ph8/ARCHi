@@ -57,6 +57,17 @@ struct LocalInvocationDetails: View {
                     Text("Model load · " + AssistantMetricSummary.duration(invocation.metrics?.loadNanoseconds))
                     Text("Prompt evaluation · " + AssistantMetricSummary.duration(invocation.metrics?.promptEvaluationNanoseconds))
                     Text("Response generation · " + AssistantMetricSummary.duration(invocation.metrics?.evaluationNanoseconds))
+                    Text("Internal representations · " + invocation.representationAccess.title)
+                    Text(invocation.representationAccess.detail)
+                    Text(invocation.representationReceipt.detail)
+                    if let assay = invocation.representationReceipt.assay {
+                        Text("Assay · \(assay.basis.namespace) · layer \(assay.basis.layer) · \(assay.phase)")
+                        if let scope = assay.basis.measurementScope {
+                            Text("Reader scope · \(scope) · \(assay.basis.tokenRule)")
+                            Text("Limited synthetic-record calibration. This answer is not independently verified by the reader.")
+                        }
+                        Text("Reader \(assay.basis.readerDigest)\nCalibration \(assay.basis.calibrationDigest)")
+                    }
                     if let fields = invocation.metrics?.malformedFields, !fields.isEmpty {
                         Text("Unavailable telemetry fields · " + fields.joined(separator: ", "))
                     }
@@ -128,6 +139,7 @@ private struct EvidenceDecisionDetails: View {
         case .revoked: "source changed or revoked"
         case .unmatched: "topic did not match"
         case .otherSource: "different shared source"
+        case .unavailable: "local component unavailable"
         }
     }
 }

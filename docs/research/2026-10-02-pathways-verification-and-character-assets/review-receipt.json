@@ -1,0 +1,17 @@
+{
+  "schema": "archi-research-review-receipt/v1",
+  "date_local": "2026-10-02",
+  "status": "PUBLIC_RESEARCH_HANDOFF_NOT_RUNTIME_DELIVERY",
+  "public_projection": true,
+  "scope": "Primary research mapping and proposed animation qualification; private provenance and runtime evidence excluded.",
+  "review_files_sha256": {
+    "README.md": "e88a9b80683a81c7d31f3b34c42d49a61c0a0ca515ebaa1f041aef53757ccaf5",
+    "sprite-authoring.md": "54b0bce29e035268c2a41e0b3204904a5a446e433d38ccf250e3bdea0ad27f7c",
+    "sources.json": "ed8722c8afd3cc8ef0d954b1e291b1e05da7a3f335cb52e2ebdfb1935da355f4"
+  },
+  "limits": [
+    "Research claims are not ARCHi efficacy results.",
+    "No sprite package or device integration is installed by this document.",
+    "Installed-app and Unity acceptance remain separate."
+  ]
+}

@@ -1,0 +1,168 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "R26-METHOD-FINDER-2026-09-26",
+  "milestoneId": "R26-METHOD-FINDER",
+  "asOf": "2026-09-26",
+  "recordedAt": "2026-09-27T06:51:39.697587+00:00",
+  "evidenceClass": "installed-task-aware-method-preparation",
+  "authority": "project-evidence-only",
+  "result": "PASS",
+  "resultScope": "Local word retrieval, protected preparation and source restrictions; disposable production-owner checks and installed empty-library interaction and one disposable local proposal; no helpfulness or learning claim.",
+  "sealed": true,
+  "draft": false,
+  "source": {
+    "branch": "codex/archi-encounter-composition-v1",
+    "baseCommit": "15544acf37152a400045e627a7def753e272c4ad",
+    "dirty": true,
+    "checkpointCommit": null,
+    "checkpointTree": null,
+    "cleanSource": false,
+    "sourceSurfaceDigest": "sha256:975265ae2007daeecc625d94fd061b15ab97fd19078d20eb054d9df5941aba9c",
+    "inventory": "output/method-finder-2026-09-27/source-inventory.json",
+    "inventorySHA256": "sha256:de05c3c3205a09aa3d5ac9089c6d7db26ef8ecddfecc958769ad69b006fc3825",
+    "scope": "Selected native task-aware method retrieval, protected previews, source-binding preservation, targeted checks and documentation. Primary authored source remains dirty."
+  },
+  "checks": [
+    {
+      "id": "local-model-proposal",
+      "command": "ARCHI_METHOD_FINDER_LIVE=1 swift test --filter DocumentMethodFinderLiveTests (one local Qwen request, no retries)",
+      "result": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "search",
+      "command": "swift test --filter DocumentMethodSearchTests (8 cases)",
+      "result": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "preparation-and-source",
+      "command": "swift test --filter DocumentMethodPreparationTests|KnowledgeProcedureIntegrationTests (11 cases)",
+      "result": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "native-install",
+      "command": "guarded build/install, strict signature and native interaction",
+      "result": "PASS",
+      "exitCode": 0
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "R26-METHOD-FINDER-ARTIFACT-1",
+      "path": "output/method-finder-2026-09-27/source-inventory.json",
+      "digest": "sha256:de05c3c3205a09aa3d5ac9089c6d7db26ef8ecddfecc958769ad69b006fc3825",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-METHOD-FINDER-ARTIFACT-2",
+      "path": "output/method-finder-2026-09-27/RESULT.md",
+      "digest": "sha256:3b9a6f4753ac7286ce312185b338e5653645a873e4f2deb673e443f1af7af18e",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-METHOD-FINDER-ARTIFACT-3",
+      "path": "output/method-finder-2026-09-27/installation.json",
+      "digest": "sha256:dbec4f0b972446c61906f83288f56fcbc6c890965ce54c97894e5c2f1f9e37f5",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-METHOD-FINDER-ARTIFACT-4",
+      "path": "output/method-finder-2026-09-27/native-ui-observation.json",
+      "digest": "sha256:4428493e580cab03dd27b4deba6c89fdd2ed23f3e70c037809c43416fcd9d7c2",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-METHOD-FINDER-ARTIFACT-5",
+      "path": "output/method-finder-2026-09-27/profiles-before.json",
+      "digest": "sha256:4601706e5036c3c2f3e9909c1b551338981ff7903dd3e68049c37133d96e11a7",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-METHOD-FINDER-ARTIFACT-6",
+      "path": "output/method-finder-2026-09-27/profiles-after-native.json",
+      "digest": "sha256:df648c3b9fa61c3731bb9a1dd4b147d581a5437e53e65448424372026c9aac53",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-METHOD-FINDER-ARTIFACT-7",
+      "path": "output/method-finder-2026-09-27/focused-checks-02.log",
+      "digest": "sha256:4e3c6ca734bad42232a8897b5d186b555830bbfb99b584e4a0d6ecb456814f2a",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-METHOD-FINDER-ARTIFACT-8",
+      "path": "output/method-finder-2026-09-27/preparation-final-02.log",
+      "digest": "sha256:978eedebdcd6a93548bd9afb167cc883becd868351f91100a19e2193c9573eed",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-METHOD-FINDER-ARTIFACT-9",
+      "path": "output/method-finder-2026-09-27/install-final-02.log",
+      "digest": "sha256:5d1a90f6b5a8f4bc91361dbcc4db726ab44859a9fc8583aad030cd2bbe2270ef",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-METHOD-FINDER-ARTIFACT-10",
+      "path": "output/method-finder-2026-09-27/live-call-02.log",
+      "digest": "sha256:5c20f09b2932dc25e09241ba079b2894de6b131ecdaa299d3161719c904e4ab5",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-METHOD-FINDER-ARTIFACT-11",
+      "path": "output/method-finder-2026-09-27/method-finder-live.json",
+      "digest": "sha256:ea75ee92373cda71b80e7c221b1073dbe2ca1f509622aef7d2ae9c3420a4a341",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-METHOD-FINDER-ARTIFACT-12",
+      "path": "output/method-finder-2026-09-27/attempt-started.json",
+      "digest": "sha256:4f35d67ab3f1c9e936a9c627f10a5f44c19102b09d5c860be5c4326daee7632b",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    }
+  ],
+  "limitations": [
+    "Exact-word matches are hints, not semantic-fit or success judgments.",
+    "Populated method preview/restart/source-correction paths used disposable production-owner fixtures; installed native walkthrough used the empty personal library. One local synthetic proposal was inspected without Apply or Helpful review.",
+    "No owner-authored method transfer, generation improvement, whole-stack efficacy, patent validity or beta readiness established.",
+    "Historical R18 receipt mismatch remains failed and unrecovered."
+  ],
+  "nextPromotionCondition": "Complete useful owner-authored work through method selection, Apply, semantic review and later reuse; keep broader transfer and release qualification separate."
+}

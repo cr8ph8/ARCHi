@@ -1,0 +1,143 @@
+{
+  "schema": "archi-research-batch-sources/v1",
+  "reviewDate": "2026-09-27",
+  "status": "RESEARCH_REVIEWED_NOT_RUNTIME_ADMITTED",
+  "sources": [
+    {
+      "id": "model-collapse",
+      "title": "AI models collapse when trained on recursively generated data",
+      "url": "https://www.nature.com/articles/s41586-024-07566-y",
+      "version": "Version of record, corrected March 2025",
+      "status": "primary-full-text-reviewed",
+      "archive": "private-archive/model-collapse.pdf"
+    },
+    {
+      "id": "collapse-correction",
+      "title": "Author Correction: AI models collapse when trained on recursively generated data",
+      "url": "https://www.nature.com/articles/s41586-025-08905-3",
+      "version": "2025-03-21",
+      "status": "primary-correction-reviewed",
+      "archive": "private-archive/model-collapse-correction.pdf"
+    },
+    {
+      "id": "accumulation",
+      "title": "Is Model Collapse Inevitable? Breaking the Curse of Recursion by Accumulating Real and Synthetic Data",
+      "url": "https://arxiv.org/abs/2404.01413v2",
+      "version": "v2, 2024-04-29",
+      "status": "abstract-and-paper-identity-reviewed; no proof reproduction",
+      "archive": "private-archive/accumulating-data.pdf"
+    },
+    {
+      "id": "stair",
+      "title": "STAIR (STructure Aware Information Retriever): A novel dataset and LLM based retriever for document structure augmentation",
+      "url": "https://arxiv.org/html/2609.03874v1",
+      "version": "v1, 2026-09-03",
+      "status": "primary-full-text-refreshed",
+      "archive": "../2026-09-18-retrieval-replay-evaluation/private-archive/stair.pdf"
+    },
+    {
+      "id": "primer",
+      "title": "The Little Book of Generative AI Foundations: An Intuitive Mathematical Primer",
+      "url": "https://arxiv.org/html/2605.29713v2",
+      "version": "v2, 2026-09-08",
+      "author": "Tianhua Chen",
+      "status": "contents-and-selected-derivations-reviewed; not a line-by-line audit",
+      "archive": "private-archive/generative-primer-v2.pdf"
+    },
+    {
+      "id": "albatross",
+      "title": "An RNA Language Model trained on sequence alone reveals the structural logic of Internal Ribosome Entry Sites",
+      "url": "https://www.biorxiv.org/content/10.64898/2026.05.19.726202v2",
+      "version": "requested v2; full text inaccessible",
+      "status": "partial: author explanation and atlas accessible; revised manuscript claims unverified",
+      "relatedURLs": [
+        "https://www.rouskinlab.com/articles/albatross/",
+        "https://albatrossrna.org/",
+        "https://pmc.ncbi.nlm.nih.gov/articles/PMC13228543/"
+      ],
+      "missingPDF": "https://www.biorxiv.org/content/10.64898/2026.05.19.726202v2.full.pdf",
+      "evidence": "private-archive/albatross-access.json",
+      "limits": [
+        "Chat-attributed v2 metrics and revised Type II subclass claim not independently verified.",
+        "Accessible author explanation has different metrics; versions are not combined.",
+        "No RNA datasets, sequences, model weights or code executed."
+      ]
+    }
+  ],
+  "conversations": [
+    {
+      "title": "Teaching AI RNA Structure",
+      "path": "private-archive/albatross-conversation.json",
+      "sha256": "e76d256614d74d68c1245d2e77f0fbd062f643a42a1bbe327a54770b2604c256",
+      "returnedTurns": 1,
+      "olderPageAvailable": false,
+      "reportedTruncatedItems": 0,
+      "citationPlaceholdersResolved": false
+    },
+    {
+      "title": "Model collapse threat",
+      "path": "private-archive/model-collapse-conversation.json",
+      "sha256": "ab17f6d5bbc5279068854e726656ea5d1a4de5410dd3afc654be59e1a27ba926",
+      "returnedTurns": 1,
+      "olderPageAvailable": false,
+      "reportedTruncatedItems": 0,
+      "citationPlaceholdersResolved": false
+    },
+    {
+      "title": "Generative AI Primer",
+      "path": "private-archive/primer-conversation.json",
+      "sha256": "4b939bf7bf6798dfa125b99e2f9a7fd8017ff6956af2d7426998be7b65b45cb9",
+      "returnedTurns": 1,
+      "olderPageAvailable": false,
+      "reportedTruncatedItems": 0,
+      "citationPlaceholdersResolved": false
+    },
+    {
+      "title": "STAIR Retriever Breakthrough",
+      "path": "private-archive/stair-conversation.json",
+      "sha256": "62665128d31a33eecdee1fa7e2022da4f5b0bc522307b606420357e6eb67cd53",
+      "returnedTurns": 1,
+      "olderPageAvailable": false,
+      "reportedTruncatedItems": 0,
+      "citationPlaceholdersResolved": false
+    }
+  ],
+  "documents": [
+    {
+      "path": "private-archive/model-collapse.pdf",
+      "sha256": "474c820b5224b6bfa337e98a0ff942eca4b7808b44236121af828c6122a860ae",
+      "bytes": 1157018,
+      "pages": 6,
+      "firstPagePrefix": "Nature  |  Vol 631  |  25 July 2024  |  755\nArticle\nAI models collapse when trained on \nrecursively generated data\nIlia Shumailov1,8 ✉, Zakhar Shumayl"
+    },
+    {
+      "path": "private-archive/model-collapse-correction.pdf",
+      "sha256": "56703cf6817b8c0edb334fe98be298d1708b51c515cd8c9cbd5489d4f1ad4b17",
+      "bytes": 616457,
+      "pages": 1,
+      "firstPagePrefix": "E6  |  Nature  |  Vol 640  |  10 April 2025\nCorrections & amendments\nAuthor Correction:  \nAI models collapse when \ntrained on recursively \ngenerated d"
+    },
+    {
+      "path": "private-archive/accumulating-data.pdf",
+      "sha256": "fd4f45b2625c119f94e5c2f05cac38cacf1d0bf4f6a09961a9bb968567bf69e7",
+      "bytes": 5651490,
+      "pages": 29,
+      "firstPagePrefix": "Is Model Collapse Inevitable? Breaking the Curse of\nRecursion by Accumulating Real and Synthetic Data\nMatthias Gerstgrasser∗†, Rylan Schaeffer∗, Aprat"
+    },
+    {
+      "path": "private-archive/generative-primer-v2.pdf",
+      "sha256": "7a88b2ba5c54d7c787f4b569f7b9421524de44974f8e290ff30faef0bf113f32",
+      "bytes": 2194142,
+      "pages": 195,
+      "firstPagePrefix": "The Little Book of Generative AI Foundations: An\nIntuitive Mathematical Primer\nTianhua Chen\nSchool of Computing and Engineering\nUniversity of Huddersf"
+    },
+    {
+      "path": "../2026-09-18-retrieval-replay-evaluation/private-archive/stair.pdf",
+      "sha256": "3bd184d873154b105b60d16c07f6f6ec3b800b582d4b50ada034ab85245dda8b",
+      "bytes": 4339869,
+      "pages": 11,
+      "reused": true
+    }
+  ],
+  "retention": "Private local copies; not remote backup, profile admission or training data."
+}

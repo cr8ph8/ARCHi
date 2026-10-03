@@ -25,7 +25,9 @@ struct KinCoreSeedFrame: View {
     var body: some View {
         Canvas { context, size in
             let unit = min(size.width, size.height)
-            let center = CGPoint(x: size.width * 0.5, y: size.height * 0.465)
+            // Match the authored portrait's center so fallback motion, light,
+            // and the carried pearl use the same protected inset.
+            let center = CGPoint(x: size.width * 0.5, y: size.height * 0.5)
             let radius = unit * 0.335
             let gold = Color(red: 1, green: 0.69, blue: 0.26)
             let ivory = Color(red: 1, green: 0.97, blue: 0.83)
@@ -77,7 +79,10 @@ struct KinCoreSeedFrame: View {
                 let color = palette[colorIndex]
                 let r = max(0.22, unit * (bright ? 0.0054 : 0.0015 + Double(index % 4) * 0.00045)) * (0.7 + depth * 0.5)
                 let opacity = 0.35 + depth * 0.65
-                if bright { glow(p, r * 4.5, color, opacity * 0.5) }
+                if bright {
+                    glow(p, r * 6, color, opacity * 0.18)
+                    glow(p, r * 2.8, color, opacity * 0.58)
+                }
                 // A warm dark edge keeps individual flecks readable on pale desktops.
                 if bright {
                     context.fill(circle(p, r * 1.18), with: .color(Color(red: 0.34, green: 0.12, blue: 0.05).opacity(0.5)))

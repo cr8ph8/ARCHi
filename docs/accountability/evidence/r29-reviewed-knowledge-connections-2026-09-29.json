@@ -1,0 +1,90 @@
+{
+  "basePublicationCommit": "c4c9bafa090808c4394837bf8b687cc5c731d305",
+  "capabilities": [
+    "reviewed directed supports/contradicts/dependsOn declarations",
+    "exact page revision and source dependency checks",
+    "append-only draft/review/withdraw link history",
+    "lexical-first bounded one-hop suggestions",
+    "Activity map current declared edges",
+    "v5 same-library backup and restore",
+    "protected connection drafts"
+  ],
+  "checks": {
+    "authoredAndCuratedRuns": "same 47 cases on each; not 94 independent checks",
+    "broadSuiteRun": false,
+    "focusedTestsFailed": 0,
+    "focusedTestsPassed": 47,
+    "modelCalls": 0,
+    "puzzleRuns": 0,
+    "suites": [
+      "KnowledgePageLinkTests",
+      "KnowledgeLinkRetrievalTests",
+      "KnowledgeLinkIntegrationTests",
+      "KnowledgeRetrievalTests",
+      "KnowledgePageTests",
+      "ReadingSourceProvenanceTests"
+    ]
+  },
+  "installation": {
+    "addedMonitoredFiles": 0,
+    "binaryNote": "Ad-hoc bundle signing changes whole-file bytes; Mach-O UUID and __TEXT,__text dump match compiled candidate.",
+    "bundleIdentifier": "com.quotient.archi.desktop.review",
+    "existingUnityRepresentationAndLiminalPackagesRetained": true,
+    "guardedUpdater": true,
+    "installedAndCompiledMachOUUID": "751C6DBC-538E-31FF-AE89-448FA74702BC",
+    "installedAndCompiledTextSectionDumpSHA256": "dd40fa90312b0c6ed1a9a3350729dae949f1e4520731e03266318058684965c2",
+    "installedExecutableSHA256": "2680098e7c8c1c8aac999d8a43f76c3790d2a94a500a16cb5bd3df63ac85663d",
+    "monitoredProfileJSONFiles": 22,
+    "previousBundleRetained": true,
+    "unchangedMonitoredFiles": 22
+  },
+  "installedObservation": {
+    "companion": "Liminal",
+    "fullLinkAuthoringWalkthroughPassed": false,
+    "limits": "Personal profile has no saved knowledge pages. Link lifecycle/one-hop/restore exercised in disposable focused fixtures; no synthetic personal records were created. Visual screenshot was a Stage Manager thumbnail; full-size visual acceptance remains open.",
+    "localSearch": "Existing Liminal source returned: 1 shown, 1 word match, 0 connected pages, 0 unavailable pages excluded.",
+    "memoriesOpened": true,
+    "personalKnowledgeModified": false,
+    "reopened": true,
+    "savedKnowledgePages": 0
+  },
+  "limits": [
+    "User review is attribution, not factual certification.",
+    "Not learned WFM, DCE/SRCL training, or validation of all Hampton theories.",
+    "Connection declarations explain navigation and do not automatically enter model context.",
+    "After first v5 link save, binary downgrade requires a compatible pre-link data backup.",
+    "iPhone linked-memory transfer, broader method learning exports, calibrated inference interventions and existing release blockers remain separate."
+  ],
+  "recordedDate": "2026-09-29",
+  "schema": "archi-reviewed-knowledge-connections-delivery/v1",
+  "sourceScope": {
+    "buildRepair": "Immutable EvolutionStore.maximumUsefulReceipts explicitly nonisolated for the Swift concurrency checker.",
+    "curatedSourceSHA256": {
+      "desktop/Sources/ARCHiDesktop/ARCHiDesktopApp.swift": "9df854cfae7d08937432bf7668db55359970a61d8c5d38a0bd26b34c31d403a4",
+      "desktop/Sources/ARCHiDesktop/CompanionEvolution.swift": "15a941ede6fd3f5d4cf1b48b7d3e5afb49eae872bf09a17c97fd72ffababb677",
+      "desktop/Sources/ARCHiDesktop/CompanionStore.swift": "37ea93792006df85ee041f6b7c4f4f18f00aaf43f6e934227a333637306dac89",
+      "desktop/Sources/ARCHiDesktop/DesktopProfileBackup.swift": "032c5bef0a16d4605d25acec92e820da7d7244dc6766aa25638a8b3cb01f3fff",
+      "desktop/Sources/ARCHiDesktop/DesktopRecoveryControls.swift": "366f010180af8ffbfc1fe8448dd0e179cfbce0a6daf18383c9d401e5ba3cc281",
+      "desktop/Sources/ARCHiDesktop/DesktopRecoveryIntegration.swift": "6cf4fa6273ee2e847389e9d589389a8002606ba864c5e8174276ef543d7116a6",
+      "desktop/Sources/ARCHiDesktop/DesktopRetentionSummary.swift": "a5ffffdbca14a7771aa5ecd635e2f4a95ed6f7d1b4b70d7d3d9eac713538577f",
+      "desktop/Sources/ARCHiDesktop/KnowledgePageGraph.swift": "be48ca79080177544f9f3ca96408fc235b114da59fee2f73abb67b422b74bde0",
+      "desktop/Sources/ARCHiDesktop/KnowledgePageIntegration.swift": "ab1a575de7f21e6d23b8493c163d37c37b5314554908c1cae62463357e0ab9eb",
+      "desktop/Sources/ARCHiDesktop/KnowledgePageLink.swift": "9ffc37097e5b22a2ce44f4902b9879e18482ca7006b3870369221c8aebb68a3a",
+      "desktop/Sources/ARCHiDesktop/KnowledgePageLinksView.swift": "57086a46c72f34a4976cbf07496866b957cd852dd8e3188a93486fcf32c3079f",
+      "desktop/Sources/ARCHiDesktop/KnowledgePagesViews.swift": "3f5a63eb6e0207937566e5161c67e0d98922aa49944aeda63c6b20cc7c76be6e",
+      "desktop/Sources/ARCHiDesktop/KnowledgeProcedureIntegration.swift": "b43b5b1f37795f67243e924f4bf1551cfa99aac16b26e3c03b286faf9e6df42c",
+      "desktop/Sources/ARCHiDesktop/KnowledgeRetrieval.swift": "b0bcb8b00dea547887cae3dc34d95c4af7aeaa8b8fd16c32f172d6325200cd36",
+      "desktop/Sources/ARCHiDesktop/KnowledgeRetrievalView.swift": "8d83bb95c8e11453d47d4cfd83c3b60280df4c95f2c925fb8c4ecc8f1faecf40",
+      "desktop/Sources/ARCHiDesktop/ReadingSourceLibrary.swift": "50f14ae5ce18e0d54809dd276eca4599b4cb5ecb1c74cad2aaa75a221aac63f5",
+      "desktop/Tests/ARCHiDesktopTests/KnowledgeLinkIntegrationTests.swift": "3bf7c8c88065eacccbc1b627a20c76ceb0145c9362d71d6d7c418b7b828c0976",
+      "desktop/Tests/ARCHiDesktopTests/KnowledgeLinkRetrievalTests.swift": "a2b84c135a26568770710d5a4ad2fae6ea9f5c2c5fadc0e20415a2cb7d8bbe1e",
+      "desktop/Tests/ARCHiDesktopTests/KnowledgePageLinkTests.swift": "9525c65dddf71e78c54f27e5c3c25467ca858c207f8c9687ffed38994f1dbe27",
+      "desktop/Tests/ARCHiDesktopTests/ReadingSourceProvenanceTests.swift": "5e06c4f19730047f2d39f287c8640fcbe39c4e5c21b17e3f142dce98354eb2d3"
+    },
+    "publicationTransforms": [
+      "CompanionStore and ARCHiDesktopApp changes applied narrowly to prior public baseline; unrelated local WikiOS/Liminal work preserved and excluded.",
+      "Research intake iPhone links rendered as local-workspace references; iPhone source/evidence not published by this increment."
+    ]
+  },
+  "status": "implemented-and-installed-focused-acceptance"
+}

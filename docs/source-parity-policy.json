@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "reviewedDifferences": [
+    {
+      "path": "desktop/Sources/ARCHiDesktop/CompanionVisualTreatment.swift",
+      "sourceSHA256": "97c91979c23ab411f29dbcc9fcd0d19567b83296756491aaf2fb9cb4d471bd5a",
+      "publicationSHA256": "16e8fc7b8592c3700248dcd99441ae49124975eaa2fc160260174d00bf162ce8",
+      "reason": "Runtime/test pins for existing metadata-sanitized publication assets; implementation otherwise identical."
+    },
+    {
+      "path": "desktop/Tests/ARCHiDesktopTests/HamptonSeedPresentationTests.swift",
+      "sourceSHA256": "f612060ab337f322ea2d26dab6c90aca150852543fef930a72229a9beb3af615",
+      "publicationSHA256": "b9b56f4bf1072b4ef4d45a1b9dd7fd160147568c043d2603577f9d6460a30103",
+      "reason": "Runtime/test pins for existing metadata-sanitized publication assets; implementation otherwise identical."
+    },
+    {
+      "path": "unity/ARCHi/Assets/ARCHi/Runtime/NativePresentationSnapshot.cs",
+      "sourceSHA256": "dc51e645b3bd04a94798d8aeade392d0de655270f6ad0a0c2b06d2f020a629dd",
+      "publicationSHA256": "c3fbbe0907400bf7edcd8553b588f5b77d8ddadcbbc67435bdf028de1b649cd2",
+      "reason": "Runtime/test pins for existing metadata-sanitized publication assets; implementation otherwise identical."
+    },
+    {
+      "path": "unity/ARCHi/Assets/ARCHi/Editor/ARCHiPortBuild.cs",
+      "sourceSHA256": "77b94ca5faab6ff8b11eeda68312ff0daf6f34ac73881407c33a1f537b117dcc",
+      "publicationSHA256": "022a6e66c56b0af721926e138f8f07ead8af6c73138dffe5494da45ee2a0f8a4",
+      "reason": "Runtime/test pins for existing metadata-sanitized publication assets; implementation otherwise identical."
+    }
+  ]
+}

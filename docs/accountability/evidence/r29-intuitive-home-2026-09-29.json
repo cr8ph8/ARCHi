@@ -1,0 +1,84 @@
+{
+  "changes": [
+    "Single companion welcome and task-focused Home",
+    "Larger genuine memory preview; hover/selection titles avoid overlap",
+    "Current-profile outcome review and available saved methods",
+    "Optional explanation of the existing Hampton method-feedback loop",
+    "Visit-only map View options for secondary presentation controls",
+    "Compact secondary Arena and Marketplace destinations"
+  ],
+  "checks": {
+    "broadSuiteRun": false,
+    "curatedBuild": "passed",
+    "finalLabelCorrectionBuild": "passed",
+    "focusedTestsFailed": 0,
+    "focusedTestsPassed": 14,
+    "modelCalls": 0,
+    "puzzleRuns": 0,
+    "suiteScope": "Existing memory and outcome projection invariants; not automatic native UI acceptance. Final title visibility changed after these checks and was separately rebuilt and observed.",
+    "suites": [
+      "MemoryMapSnapshotTests",
+      "CompanionGraphNavigationTests",
+      "DocumentReviewQueueTests"
+    ]
+  },
+  "installation": {
+    "addedMonitoredProfileFiles": 0,
+    "binarySource": "curated publication source; Mach-O UUID and text-section dump matched after signing",
+    "compiledMachOUUID": "679565F2-0851-3C58-9B88-E46492B4D6C2",
+    "compiledTextSHA256": "249f06adbecdccc81f9b7fc02a20e63b71876d6c46ba30f6438c2d251cdab359",
+    "guardedUpdater": true,
+    "installedExecutableSHA256": "3afa66f8069c92b6520808e62c0e220b8e293a25302e5ef4acf4d669bf4c8fda",
+    "installedMachOUUID": "679565F2-0851-3C58-9B88-E46492B4D6C2",
+    "installedTextSHA256": "249f06adbecdccc81f9b7fc02a20e63b71876d6c46ba30f6438c2d251cdab359",
+    "profileFilesUnchanged": 22,
+    "retainedUnityRepresentationAndV008Packages": true,
+    "rollbackBundleRetained": true
+  },
+  "installedObservation": {
+    "finalShowcaseCommandW": true,
+    "finalShowcaseEscape": true,
+    "finalShowcaseSelectionAndFocusTitle": true,
+    "hamptonExplanationDisclosure": true,
+    "homeAndCurrentCompanion": true,
+    "homeWorkCounts": {
+      "availableMethods": 0,
+      "awaitingReview": 0,
+      "reviewedHelpful": 0
+    },
+    "mapViewOptionsOpenClose": true,
+    "methodSheetToWorkTogether": true,
+    "newPersonalMemoryCreated": false,
+    "realSourceVersionAndBacklinks": true,
+    "reviewOutcomeSheetEmptyState": true,
+    "reviewSheetEscape": true,
+    "savedMethodSheetEmptyState": true,
+    "scopeCounts": "Memory: 3 records / 2 connections including companion anchor. All activity: 26 records / 29 connections, not a memory count."
+  },
+  "limits": [
+    "Desktop increment; iPhone parity not implemented here.",
+    "Installed walkthrough at current desktop size; minimum-window and full VoiceOver coverage remain open.",
+    "Current profile has no helpful document reviews or saved methods; nonempty workflow remains covered by existing model-layer checks, not this installed empty-state walkthrough.",
+    "Source-based responsive layout review is not measured performance or universal usability evidence.",
+    "No method efficacy, model training, patent validity or whole-stack validation claim.",
+    "Existing beta/release, native/Unity performance and owner visual acceptance blockers remain open."
+  ],
+  "publicationBase": "455eed598db681060dc53358b61c78ca8a9ce117",
+  "recordedDate": "2026-09-29",
+  "references": [
+    "https://developer.apple.com/design/human-interface-guidelines/layout",
+    "https://developer.apple.com/design/human-interface-guidelines/generative-ai",
+    "https://www.nngroup.com/articles/progressive-disclosure/",
+    "https://obsidian.md/help/plugins/graph"
+  ],
+  "schema": "archi-intuitive-home-delivery/v1",
+  "sourceScope": {
+    "desktop/Sources/ARCHiDesktop/CompanionGraphView.swift": "5a3e07c6ffc40d119b4f65ab8aec46956673c7f4b0e29a632b36b0eab34346a5",
+    "desktop/Sources/ARCHiDesktop/HomeDestinations.swift": "0e30287ef8cbc0bd793b2228ed34476fd56cc83ec3decad1850e1df98c6829da",
+    "desktop/Sources/ARCHiDesktop/HomeMemoryMapCard.swift": "314edb613b872fceabb1ba2fb65c49d7597f397b3864b00e81e4d5084f196bd5",
+    "desktop/Sources/ARCHiDesktop/HomeWorkSummaryCard.swift": "3efc49c05bce26de356d0633ec43c4622c381c090cf98cb6742996320fa6f251",
+    "desktop/Sources/ARCHiDesktop/HomeWorkspace.swift": "5466a75ce969f6a4be683a2ce4b33ff8113ff437cba8947a05a953026cabba7b",
+    "desktop/Sources/ARCHiDesktop/KnowledgeParticleView.swift": "9aa5c9a1814854c00d961f95ec29c5931e4934f0970c9c36fbac9c88892d589f"
+  },
+  "status": "implemented-installed-focused"
+}

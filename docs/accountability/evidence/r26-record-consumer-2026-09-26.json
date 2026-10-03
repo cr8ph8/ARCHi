@@ -1,0 +1,224 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "R26-RECORD-CONSUMER-2026-09-26",
+  "milestoneId": "R26-RECORD-CONSUMER",
+  "asOf": "2026-09-26",
+  "recordedAt": "2026-09-27T06:17:05.989404+00:00",
+  "evidenceClass": "installed-task-scoped-record-measurement",
+  "authority": "project-evidence-only",
+  "result": "PASS",
+  "resultScope": "Exact lookup, bounded scalar endpoint, one historical numerical compatibility check and native temporary-example interaction only. No broad transfer qualification.",
+  "sealed": true,
+  "draft": false,
+  "source": {
+    "branch": "codex/archi-encounter-composition-v1",
+    "baseCommit": "15544acf37152a400045e627a7def753e272c4ad",
+    "dirty": true,
+    "checkpointCommit": null,
+    "checkpointTree": null,
+    "cleanSource": false,
+    "sourceSurfaceDigest": "sha256:4f937711104fa5e2e764790dd2e5dde2f2a518311cba161f3dd2f144f34bd629",
+    "inventory": "output/record-reader-integration-2026-09-26/source-inventory.json",
+    "inventorySHA256": "sha256:b17ec0384f7429ddc5a75e36a95d10edea05ccbcaa2126250d25220cdccb94ba",
+    "scope": "Selected native record consumer, frozen synthetic reader resource, bounded worker protocol, packaging, dependency provenance, focused checks and documentation. Primary authored source remains dirty."
+  },
+  "checks": [
+    {
+      "id": "focused-native",
+      "command": "swift test --filter RecordLookupTests|RecordMeasurementClientTests",
+      "result": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "worker-and-packaging",
+      "command": "task_assay_checks.py, protocol_checks.py, task_assay_package_checks.py; zero model calls",
+      "result": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "numerical-parity",
+      "command": "One --measure-record prefill on original fit-004-0; no refit or holdout campaign",
+      "result": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "native-install",
+      "command": "build_and_run.sh --build-only; signatures/profile hashes; native CUA example measurement and source-field change",
+      "result": "PASS",
+      "exitCode": 0
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-1",
+      "path": "output/record-reader-integration-2026-09-26/source-inventory.json",
+      "digest": "sha256:b17ec0384f7429ddc5a75e36a95d10edea05ccbcaa2126250d25220cdccb94ba",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-2",
+      "path": "output/record-reader-integration-2026-09-26/RESULT.md",
+      "digest": "sha256:7a99b814bb90c2fbd3e0203d4bd2ec093f7326ee0639f2a4bb5670707fcd7184",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-3",
+      "path": "output/record-reader-integration-2026-09-26/installation.json",
+      "digest": "sha256:f9e3cceb40bc2ab3f79f2acf4cad27cf37840b9c19a7c2a5decd6dd33c807f4d",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-4",
+      "path": "output/record-reader-integration-2026-09-26/native-ui-observation.json",
+      "digest": "sha256:07561f0d60980865cd4cb01f8d59b5fdffdbe81b1f3c1cde7847a0610dc11411",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-5",
+      "path": "output/record-reader-integration-2026-09-26/profiles-before.json",
+      "digest": "sha256:66a3b702dca5ddeb2920fe43e2585c5bcd56e2f2e92c69bf0f94d1b924aef3d9",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-6",
+      "path": "output/record-reader-integration-2026-09-26/profiles-after-install.json",
+      "digest": "sha256:00f320ae6158cfd9a7fe58b2ff2b6a1b38432e42f6e2cd4f640ada5e21bf6243",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-7",
+      "path": "output/record-reader-integration-2026-09-26/native-checks-authorized.log",
+      "digest": "sha256:7d47faf83e1c11358dad2ca643d44bf032d09bb73780fcea72123b2f67d5f234",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-8",
+      "path": "output/record-reader-integration-2026-09-26/dependency-checks.log",
+      "digest": "sha256:a941d538744b63c53080ef11b6e5deebdceacb7c1e59e7750de74b87b82cc164",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-9",
+      "path": "output/record-reader-integration-2026-09-26/worker-contract.md",
+      "digest": "sha256:4a1d11101b9777e12591ad054aeaa31d7610fc8d184d18ecc2040a848646b633",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-10",
+      "path": "output/record-reader-integration-2026-09-26/worker-delivery.json",
+      "digest": "sha256:623beb495da35cfb378009d7c6a44672a48ba57d5f812b39c57adc14e1624762",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-11",
+      "path": "output/record-reader-integration-2026-09-26/task-assay-protocol-checks.json",
+      "digest": "sha256:40ff2e8753bb5c6bf9b8a08d9baaa1806c9cb32415039eb1f2ed05b0adafbd7f",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-12",
+      "path": "output/record-reader-integration-2026-09-26/task-assay-package-checks.json",
+      "digest": "sha256:742560c61e37775129d8269ec57383f05eb99c6ada93a7b6f8395099ed7c0ed1",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-13",
+      "path": "output/record-reader-integration-2026-09-26/equivalence-started.json",
+      "digest": "sha256:432adecd3c07a919ec54db5ccf2c5c734ed8191fe4c38a6077a3b939abbe5a76",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-14",
+      "path": "output/record-reader-integration-2026-09-26/equivalence-request.json",
+      "digest": "sha256:ec99bd4c4f033eb07123a98fdb598fbe2490c4e74ae332163266f75a9cbcc05b",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-15",
+      "path": "output/record-reader-integration-2026-09-26/equivalence-response.json",
+      "digest": "sha256:3fa7c3128346911db48c2e4d63aef70eb7c25261de97f15ac4d1b5c70b29966c",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-16",
+      "path": "output/record-reader-integration-2026-09-26/equivalence-receipt.json",
+      "digest": "sha256:ac76d41e1f2dc6ba5b2f3d5f49385406dc5c0cc8d290d86138314593171d6adf",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-17",
+      "path": "output/record-reader-integration-2026-09-26/install-final.log",
+      "digest": "sha256:3fbc946f7ab856ac573500ef3b4beb9740de5c524c1547e58a824f45e9529c77",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-RECORD-CONSUMER-ARTIFACT-18",
+      "path": "output/record-reader-integration-2026-09-26/runtime-build-02/runtime/build-manifest.json",
+      "digest": "sha256:9f2feaa5a56062efca329f89da8a6e6b6784ced7b4639da38a9d6533217c9f4d",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    }
+  ],
+  "limitations": [
+    "Native walkthrough used a visit-only example, not owner-authored personal records.",
+    "Synthetic qualification does not establish accuracy on everyday record distributions.",
+    "No ordinary chat measurement, steering, quotient update, skill certification or companion growth from this signal.",
+    "The two-record, fixed-field ASCII table format is deliberately narrow.",
+    "The complete Hampton stack and beta readiness remain partial.",
+    "Historical R18 receipt mismatch remains failed and unrecovered."
+  ],
+  "nextPromotionCondition": "Observe useful owner-authored records and qualify real distribution transfer before measurement-to-adaptation or broader chat use."
+}

@@ -110,7 +110,8 @@ const PRESETS: Readonly<Record<EncounterViewportClass, CompositionPreset>> = Obj
     activeScale: 0.77,
     reserveScale: 0.46,
     reserveOffsetX: 48,
-    reserveOffsetY: 64,
+    // Keep the complete reserve glow above the 390×500 command dock.
+    reserveOffsetY: 32,
     groundOffsetY: 48,
     groundRadiusX: 58,
     groundRadiusY: 14,

@@ -1,0 +1,57 @@
+{
+  "checks": {
+    "broadSuiteRun": false,
+    "companionAndMemoryRetained": true,
+    "installedHomeObservedAfterReopen": true,
+    "modelCalls": 0,
+    "puzzleRuns": 0,
+    "scope": "Existing installed executable unchanged; helper behavior exercised in temporary fixtures. No fresh app build was needed.",
+    "shellSyntaxCopiesPassed": 2,
+    "temporaryFixtureTestsPassed": 13
+  },
+  "cleanup": {
+    "activeApplicationUnchanged": true,
+    "activeExecutableSHA256": "d4aa28beb1651fd6c0048c92e1e2682e9fec572768ca22d9b002198ee5cd373b",
+    "deletedBundles": 0,
+    "method": "same-filesystem directory rename with inode, Info.plist hash and executable hash verification",
+    "originalApplicationEntries": 108,
+    "privateMappingIndex": "applications-relocation-2026-09-29.json",
+    "profileJSONFilesUnchanged": 22,
+    "recoveryLocation": "~/Library/Application Support/ARCHiRecovery/Rollbacks",
+    "remainingApplicationEntries": [
+      "ARCHi.app"
+    ],
+    "rollbackBundlesRelocated": 107
+  },
+  "completedDate": "2026-09-30",
+  "documentation": [
+    "Current README entry points replace stale status links",
+    "One-app ownership, source roles and recovery guide",
+    "Main desktop method/Q2E documentation links restored from curated source",
+    "Historical research and delivery records preserved"
+  ],
+  "installer": {
+    "automaticPruning": false,
+    "futureRollbackOutsideApplications": true,
+    "liveInstallerRunForThisChange": false,
+    "normalQuitAndFailedPromotionRestorePreserved": true,
+    "privateUniqueSameFilesystemDestination": true,
+    "rejectsSymlinksWrongIdentityInvalidPermissionsAndDeviceMismatch": true,
+    "stageOnlyBehaviorUnchanged": true
+  },
+  "limits": [
+    "No blanket promotion of pending iPhone or Liminal source",
+    "No whole-stack completion or release-readiness claim",
+    "Moved local backups still occupy disk space; this is not off-device backup",
+    "Binary downgrade may need a compatible data backup"
+  ],
+  "publicationBase": "456fc0e21b77c42b913619850b544e1921f0d52a",
+  "recordedDate": "2026-09-29",
+  "schema": "archi-one-app-consolidation/v1",
+  "sourceScope": {
+    "script/app_rollback_destination.py": "cce0c0440ddb76f14cb221f579fc789c92cc0c192afae2fab79cd64dc15c90bf",
+    "script/build_and_run.sh": "7298245edaa0b275122ef7972ac698b4fe7c581f8ea195245419a832d5a2519d",
+    "script/test_app_rollback_destination.py": "a8a5b7b607096d94f6f51c64cc9ce163dbff733463fcb77362cc5d14404d56f2"
+  },
+  "status": "cleanup-complete-installer-source-updated"
+}

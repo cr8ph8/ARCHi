@@ -49,10 +49,12 @@ final class EvolutionIntegrationTests: XCTestCase {
         try await answer(store)
         let id = try XCTUnwrap(store.compareResults[.qwen]?.receipt?.requestID)
         XCTAssertNotNil(store.compareResults[.qwen]?.receipt?.sourceDigest)
+        store.placed(at: CGPoint(x: 123, y: 234))
+        XCTAssertNotNil(store.evolutionFeedbackReceipt(provider: .qwen, requestID: id), "Movement preserves content-only evidence")
         XCTAssertTrue(store.markReplyUsefulForEvolution(provider: .qwen, requestID: id))
         XCTAssertFalse(store.markReplyUsefulForEvolution(provider: .qwen, requestID: id))
         XCTAssertEqual(store.evolution.usefulReceipts.count, 1)
-        store.placed(at: CGPoint(x: 123, y: 234))
+        store.share(text: "A replaced source.", name: "new.txt")
         XCTAssertFalse(store.markReplyUsefulForEvolution(provider: .qwen, requestID: id))
         XCTAssertEqual(store.evolution.usefulReceipts.count, 1, "Prior admitted feedback survives later source changes")
         await store.shutdownAssistant()
@@ -112,7 +114,8 @@ final class EvolutionIntegrationTests: XCTestCase {
 
     @MainActor private func fixture() -> CompanionStore {
         CompanionStore(preferenceURL: FileManager.default.temporaryDirectory.appendingPathComponent("evolution-integration-\(UUID().uuidString).json"),
-                       assistant: EvolutionFixtureAssistant())
+                       assistant: HamptonReasonsAssistant(reasoner: EvolutionFixtureAssistant(),
+                                                          contextSelector: EvolutionFixtureAssistant()))
     }
     @MainActor private func answer(_ store: CompanionStore) async throws {
         store.connectAssistant(provider: .qwen)
@@ -120,6 +123,7 @@ final class EvolutionIntegrationTests: XCTestCase {
         store.prompt = "Explain the shared source."
         store.submit()
         try await wait { !store.isWorking }
+        XCTAssertEqual(store.compareResults[.qwen]?.state, .complete, "Current request status: \(store.status)")
     }
     @MainActor private func wait(_ condition: () -> Bool) async throws {
         for _ in 0..<200 { if condition() { return }; try await Task.sleep(for: .milliseconds(5)) }
@@ -128,10 +132,17 @@ final class EvolutionIntegrationTests: XCTestCase {
 }
 
 @MainActor
-private final class EvolutionFixtureAssistant: AssistantClient {
+private final class EvolutionFixtureAssistant: LocalRoleClient {
     func connect() async throws {}
-    func reply(to request: AssistantRequest, onEvent: @escaping @MainActor (AssistantEvent) -> Void) async throws {
-        onEvent(.text("A synthetic useful response."))
+    func generate(_ request: LocalRoleRequest) async throws -> LocalRoleResult {
+        let payload: [String: JSONValue] = ["schema": .string("archi-reason-proposal/v1"),
+            "requestID": .string(request.id), "kind": .string("ANSWER"),
+            "answer": .string("A synthetic useful response."), "uncertainty": .string(""),
+            "sourceIDs": .array([]), "memoryIDs": .array([])]
+        return LocalRoleResult(requestID: request.id, role: request.role,
+            text: String(decoding: try JSONEncoder().encode(payload), as: UTF8.self),
+            model: QwenModelMetadata(name: "evolution-fixture", family: "qwen", parameterSize: "fixture",
+                quantization: "fixture", digest: String(repeating: "e", count: 64)), elapsedMilliseconds: 0)
     }
     func disconnect() {}
     func shutdown() async {}

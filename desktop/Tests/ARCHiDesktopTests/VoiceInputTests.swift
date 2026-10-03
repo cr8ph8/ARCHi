@@ -1,9 +1,23 @@
 import AppKit
 import Speech
+import Combine
 import XCTest
 @testable import ARCHiDesktop
 
 final class VoiceInputTests: XCTestCase {
+    @MainActor
+    func testRetiringIdleVoiceDuringNavigationDoesNotPublishAViewChange() {
+        let voice = VoiceInputController(service: VoiceTestService(), scheduler: VoiceTestScheduler())
+        var publications = 0
+        let observation = voice.objectWillChange.sink { publications += 1 }
+        voice.cancel()
+        voice.cancel(ifOwnedBy: .assistant)
+        XCTAssertEqual(publications, 0)
+        XCTAssertEqual(voice.phase, .idle)
+        XCTAssertTrue(voice.transcript.isEmpty)
+        withExtendedLifetime(observation) {}
+    }
+
     @MainActor
     func testPartialTextStaysCandidateAndFinishStopsCaptureBeforeFinalReview() async throws {
         let service = VoiceTestService(), clock = VoiceTestScheduler()

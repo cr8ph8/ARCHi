@@ -211,7 +211,7 @@ final class DesktopRetentionStateTests: XCTestCase {
 
     @MainActor
     func testProfileLabelsUseOnlyTheConfiguredFolder() throws {
-        for (folder, label) in [("ARCHiDesktopReview", "Development Review"), ("ARCHiDesktop", "ARCHi"), ("another-profile", "Custom local profile")] {
+        for (folder, label) in [("ARCHiDesktopReview", "ARCHi"), ("ARCHiDesktop", "Legacy Desktop Preview"), ("another-profile", "Custom local profile")] {
             let fixture = try makeFixture(profile: folder)
             defer { fixture.clean() }
             XCTAssertEqual(fixture.store.retentionProfileLabel, label)

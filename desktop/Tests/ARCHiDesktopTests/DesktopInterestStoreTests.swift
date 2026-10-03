@@ -4,6 +4,34 @@ import XCTest
 
 final class DesktopInterestStoreTests: XCTestCase {
     @MainActor
+    func testNativeFallbackRequiresAllowanceForExactWindowBytes() async throws {
+        for permission in ["none", "exact", "changed"] {
+            let f = InterestStoreFixture(); defer { f.cleanUp() }
+            try await f.adopt()
+            f.store.setAssistantRoute(.native)
+            if permission != "none" { f.store.allowDesktopInterestWithExternalRoute() }
+            if permission == "changed" { f.store.sharedText += " Changed after permission." }
+            f.store.prompt = "Explain the window copy."
+            XCTAssertTrue(f.store.canBeginReply, "Local work needs no external allowance")
+            f.store.submit()
+            try await interestStoreSettle { f.local.requests.count == 1 }
+            f.local.fail(0, error: QwenFailure.unavailable)
+            if permission == "exact" {
+                try await interestStoreSettle { f.cloud.requests.count == 1 }
+                XCTAssertEqual(f.cloud.requests[0].sourceText, f.reader.text)
+                f.cloud.complete(0, text: "Permitted fallback")
+                try await interestStoreSettle { !f.store.isWorking }
+            } else {
+                try await interestStoreSettle { !f.store.isWorking }
+                await interestStoreDrain()
+                XCTAssertEqual(f.cloud.connects, 0)
+                XCTAssertTrue(f.cloud.requests.isEmpty)
+                XCTAssertTrue(f.store.status.contains("local-only"))
+            }
+        }
+    }
+
+    @MainActor
     func testReviewedCaptureAdoptsExactWorkingCopyAndMetadataWithoutInferenceOrPersistence() async throws {
         let f = InterestStoreFixture(); defer { f.cleanUp() }
         f.store.share(text: "Existing unchanged copy.", name: "existing.txt")
@@ -297,6 +325,7 @@ private final class InterestStoreAssistant: AssistantClient {
     private var pending: [Int: CheckedContinuation<Void, any Error>] = [:]
     func connect() async throws { connects += 1 }
     func disconnect() { }
+    func fail(_ index: Int, error: any Error) { pending.removeValue(forKey: index)?.resume(throwing: error) }
     func reply(to request: AssistantRequest, onEvent: @escaping @MainActor (AssistantEvent) -> Void) async throws {
         let index = requests.count
         requests.append(request); events.append(onEvent)

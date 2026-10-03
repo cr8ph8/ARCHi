@@ -16,6 +16,8 @@ final class DesktopInterestSession: ObservableObject {
     private var task: Task<Void, Never>?
     private var deadline: Task<Void, Never>?
 
+    var cue: DesktopInterestCue { .init(phase: phase, target: target) }
+
     init(reader: (any DesktopInterestReading)? = nil) {
         self.reader = reader ?? NativeDesktopInterestReader()
     }

@@ -1,0 +1,175 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "R27-ARENA-ARCHI-TRIALS-2026-09-27",
+  "milestoneId": "R27-ARENA-ARCHI-TRIALS",
+  "asOf": "2026-09-27",
+  "recordedAt": "2026-09-27T16:23:27.418651+00:00",
+  "evidenceClass": "installed-bounded-native-integration",
+  "authority": "project-evidence-only",
+  "result": "PASS",
+  "resultScope": "Shared trial host, native runtime repair, two-dispatch walkthrough and final branding; no performance or release qualification.",
+  "sealed": true,
+  "draft": false,
+  "source": {
+    "branch": "codex/archi-encounter-composition-v1",
+    "baseCommit": "15544acf37152a400045e627a7def753e272c4ad",
+    "dirty": true,
+    "checkpointCommit": null,
+    "checkpointTree": null,
+    "cleanSource": false,
+    "sourceSurfaceDigest": "sha256:ca0bb0a64d948c1f8faa3388fcd3c9281cb1a19bfb200f1f58c9ff65ccc8d996",
+    "inventory": "output/arena-arc-2026-09-27/source-inventory.json",
+    "inventorySHA256": "sha256:b58f1cb28e5c41daa48851aba1cce05fb5a0cea13d78d4347b7aafcc79af584b",
+    "scope": "Shared Arena ARC host, ARCHi Trials branding, native runtime repair and bounded evidence; primary authored work remains dirty."
+  },
+  "checks": [
+    {
+      "id": "arc-owners-runtime",
+      "command": "swift test --filter ArenaARCTests|ARC3IntegrationTests|ARC3SessionTests",
+      "result": "PASS",
+      "exitCode": 0,
+      "detail": "13 focused checks; initial directory-URL fixture failure retained and corrected."
+    },
+    {
+      "id": "native-two-dispatch-trial",
+      "command": "Native Arena discover, Start with budget 2, Explore; inspect native/bridge records",
+      "result": "PASS",
+      "exitCode": 0,
+      "detail": "RESET plus Action 1; 0/7 levels; automatic budget stop; no model calls or network attempts."
+    },
+    {
+      "id": "branding-install-preservation",
+      "command": "guarded build/install; strict signature; hash comparison; native branded tabs and source attribution",
+      "result": "PASS",
+      "exitCode": 0,
+      "detail": "Final copy-only branding observed after the bounded trial. Seed/preferences and 12 helpers preserved; Usage and episode records retained."
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "R27-ARENA-ARCHI-TRIALS-ARTIFACT-1",
+      "path": "output/arena-arc-2026-09-27/source-inventory.json",
+      "digest": "sha256:b58f1cb28e5c41daa48851aba1cce05fb5a0cea13d78d4347b7aafcc79af584b",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-ARCHI-TRIALS-ARTIFACT-2",
+      "path": "output/arena-arc-2026-09-27/RESULT.md",
+      "digest": "sha256:446a3e95b7d2fa060b263616a42217e2c51403a422848d57b9a4637d963b5740",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-ARCHI-TRIALS-ARTIFACT-3",
+      "path": "output/arena-arc-2026-09-27/installation-branded.json",
+      "digest": "sha256:e5245e71a273424c7dd23f756c90a92b5aa08e32407c7ad5ce85353bbe232ff2",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-ARCHI-TRIALS-ARTIFACT-4",
+      "path": "output/arena-arc-2026-09-27/native-walkthrough.json",
+      "digest": "sha256:9502e577725239f5774dbff956f9063bb75a2c37990bd01586a0b37251893516",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-ARCHI-TRIALS-ARTIFACT-5",
+      "path": "output/arena-arc-2026-09-27/native-episode.json",
+      "digest": "sha256:6657ae03791d954cc03accbfb3a75ac133946f880a8f7f28cb6e96c2cc00ce40",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-ARCHI-TRIALS-ARTIFACT-6",
+      "path": "output/arena-arc-2026-09-27/bridge-receipt.json",
+      "digest": "sha256:f1666d28c7a46d134ebcd3002c691aa4000fd1211a70b1767ea6d4c5238c5340",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-ARCHI-TRIALS-ARTIFACT-7",
+      "path": "output/arena-arc-2026-09-27/runtime-installation.json",
+      "digest": "sha256:47cb06ed42ac3b37b4356eb8ac6a5c6b6407015ee1f3834d4f19ea3a58e581da",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-ARCHI-TRIALS-ARTIFACT-8",
+      "path": "output/arena-arc-2026-09-27/profiles-before.json",
+      "digest": "sha256:00f320ae6158cfd9a7fe58b2ff2b6a1b38432e42f6e2cd4f640ada5e21bf6243",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-ARCHI-TRIALS-ARTIFACT-9",
+      "path": "output/arena-arc-2026-09-27/profiles-final.json",
+      "digest": "sha256:e446cb60a1ee882efd3e20db9c5b78ab18e69676d4fedde5ba65d244b983285d",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-ARCHI-TRIALS-ARTIFACT-10",
+      "path": "output/arena-arc-2026-09-27/runtime-checks-final.log",
+      "digest": "sha256:0b6de8421247ca6bf80a975691088276489507f08eada0b1c8c9b51f72ecc651",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-ARCHI-TRIALS-ARTIFACT-11",
+      "path": "output/arena-arc-2026-09-27/runtime-checks.log",
+      "digest": "sha256:8d43ee8d11cc1790fa6e7f2fd54250851657d5cd9c31cfbb25859c276eb7f1a7",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-ARCHI-TRIALS-ARTIFACT-12",
+      "path": "output/arena-arc-2026-09-27/runtime-setup.log",
+      "digest": "sha256:00793a2c628829965669ddbed1a64b1ed02aa24c7e8766cc015ce0b0d431217b",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-ARCHI-TRIALS-ARTIFACT-13",
+      "path": "output/arena-arc-2026-09-27/install-branded.log",
+      "digest": "sha256:e8416a5d72d52cbd0e4768311e9a681d6622931b8c0c81497cbede596f8d95db",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    }
+  ],
+  "limitations": [
+    "ARCHi Trials brands the product experience. Original ARC/ARC3 attribution, game names, versions and receipt schemas remain; no claim of authoring the original environments.",
+    "The live LS20 walkthrough used two dispatches, completed zero levels and demonstrated launch/action/budget accounting only. No benchmark score or Hampton-wide efficacy is established.",
+    "Trials are native/offline local activities. They do not run inside Unity combat or provide an online contest, multiplayer ARC hosting, rewards or canonical growth.",
+    "The managed runtime depends on the chosen base Python installation. Custom runtime-folder selection remains visit-local; new worlds need source and distribution review.",
+    "Historical R18 artifact digest mismatch remains failed and unchanged. Public source is draft, unmerged and unreleased."
+  ],
+  "nextPromotionCondition": "Add explicitly authored, versioned ARCHi worlds and meaningful transfer/outcome review while retaining original environment provenance and bounded execution."
+}

@@ -1,0 +1,69 @@
+{
+  "schema": "archi-shared-memory-particles/v1",
+  "date": "2026-10-03",
+  "status": "INSTALLED_NATIVE_SHARED_PARTICLES_CROSS_RUNTIME_PARTIAL",
+  "canonicalOwner": "Existing native profile, memory, knowledge, method and outcome records",
+  "newPersistedStore": false,
+  "nativeContract": {
+    "selectableIdentity": "Exact graph record ID",
+    "contentGrouping": "Optional support metadata; does not replace graph identities",
+    "renderers": [
+      "Native compact Seed",
+      "Native expanded memory map",
+      "Common native PNG exports"
+    ],
+    "preserves": [
+      "Authored Seed art",
+      "Profiles and identity",
+      "All bounded graph records",
+      "Exact versions and sources",
+      "Typed relationships",
+      "Equipment and personal colors",
+      "Reviewed experience history"
+    ]
+  },
+  "observedCounts": {
+    "memoryMapRecords": 25,
+    "memoryMapRelationships": 60,
+    "retainedContentNodes": 17,
+    "reviewedHelpfulApplications": 0
+  },
+  "checks": {
+    "focusedCases": 38,
+    "failures": 0,
+    "authoredAndCuratedRunsOverlap": true,
+    "models": 0,
+    "puzzles": 0
+  },
+  "walkthrough": {
+    "mapSeedMapExactSelection": true,
+    "seedClickOpensExactVersionAndBacklinks": true,
+    "mapSelectionHighlightsCompanionSeed": true,
+    "fullSizeVisualAcceptance": false,
+    "sustainedFPSMeasured": false,
+    "finalBuildReadback": true
+  },
+  "remaining": [
+    "Dense Liminal growth motif and authored inspection anchor unification",
+    "Unity Proto/KIN ID-aware particle consumer",
+    "Cross-runtime pose/selection/profile/color acceptance",
+    "Physical iPhone delivery",
+    "Sustained active 30 fps and full-size visual acceptance",
+    "Independent direct-world experience attribution"
+  ],
+  "publication": {
+    "reviewedNativeCodePaths": 18,
+    "unrelatedQiMonGameDifferences": 3,
+    "privateHistoryOrProfilesPublished": false
+  },
+  "delivery": {
+    "compiledUUID": "5971B077-A226-36A1-B075-9DA7F2FF39B9",
+    "installedUUID": "5971B077-A226-36A1-B075-9DA7F2FF39B9",
+    "UUIDsMatch": true,
+    "strictLocalSigningPassed": true,
+    "monitoredProfileFiles": 23,
+    "changedProfileFiles": 0,
+    "rollbackPreserved": true,
+    "notarized": false
+  }
+}

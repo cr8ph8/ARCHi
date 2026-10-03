@@ -22,7 +22,7 @@ public static class ARCHiPortBuild
 
     private static string ProjectRoot => Directory.GetParent(Application.dataPath).FullName;
     private static string RepositoryRoot => Path.GetFullPath(Path.Combine(ProjectRoot, "../.."));
-    private static string EvidenceRoot => Path.Combine(RepositoryRoot, "output/unity-port-2026-09-14");
+    private static string EvidenceRoot => Path.Combine(RepositoryRoot, "output/unity-port-2026-09-16");
 
     [Serializable]
     private sealed class Receipt
@@ -36,7 +36,9 @@ public static class ARCHiPortBuild
         public double buildSeconds;
         public bool runtimeInteractionVerified;
         public int verifiedBundledArtCount;
+        public int verifiedNativeRigCount;
         public int relayAssertions;
+        public int nativePresentationAssertions;
         public string panelSettingsAsset, textSettingsAsset, themeAsset;
         public bool bakedICUData;
     }
@@ -127,6 +129,7 @@ public static class ARCHiPortBuild
         {
             var receipt = InspectScene(scene);
             receipt.relayAssertions = ARCHi.Port.Editor.RelayPracticeChecks.Run();
+            receipt.nativePresentationAssertions = ARCHi.Port.Editor.NativePresentationChecks.Run();
             receipt.status = "EDITOR_SCENE_VALIDATED_RUNTIME_NOT_EXERCISED";
             WriteReceipt(receipt, "scene-validation");
             Debug.Log("ARCHI_PORT_SCENE_VALIDATED " + StartupScene);
@@ -136,6 +139,14 @@ public static class ARCHiPortBuild
             if (closeAfterValidation) EditorSceneManager.CloseScene(scene, true);
         }
     }
+
+    [MenuItem("ARCHi/Port/Build Native Companion Mac")]
+    public static void BuildNativeCompanion()
+    {
+        nativeBuildOverride = Path.Combine(EvidenceRoot, "ARCHi Unity Companion-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + ".app");
+        try { BuildMac(); } finally { nativeBuildOverride = null; }
+    }
+    private static string nativeBuildOverride;
 
     [MenuItem("ARCHi/Port/Build Mac ARM64")]
     public static void BuildMac()
@@ -147,7 +158,7 @@ public static class ARCHiPortBuild
         if (!BuildPipeline.IsBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneOSX))
             throw new InvalidOperationException("The matching Mac standalone build module is unavailable.");
 
-        string artifact = Path.Combine(EvidenceRoot, ProductName + ".app");
+        string artifact = nativeBuildOverride ?? Path.Combine(EvidenceRoot, ProductName + ".app");
         // Keep prior build evidence. A caller may select another path beneath
         // this task's output directory with -archiBuildOutput <absolute-path>.
         var arguments = Environment.GetCommandLineArgs();
@@ -166,6 +177,11 @@ public static class ARCHiPortBuild
 
         Prepare();
         Validate();
+        ArenaValidation.Validate();
+        ArenaMultiplayerValidation.Validate();
+        PersonalSeedValidation.Validate();
+        bool hasLiminalFinish=VerifyLiminalFinish();
+        bool hasLiminalLight=VerifyLiminalLight();
         Directory.CreateDirectory(Path.GetDirectoryName(artifact));
         var options = new BuildPlayerOptions
         {
@@ -177,7 +193,7 @@ public static class ARCHiPortBuild
         };
         var report = BuildPipeline.BuildPlayer(options);
         var receipt = NewReceipt();
-        receipt.status = report.summary.result == BuildResult.Succeeded
+        receipt.status = report.summary.result == BuildResult.Succeeded && report.summary.totalErrors == 0
             ? "MAC_PLAYER_BUILT_RUNTIME_NOT_EXERCISED" : "MAC_PLAYER_BUILD_FAILED";
         receipt.artifact = artifact;
         receipt.result = report.summary.result.ToString();
@@ -186,11 +202,47 @@ public static class ARCHiPortBuild
         receipt.artifactBytes = report.summary.totalSize;
         receipt.buildSeconds = report.summary.totalTime.TotalSeconds;
         WriteReceipt(receipt, "build");
-        if (report.summary.result != BuildResult.Succeeded)
+        if (report.summary.result != BuildResult.Succeeded || report.summary.totalErrors != 0)
             throw new BuildFailedException("ARCHi Mac build failed: " + report.summary.result);
         if (!File.Exists(Path.Combine(artifact, "Contents/Info.plist")))
             throw new BuildFailedException("Build reported success but the Mac bundle is incomplete.");
+        var plistPath = Path.Combine(artifact, "Contents/Info.plist");
+        var plist = File.ReadAllText(plistPath);
+        int closing = plist.LastIndexOf("</dict>", StringComparison.Ordinal);
+        if (closing < 0) throw new BuildFailedException("Native presentation marker needs a valid plist.");
+        plist = plist.Insert(closing, "\t<key>ARCHiNativePresentationProtocol</key>\n\t<integer>1</integer>\n"
+            + "\t<key>ARCHiNativeStaffRecipeVersion</key>\n\t<integer>1</integer>\n"
+            + "\t<key>ARCHiNativeArenaProtocol</key>\n\t<integer>1</integer>\n"
+            + "\t<key>ARCHiSeedAppearanceVersion</key>\n\t<integer>1</integer>\n"
+            + "\t<key>ARCHiPersonalSeedVersion</key>\n\t<integer>1</integer>\n"
+            + "\t<key>ARCHiLiminalPointAssetVersion</key>\n\t<integer>7</integer>\n"
+            + (hasLiminalFinish?"\t<key>ARCHiLiminalPointFinishSHA256</key>\n\t<string>"+ARCHi.Port.LiminalPointFinish.ExpectedManifestSHA256+"</string>\n":"")
+            + (hasLiminalLight?"\t<key>ARCHiLiminalPointLightStyle</key>\n\t<string>"+ARCHi.Port.LiminalParticleRenderer.LightStyleRevision+"</string>\n\t<key>ARCHiLiminalPointLightSHA256</key>\n\t<string>"+ARCHi.Port.LiminalPointLight.ExpectedManifestSHA256+"</string>\n":""));
+        File.WriteAllText(plistPath, plist);
         Debug.Log("ARCHI_PORT_MAC_BUILD_SUCCEEDED " + artifact);
+    }
+
+    private static bool VerifyLiminalFinish()
+    {
+        string root=Path.Combine(Application.streamingAssetsPath,"LiminalV008");
+        string finish=Path.Combine(root,"finish-v11");
+        if(!Directory.Exists(finish))return false;
+        string sourceDigest=ARCHi.Port.LiminalPointAsset.Hash(File.ReadAllBytes(Path.Combine(root,"manifest.json")));
+        var asset=ARCHi.Port.LiminalPointAsset.Load(root,sourceDigest,System.Threading.CancellationToken.None);
+        ARCHi.Port.LiminalPointFinish.Load(finish,ARCHi.Port.LiminalPointFinish.ExpectedManifestSHA256,asset,System.Threading.CancellationToken.None);
+        return true;
+    }
+
+    private static bool VerifyLiminalLight()
+    {
+        string root=Path.Combine(Application.streamingAssetsPath,"LiminalV008"),light=Path.Combine(root,"light-v12");
+        if(!Directory.Exists(light))return false;
+        var token=System.Threading.CancellationToken.None;
+        string sourceDigest=ARCHi.Port.LiminalPointAsset.Hash(File.ReadAllBytes(Path.Combine(root,"manifest.json")));
+        var asset=ARCHi.Port.LiminalPointAsset.Load(root,sourceDigest,token);
+        var finish=ARCHi.Port.LiminalPointFinish.Load(Path.Combine(root,"finish-v11"),ARCHi.Port.LiminalPointFinish.ExpectedManifestSHA256,asset,token);
+        ARCHi.Port.LiminalPointLight.Load(light,asset,finish,token);
+        return true;
     }
 
     private static Receipt InspectScene(Scene scene)
@@ -311,8 +363,8 @@ public static class ARCHiPortBuild
         var provenance = JsonUtility.FromJson<ArtProvenance>(File.ReadAllText(resourcePath + "provenance.json"));
         string[] names = { "kin-core-seed-blender-v2.png", "kin-first-light-blender-v1.png" };
         string[] hashes = {
-            "d88ba7b233a09142b8353b6cdc646100d0da0fcbe2789b8b2071e828ba481707",
-            "ba5d05407117740796bf3bc6b949a4ffca3178a6b6f8598c5bbcd24b4f82eba0"
+            "02066c89c597edf6b0f9d3c9f5706323cfefa8163c94b8407ec48cd7e57bf5e6",
+            "96dcfec5654287a22c5d53357dcc47dc7a6a92cd4458da381c45fe074f32de2d"
         };
         if (provenance == null || provenance.schema != "archi-unity-bundled-art/v1"
             || provenance.assets == null || provenance.assets.Length != names.Length)
@@ -331,6 +383,22 @@ public static class ARCHiPortBuild
             if (AssetDatabase.LoadAssetAtPath<Texture2D>(resourcePath + names[index]) == null)
                 throw new InvalidOperationException("KIN artwork has not imported as a usable texture: " + names[index]);
         }
+        var protoImage = "Assets/Resources/Proto/proto-body.png";
+        using (var sha = SHA256.Create())
+        {
+            var bytes = File.ReadAllBytes(protoImage);
+            var digest = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
+            if (digest != ARCHi.Port.NativePresentationSnapshot.ProtoBodyDigest)
+                throw new InvalidOperationException("Proto body image differs from the native contract.");
+        }
+        if (AssetDatabase.LoadAssetAtPath<Texture2D>(protoImage) == null)
+            throw new InvalidOperationException("Proto body image is not imported.");
+        foreach (var modelPath in new[] { "Assets/Resources/KIN/kin-arena-motion-v1.fbx", "Assets/Resources/Proto/proto-character.fbx" })
+        {
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
+            if (model == null || !model.GetComponentsInChildren<SkinnedMeshRenderer>().Any(shape => shape.sharedMesh.blendShapeCount > 0))
+                throw new InvalidOperationException("The authored body needs its Seed-to-body shape: " + modelPath);
+        }
     }
 
     private static Receipt NewReceipt() => new Receipt
@@ -340,7 +408,7 @@ public static class ARCHiPortBuild
         target = EditorUserBuildSettings.activeBuildTarget.ToString(),
         architecture = UnityEditor.OSXStandalone.UserBuildSettings.architecture.ToString(),
         backend = PlayerSettings.GetScriptingBackend(NamedBuildTarget.Standalone).ToString(),
-        runtimeInteractionVerified = false, verifiedBundledArtCount = 2
+        runtimeInteractionVerified = false, verifiedBundledArtCount = 3, verifiedNativeRigCount = 2
     };
 
     private static void WriteReceipt(Receipt receipt, string category)

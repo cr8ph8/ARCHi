@@ -1,0 +1,45 @@
+{
+  "schema": "archi-native-record-lookup-delivery/v1",
+  "recordedAt": "2026-09-27T06:17:05.989404+00:00",
+  "status": "installed-bounded-native-walkthrough-passed",
+  "readerSHA256": "b699deda8bc7bdd99b5e362c88d16accdd66c163222e89647086b44a680a7ac0",
+  "workerSHA256": "6fd5b2c0ce02ddb38ec31f7a9b6684a372850273445520b216b2a12bd8e97992",
+  "installedExecutableSHA256": "fe42e2232a61f5af5102362173039c4514255c77697c877dd1fce3987e5ed9c9",
+  "deterministicLookup": "Exact selected table cell; missing field returns NEED_SOURCE",
+  "nativeExample": {
+    "standardizedScoreDisplayed": "0.4548",
+    "rawScoreDisplayed": "13.288999",
+    "inputTokens": 118,
+    "generatedTokens": 0,
+    "readerSHA256": "b699deda8bc7bdd99b5e362c88d16accdd66c163222e89647086b44a680a7ac0",
+    "requestID": "A8147A08-0465-47C4-9595-8FAC160815FA"
+  },
+  "historicalPrefill": {
+    "inputTokens": 142,
+    "generatedTokens": 0,
+    "absoluteProjectionDifference": 0.0
+  },
+  "totalObservedInputTokens": 260,
+  "generatedTokens": 0,
+  "paidAPICalls": 0,
+  "arcPuzzleCampaign": false,
+  "checks": {
+    "native": 12,
+    "recordWorkerProtocol": 51,
+    "priorShadowProtocol": 15,
+    "runtimePackaging": 15,
+    "researchDependencyContracts": 4
+  },
+  "profiles": {
+    "files": 23,
+    "unchanged": true
+  },
+  "limits": [
+    "Native walkthrough used a visit-only example, not owner-authored personal records.",
+    "Synthetic qualification does not establish accuracy on everyday record distributions.",
+    "No ordinary chat measurement, steering, quotient update, skill certification or companion growth from this signal.",
+    "The two-record, fixed-field ASCII table format is deliberately narrow.",
+    "The complete Hampton stack and beta readiness remain partial.",
+    "Historical R18 receipt mismatch remains failed and unrecovered."
+  ]
+}

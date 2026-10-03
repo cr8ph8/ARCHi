@@ -1,0 +1,83 @@
+{
+  "changes": [
+    "Unified Ask ARCHi labels across Home, sidebar, menus, bubble and full workspace; companion identity retained",
+    "Direct Memory map and Work together entry points from the idle workspace; existing draft and request owner retained",
+    "Compact optional document row and progressively disclosed bubble reply options",
+    "Knowledge-page sharing notice takes precedence over full-document sharing notice",
+    "Searchable private profile with status filters, individual source disclosure and attribution-preserving edits",
+    "Current routing, qualified reader and method documentation separated from historical limitations"
+  ],
+  "checks": {
+    "askNavigationComposerAndBubblePassed": 10,
+    "broadSuiteRun": false,
+    "curatedBuild": "passed",
+    "failed": 0,
+    "finalAccessibilityGrouping": "rebuilt and observed separately after focused checks",
+    "modelCalls": 0,
+    "optionalHomeRendersSkipped": 3,
+    "personalContextPassed": 9,
+    "puzzleRuns": 0,
+    "readOnlyReview": "No actionable regressions in draft ownership, provider disclosure, source attribution or stale-save guards",
+    "skipReason": "ARCHI_HOME_RENDER_DIR was not set for optional Home renderer cases"
+  },
+  "installation": {
+    "compiledMachOUUID": "95259DD1-B3E0-37D1-AB95-A895FAE9E473",
+    "compiledTextSHA256": "94a97bd409aa16be166c9fe00f14761921801086e0891d384cd4e3a1af33bc00",
+    "guardedUpdater": true,
+    "installedExecutableSHA256": "d4aa28beb1651fd6c0048c92e1e2682e9fec572768ca22d9b002198ee5cd373b",
+    "installedMachOUUID": "95259DD1-B3E0-37D1-AB95-A895FAE9E473",
+    "installedTextSHA256": "94a97bd409aa16be166c9fe00f14761921801086e0891d384cd4e3a1af33bc00",
+    "noModelCalls": true,
+    "noPuzzleRuns": true,
+    "profileFilesUnchanged": 22,
+    "retainedUnityRepresentationAndV008Packages": true,
+    "rollbackBundleRetained": true,
+    "schema": "archi-profile-ask-ui-installation/v1",
+    "signatureCheck": "passed"
+  },
+  "installedObservation": {
+    "askWorkspaceAndSidebarBranding": true,
+    "bubbleNativeWalkthrough": "not repeated in this increment; minimum render and shared-draft contracts covered by focused checks",
+    "companionNamePreserved": true,
+    "distinctProfileAccessibilityIdentifiers": true,
+    "draftSurvivesMapRoundTrip": true,
+    "localOnlyRouteAndDisabledEmptySend": true,
+    "memoryMapStarterNavigation": true,
+    "populatedMapRecordSelectionAndVersionBacklinks": true,
+    "profileSearchAndStatusCounts": true,
+    "profileSourceDisclosure": true,
+    "sourceEditsAndNewDetailRetainedAfterRestart": true,
+    "temporaryDraftClearedWithoutSending": true
+  },
+  "limits": [
+    "Desktop increment only; phone rebranding and memory parity remain open",
+    "No model generation or reader efficacy claim",
+    "No new development, permission or growth awards from profile population",
+    "Whole Hampton stack completion, useful method transfer and beta readiness remain open",
+    "Full small-window and VoiceOver walkthrough, dense graph performance and v008 body-picking acceptance remain open",
+    "Existing release review, source-scope, receipt-digest and notarization blockers remain open"
+  ],
+  "privacy": {
+    "installationBaseline": "Captured after authorized profile edits; 22 monitored JSON files byte-identical across final installation",
+    "ownerProfileAndKnowledgeDataPublished": false,
+    "privateEnrichment": "Separate authorized local data update; implementation receipt contains no personal entries or imported passages"
+  },
+  "publicationBase": "f167d10b7fe07b5380b39e9cd7a61e52a09e09cb",
+  "recordedDate": "2026-09-29",
+  "schema": "archi-profile-ask-ui-delivery/v1",
+  "sourceScope": {
+    "desktop/Sources/ARCHiDesktop/ARCHiDesktopApp.swift": "51f17d5910a65113b92fdfdba6b0387441d6019b09876de01f42c9bff2257686",
+    "desktop/Sources/ARCHiDesktop/AskARCHiBrand.swift": "ce59bedb2c915b4192c0088ec375ac7eb35022195b6de8958f70f846a19f7ebb",
+    "desktop/Sources/ARCHiDesktop/AssistantActivity.swift": "a02c503fd80cb8dd4c1a6040532e73635eb889503037f4bcfc42c08c3d26bce2",
+    "desktop/Sources/ARCHiDesktop/CompanionChatBubble.swift": "9bfa6fdf3afc391c2f8ac6f6bfb72ae3cee10645706c76b9e323a1bf511565ea",
+    "desktop/Sources/ARCHiDesktop/CompanionGraphView.swift": "66fe4496284d92cdfbbd297a08efe10454ad5cb4d9e14371c567e647668b6acd",
+    "desktop/Sources/ARCHiDesktop/CompanionPanel.swift": "4f4410a66a7557ce4722adff73fd7ba701a0c0057d798785b2983edab5b5eee9",
+    "desktop/Sources/ARCHiDesktop/HomeWorkspace.swift": "61413bbae64fd5006188f9453aecf2250a3f54344df61b71a1aee4616b918e03",
+    "desktop/Sources/ARCHiDesktop/PersonalContextCard.swift": "b78906c33c86513b8c0953da0e34905d4de55ad6a80e5070c8c2f4c9e23ebec7",
+    "desktop/Sources/ARCHiDesktop/PlayWorkspace.swift": "02482c6ede96d12f4773fe96c2dd9921a65370ae8673b91a21958acc6cd4e9f1",
+    "desktop/Sources/ARCHiDesktop/ReasoningWorkspace.swift": "2472baa9ff12025f557a870721974195bcd20f80c8ba230c065c80b53e32227b",
+    "desktop/Sources/ARCHiDesktop/WorkspaceNavigation.swift": "15652bae35ecc13c5b07924218c47f0d05408f7b3b6ba67371b10769568c6340",
+    "desktop/Sources/ARCHiDesktop/WorkspaceView.swift": "14a7494aa443d3c1ec352e1e16bae4d1b16d3dc4580b42485ba040e023a4221f"
+  },
+  "status": "implemented-installed-focused"
+}

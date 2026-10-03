@@ -66,6 +66,23 @@ describe("read-only desktop Journey host", () => {
     ]) expect(environment.__ARCHI_DESKTOP_HOST__!.setAppearance(invalid)).toBe(false);
     expect(environment.__ARCHI_DESKTOP_HOST__!.setAppearance(message)).toBe(true);
   });
+  it("accepts a compact Liminal structure identity and rejects concatenated oversized identities", () => {
+    const { environment, messages } = fixture();
+    const bridge = connectDesktopHost(environment)!;
+    bridge.publish(ready());
+    const before = JSON.stringify(messages);
+    const message = { version: 1, host: "archi-desktop", sessionId, sequence: 1,
+      id: "liminal-" + "a".repeat(64), label: "Liminal · Beast Form", png: "data:image/png;base64,iVBORw0KGgoAAAA=", reduceMotion: true };
+    const changed = vi.fn(); bridge.onAppearanceChange(changed);
+    expect(environment.__ARCHI_DESKTOP_HOST__!.setAppearance({ ...message,
+      id: "liminal-v008-" + "a".repeat(64) + "-structure-" + "b".repeat(64) })).toBe(false);
+    expect(environment.__ARCHI_DESKTOP_HOST__!.setAppearance(message)).toBe(true);
+    expect(changed).toHaveBeenLastCalledWith(expect.objectContaining({ id: message.id }));
+    expect(environment.__ARCHI_DESKTOP_HOST__!.setAppearance({ ...message, sequence: 2, id: "b".repeat(100) })).toBe(true);
+    expect(environment.__ARCHI_DESKTOP_HOST__!.setAppearance({ ...message, sequence: 3, id: "c".repeat(101) })).toBe(false);
+    expect(changed).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(messages)).toBe(before);
+  });
   it("requires both exact native bootstrap and its callable WK transport", () => {
     expect(readDesktopHostBootstrap({})).toBeNull();
     expect(readDesktopHostBootstrap({ __ARCHI_DESKTOP_BOOTSTRAP__: bootstrap })).toBeNull();

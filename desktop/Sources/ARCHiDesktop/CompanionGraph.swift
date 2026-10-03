@@ -2,35 +2,49 @@ import Foundation
 import CryptoKit
 
 enum CompanionGraphKind: String, CaseIterable, Identifiable, Sendable {
-    case companion, source, lesson, request, invocation, answer, context, omission
+    case companion, source, knowledge, lesson, method, request, invocation, answer, context, omission, evaluation, accounting
     var id: String { rawValue }
     var title: String {
         switch self {
         case .companion: "Companion"
         case .source: "Source"
+        case .knowledge: "Knowledge page"
         case .lesson: "Kept lesson"
+        case .method: "Saved method"
         case .request: "Request"
         case .invocation: "Model call"
         case .answer: "Answer outcome"
         case .context: "Temporary context"
         case .omission: "Omission"
+        case .evaluation: "ARC evidence"
+        case .accounting: "Task accounting"
         }
     }
     var symbol: String {
         switch self {
         case .companion: "sparkles"
         case .source: "doc.text"
+        case .knowledge: "books.vertical"
         case .lesson: "bookmark"
+        case .method: "arrow.triangle.branch"
         case .request: "bubble.left"
         case .invocation: "arrow.triangle.2.circlepath"
         case .answer: "text.bubble"
         case .context: "text.quote"
         case .omission: "minus.circle"
+        case .evaluation: "square.grid.3x3"
+        case .accounting: "chart.bar.doc.horizontal"
         }
     }
 }
 
-enum CompanionGraphTarget: String, Sendable { case assistant, context, memory, advanced }
+enum CompanionGraphTarget: Equatable, Sendable {
+    case assistant, context, memory, advanced, capabilities, steward, interactiveARC
+    case arcEvidence(proposalHash: String)
+    case stewardTask(taskID: String)
+    case knowledgePage(id: String)
+    case documentMethod(DocumentProcedureUse)
+}
 struct CompanionGraphDetail: Equatable, Sendable { let label: String; let value: String }
 struct CompanionGraphNode: Identifiable, Equatable, Sendable {
     let id: String
@@ -40,12 +54,18 @@ struct CompanionGraphNode: Identifiable, Equatable, Sendable {
     let status: String
     let details: [CompanionGraphDetail]
     let target: CompanionGraphTarget?
+    /// Display metadata derived by the record owner. Never an admission decision.
+    var presentationState: CompanionGraphPresentationState = .recorded
+    var evidenceTrail: [CompanionGraphEvidence] = []
 }
 struct CompanionGraphEdge: Identifiable, Equatable, Sendable {
     let id: String
     let source: String
     let target: String
     let label: String
+    var relationship: CompanionGraphRelationship = .recorded
+    var rationale: String? = nil
+    var reference: String? = nil
 }
 struct CompanionGraphSnapshot: Equatable, Sendable {
     let nodes: [CompanionGraphNode]
@@ -61,12 +81,18 @@ struct CompanionGraphSource: Equatable, Sendable { let name: String; let text: S
 enum CompanionGraph {
     static let maximumNodes = 220
     static let maximumEdges = 500
+    /// Stable identity shared by projections; callers still check exact snapshots.
+    static func lessonNodeID(_ lesson: KeptLesson) -> String { lessonKey(lesson) }
     static func build(receipts: [AssistantLaneReceipt], lessons: [KeptLesson], source: CompanionGraphSource?,
-                      now: Date, records: [SessionContextRecord] = [], turn: Int = 0) -> CompanionGraphSnapshot {
+                      now: Date, records: [SessionContextRecord] = [], turn: Int = 0,
+                      arcRecords: [ARCCapabilitiesRecord] = [], arcError: String? = nil,
+                      accountingTasks: [TokenStewardTask] = [], accountingError: String? = nil) -> CompanionGraphSnapshot {
         var projection = Projection(source: source, now: now)
         projection.add("companion-archi", title: "ARCHi", subtitle: "Your existing companion", kind: .companion,
             status: "Read-only view", details: [.init(label: "Scope", value: "Existing records and request receipts. Connections do not establish truth or change memory.")], target: .assistant)
         projection.addCurrentSource()
+        // ARC owns the checked bundles. The graph never re-scores or persists them.
+        projection.addARC(arcRecords, error: arcError, tasks: accountingTasks, accountingError: accountingError)
         let orderedLessons = lessons.sorted { lessonKey($0) < lessonKey($1) }
         projection.truncated += max(0, orderedLessons.count - 64)
         for lesson in orderedLessons.prefix(64) where lesson.isValid { projection.addLesson(lesson) }
@@ -78,6 +104,7 @@ enum CompanionGraph {
         let orderedReceipts = receipts.sorted { receiptKey($0) < receiptKey($1) }
         projection.truncated += max(0, orderedReceipts.count - 64)
         for receipt in orderedReceipts.prefix(64) { projection.addReceipt(receipt) }
+        if accountingError == nil { projection.addRetainedProvenance(accountingTasks) }
         return .init(nodes: projection.nodes, edges: projection.edges, truncatedCount: projection.truncated)
     }
 
@@ -132,6 +159,114 @@ enum CompanionGraph {
             guard !edgeIDs.contains(id) else { return }
             guard nodeIDs.contains(from), nodeIDs.contains(to), edges.count < maximumEdges else { truncated += 1; return }
             edges.append(.init(id: id, source: from, target: to, label: label)); edgeIDs.insert(id)
+        }
+
+        mutating func addARC(_ records: [ARCCapabilitiesRecord], error: String?,
+                             tasks: [TokenStewardTask], accountingError: String?) {
+            if let error {
+                let id = "arc-shelf-error"
+                add(id, title: "ARC operation needs attention", subtitle: "Existing owner reported a problem",
+                    kind: .evaluation, status: "Review required",
+                    details: [.init(label: "Outcome", value: error),
+                        .init(label: "Meaning", value: "The latest operation did not complete. Existing results retain their last successful evaluation. Open ARC to review the reported problem; this graph does not repair files.")], target: .capabilities)
+                edge("companion-archi", id, "evidence review needed")
+            }
+            let ordered = records.sorted { $0.id < $1.id }
+            truncated += max(0, ordered.count - 16)
+            for record in ordered.prefix(16) {
+                let summary = record.summary, counts = summary.counts
+                let scope: String
+                let accountingScope: String
+                if let solving = record.solverEvidence {
+                    scope = "Recorded local symbolic search: \(solving.run.attemptedPrograms) rule attempts, \(solving.run.matchingPrograms) training fits; \(solving.run.outcome.rawValue). No model calls, growth, memory or permission changes. Opening this graph does not rerun the solver."
+                    accountingScope = "Local search and checking elapsed time. No model calls or API charges; CPU and energy cost is unmeasured. Repeated runs remain separate tasks in Token Steward."
+                } else {
+                    scope = "Local rescoring of supplied predictions. No solver execution or model calls; no growth, memory or permission changes."
+                    accountingScope = "Rescoring invokes no model. The cost of originally generating these predictions is unknown. Repeated checks remain separate tasks in Token Steward."
+                }
+                let id = key("arc-evaluation", record.id)
+                let sourceID = key("arc-manifest", summary.manifestHash)
+                let target = CompanionGraphTarget.arcEvidence(proposalHash: record.id)
+                add(sourceID, title: summary.sourceLabel, subtitle: "Frozen ARC manifest", kind: .source,
+                    status: summary.sourceStatus == "synthetic-fixture" ? "Synthetic fixture" : "Unverified offline snapshot",
+                    details: [.init(label: "Manifest ID", value: summary.manifestID),
+                        .init(label: "Manifest hash", value: summary.manifestHash),
+                        .init(label: "Scope", value: "\(counts.totalTasks) tasks · \(counts.totalExamples) test examples"),
+                        .init(label: "Meaning", value: "A retained bundle reference. Hashes identify content; they do not authenticate its source.")], target: target)
+                add(id, title: "ARC · \(counts.exact) of \(counts.totalExamples) exact",
+                    subtitle: summary.sourceLabel, kind: .evaluation,
+                    status: "Proposed · Not certified",
+                    details: [.init(label: "Outcome", value: "Exact \(counts.exact) · Incorrect \(counts.incorrect) · Missing \(counts.missing) · Invalid \(counts.invalid) · Unscored \(counts.unscored)"),
+                        .init(label: "Coverage", value: "Receipts \(summary.receiptCoverageComplete ? "complete" : "incomplete") · Scoring \(summary.scoredCoverageComplete ? "complete" : "incomplete")"),
+                        .init(label: "Scope", value: scope),
+                        .init(label: "Solver ID", value: summary.solverID),
+                        .init(label: "Meaning", value: "Solver provenance remains unattested. A perfect score still does not certify a capability."),
+                        .init(label: "Recorded", value: record.recordedAt.ISO8601Format()),
+                        .init(label: "Application task ID", value: record.taskID),
+                        .init(label: "Proposal hash", value: record.id),
+                        .init(label: "Bundle hash", value: record.bundleHash),
+                        .init(label: "Checker", value: ARCCapabilitiesEvaluator.scorer)], target: target)
+                edge("companion-archi", id, "checked evidence")
+                edge(sourceID, id, "independently rescored as")
+
+                // The usage journal is shared across profiles. Only the exact
+                // application-owned retention task may join this profile's graph.
+                let task = accountingError == nil ? tasks.first { task in
+                    task.id == record.taskID && task.route == "arc-evaluation" &&
+                    task.outcomes.contains { $0.kind == .checked && $0.evidenceID == record.id && $0.value == summary.allExact }
+                } : nil
+                let accountingID = key("arc-accounting", record.taskID)
+                let duration = task?.lanes.first?.elapsedMilliseconds.map { "\($0) ms" } ?? "Unavailable"
+                add(accountingID, title: "ARC task accounting", subtitle: "Original retention task", kind: .accounting,
+                    status: task == nil ? "Accounting unavailable" : "Recorded · Offline check",
+                    details: [.init(label: "Application task ID", value: record.taskID),
+                        .init(label: "Elapsed", value: duration),
+                        .init(label: "Outcome", value: task == nil ? (accountingError ?? "No matching accounting receipt is available.") : "The check completed. All predictions exact: \(summary.allExact ? "yes" : "no")."),
+                        .init(label: "Scope", value: accountingScope)], target: .stewardTask(taskID: record.taskID))
+                edge(id, accountingID, task == nil ? "accounting unavailable" : "accounted by")
+            }
+        }
+
+        mutating func addRetainedProvenance(_ tasks: [TokenStewardTask]) {
+            let retained = tasks.filter { $0.requestProvenance?.isValid == true }.sorted {
+                $0.startedAt == $1.startedAt ? $0.id < $1.id : $0.startedAt > $1.startedAt
+            }
+            truncated += max(0, retained.count - 12)
+            for task in retained.prefix(12) {
+                guard let provenance = task.requestProvenance,
+                      let lane = task.lanes.first(where: { $0.provider == AssistantProvider.qwen.name }) else { continue }
+                let taskID = key("retained-local-request", task.id)
+                guard add(taskID, title: "Retained local request", subtitle: task.id, kind: .accounting,
+                    status: lane.dispatched ? lane.state.capitalized : "Prepared",
+                    details: [.init(label: "Request ID", value: task.id),
+                        .init(label: "Input digest", value: provenance.inputDigest),
+                        .init(label: "Knowledge context digest", value: provenance.knowledgeContextDigest ?? "Not recorded"),
+                        .init(label: "Purpose", value: provenance.isKnowledgeAcquisition ? "Editable knowledge proposal" : "Local assistance"),
+                        .init(label: "Meaning", value: "Captured source references from Usage. These do not establish current availability, model citation, factual truth or title rights.")],
+                    target: .stewardTask(taskID: task.id)) else { continue }
+                edge("companion-archi", taskID, "retained request provenance")
+                for binding in provenance.readingDependencies ?? [] {
+                    let id = key("retained-source-reference", binding.id, String(binding.revision), binding.digest,
+                        binding.provenance?.digest ?? "")
+                    if add(id, title: "Captured source version", subtitle: binding.id, kind: .source,
+                        status: "Historical reference", details: [.init(label: "Source ID", value: binding.id),
+                            .init(label: "Revision", value: String(binding.revision)), .init(label: "Digest", value: binding.digest),
+                            .init(label: "Provenance digest", value: binding.provenance?.digest ?? "No declaration recorded"),
+                            .init(label: "Availability", value: "Inspect the source owner. A newer source cannot replace this exact reference.")], target: .memory) {
+                        edge(id, taskID, lane.dispatched ? "captured dependency at dispatch" : "prepared dependency")
+                    }
+                }
+                for binding in provenance.knowledgeDependencies ?? [] {
+                    let id = key("retained-page-reference", binding.id, String(binding.revision), binding.digest)
+                    if add(id, title: "Captured page version", subtitle: binding.id, kind: .knowledge,
+                        status: "Historical reference", details: [.init(label: "Page ID", value: binding.id),
+                            .init(label: "Revision", value: String(binding.revision)), .init(label: "Digest", value: binding.digest),
+                            .init(label: "Availability", value: "Inspect the page history. This reference does not substitute the latest version or certify its claim.")],
+                        target: .knowledgePage(id: binding.id)) {
+                        edge(id, taskID, lane.dispatched ? "captured dependency at dispatch" : "prepared dependency")
+                    }
+                }
+            }
         }
 
         mutating func addCurrentSource() {
@@ -249,6 +384,9 @@ enum CompanionGraph {
                             .init(label: "Elapsed", value: invocation.elapsedMilliseconds.map { "\($0) ms" } ?? "Unavailable"),
                             .init(label: "Input tokens", value: invocation.metrics?.inputTokens.map(String.init) ?? "Unavailable"),
                             .init(label: "Output tokens", value: invocation.metrics?.outputTokens.map(String.init) ?? "Unavailable"),
+                            .init(label: "Internal representations", value: invocation.representationAccess.title),
+                            .init(label: "Measurement boundary", value: invocation.representationAccess.detail),
+                            .init(label: "Representation receipt", value: invocation.representationReceipt.detail),
                             .init(label: "Meaning", value: "Attempted means the local client was invoked. Response received does not establish answer admission or factual accuracy.")], target: .advanced)
                     edge(requestID, id, "attempted")
                 }

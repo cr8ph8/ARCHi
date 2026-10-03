@@ -5,6 +5,8 @@ import CryptoKit
 enum CompanionVisualTreatment: String, CaseIterable, Identifiable, Codable {
     case original = "Original"
     case pearlStudy = "Pearl study"
+    case protoStudy = "Proto expression"
+    case liminalV008 = "Liminal v008"
     var id: String { rawValue }
 }
 
@@ -23,31 +25,49 @@ enum CompanionVisualAsset {
     static func tealBody(for form: CompanionForm) -> BundledBody? {
         switch form {
         case .constellation:
-            BundledBody(filename: "archi-teal-constellation-v1", digest: "43c6d8239a4b13d85d54e33e21475c4dc6dd982158bc038d6e3e0271adf54aaf")
+            BundledBody(filename: "archi-teal-constellation-v1", digest: "505e40c2f279fe89c75f066f66ad38c86696e0d4a775c5245f268ee984b1bf00")
         case .sprout:
-            BundledBody(filename: "archi-teal-sprout-v1", digest: "9c62aa7904d6e58c1c8b3902697c1ae3fad949782a8326497b52b11da47d8de8")
+            BundledBody(filename: "archi-teal-sprout-v1", digest: "222ec7843b58f5f3c09ce99cbaffe3dd0f662737c66c75608298b1e30afde93a")
         case .ribbonSpirit:
-            BundledBody(filename: "archi-teal-ribbon-spirit-v1", digest: "3d914e0df829ab991b37acbea58e44c5a0128c56154269c8af2f9155f15da456")
+            BundledBody(filename: "archi-teal-ribbon-spirit-v1", digest: "4a75407d8b4248ef7282e366d9486470f43e282f914e449b17c1fde358d1534d")
         case .geode:
-            BundledBody(filename: "archi-teal-geode-v1", digest: "d5021e29cc0ccc9705069897026db2783253e1a522f7d371a1ecd8f8ea4ada11")
+            BundledBody(filename: "archi-teal-geode-v1", digest: "4cb2535fb127abf011c90321b4f7abe0231c4dd94a987406c65b081a5810a397")
         default: nil
         }
     }
 
-    static let revision = "pearl-study-v1-698cac34"
-    static let digest = "698cac349f8d2c2eb184fee0b6d08761cce310f05e5cbafd7cc461bc5a6d4c03"
+    static let revision = "pearl-study-v1-b47816dc"
+    static let digest = "b47816dc3c72078b2456f4e1b42de071d12f23a4782048f1a7b0ab48e3029198"
     static let filename = "archi-pearl-study-v1"
-    static let lumenRevision = "lumen-pearl-v1-55faaa66"
-    static let lumenDigest = "55faaa664fc7e0dfdbc466c50ae1936157d3fe6ec5882e3006c938819c0fabff"
+    static let lumenRevision = "lumen-pearl-v1-5bb6b3fd"
+    static let lumenDigest = "5bb6b3fd2774be1227519f2d341f441e64488e2e4b966258ec92c47eb98f8a97"
     static let lumenFilename = "archi-lumen-pearl-v1"
     static let maximumBytes = 1_400_000
+    static let lightSeedFilename = "archi-ball-of-light-v1"
+    static let lightSeedDigest = "867b75f54b17619c9eaca563515221e5f7b5e49385b9f29cad8b5216213dd9c4"
+    static let lightSeedImage = load(name: lightSeedFilename, digest: lightSeedDigest)
+    static let hamptonSeedFilename = "hampton-liminal-seed-v1"
+    static let hamptonSeedDigest = "9ffb19a74959c29fd1ff46848937c2745c08b543b0c70871e99c4c5c606916a1"
+    static let hamptonSeedImage = load(name: hamptonSeedFilename, digest: hamptonSeedDigest)
+    static let hamptonGarnetFilename = "hampton-liminal-garnet-v1"
+    static let hamptonGarnetDigest = "6a60509d41e00d8dd6b204dd894b988498b6e38dabbc29349db058046e7228d0"
+    static let hamptonGarnetImage = load(name: hamptonGarnetFilename, digest: hamptonGarnetDigest)
     static let kinSeedFilename = "kin-core-seed-blender-v2"
-    static let kinSeedDigest = "d88ba7b233a09142b8353b6cdc646100d0da0fcbe2789b8b2071e828ba481707"
+    static let kinSeedDigest = "02066c89c597edf6b0f9d3c9f5706323cfefa8163c94b8407ec48cd7e57bf5e6"
     static let kinSeedImage = load(name: kinSeedFilename, digest: kinSeedDigest)
     static let kinFirstLightFilename = "kin-first-light-blender-v1"
     // Replaced only after the final Blender portrait passes source review.
-    static let kinFirstLightDigest = "ba5d05407117740796bf3bc6b949a4ffca3178a6b6f8598c5bbcd24b4f82eba0"
+    static let kinFirstLightDigest = "96dcfec5654287a22c5d53357dcc47dc7a6a92cd4458da381c45fe074f32de2d"
     static let kinFirstLightImage = load(name: kinFirstLightFilename, digest: kinFirstLightDigest)
+    static let protoFilename = "archi-proto-blender-v1"
+    static let protoDigest = "f64051b207446340c9e813c35e89087afc6fac068ca0d7ec38d22d86e56ac688"
+    static let protoImage = load(name: protoFilename, digest: protoDigest)
+    static func firstLightImage(treatment: CompanionVisualTreatment) -> NSImage? {
+        treatment == .protoStudy ? (protoImage ?? kinFirstLightImage) : kinFirstLightImage
+    }
+    static func usesProto(_ treatment: CompanionVisualTreatment) -> Bool {
+        treatment == .protoStudy && protoImage != nil
+    }
     static var resourceURL: URL? {
         resourceURL(named: filename)
     }
@@ -98,20 +118,24 @@ enum CompanionVisualAsset {
 
     static func applies(form: CompanionForm, family: EvolutionFamily?, treatment: CompanionVisualTreatment) -> Bool {
         (family == nil && tealBody(for: form) != nil)
+            || (family == nil && form == .companion && treatment == .protoStudy)
             || (form == .companion && (family == nil || family == .lumen) && treatment == .pearlStudy)
     }
 
     static func resolvedImage(form: CompanionForm, family: EvolutionFamily?, treatment: CompanionVisualTreatment) -> NSImage? {
         if family == nil, tealBody(for: form) != nil { return tealImages[form] }
         guard applies(form: form, family: family, treatment: treatment) else { return nil }
+        if family == nil && treatment == .protoStudy { return protoImage }
         return family == .lumen ? lumenImage : image
     }
 
     static func label(form: CompanionForm, family: EvolutionFamily?, treatment: CompanionVisualTreatment,
                       recipe: CompanionAppearanceRecipe? = nil, naturalVariation: CompanionNaturalVariation? = nil,
-                      equipment: CompanionEquipment = .empty) -> String {
+                      equipment: CompanionEquipment = .empty, seedColor: CompanionSeedColor = .original) -> String {
         let label = baseLabel(form: form, family: family, treatment: treatment, recipe: recipe, naturalVariation: naturalVariation)
-        let combined = equipment.item.map { "\(label) · \($0.title)" } ?? label
+        let coloredLabel = seedColor != .original && SeedColorRendering.applies(form: form, family: family)
+            ? "\(label) · \(seedColor.title)" : label
+        let combined = equipment.item.map { "\(coloredLabel) · \($0.title)" } ?? coloredLabel
         // The hosted bridge measures JavaScript string length in UTF-16 units.
         // Keep short legacy labels exact and never split an emoji or grapheme.
         guard combined.utf16.count > 80 else { return combined }
@@ -127,7 +151,14 @@ enum CompanionVisualAsset {
 
     private static func baseLabel(form: CompanionForm, family: EvolutionFamily?, treatment: CompanionVisualTreatment,
                                   recipe: CompanionAppearanceRecipe?, naturalVariation: CompanionNaturalVariation?) -> String {
+        if family == nil && form == .velaSeed { return "Vela · Opal Seed" }
+        if family == nil && form == .velaLantern { return "Vela · Lantern Wing" }
+        if LiminalV008Runtime.applies(form: form, family: family, treatment: treatment) { return "Hampton · Liminal v008 particles" }
+        if family == nil && form == .hamptonSeed { return "Hampton · Liminal Seed" }
+        if family == nil && form == .corePearl { return "ARCHi · Ball of Light" }
+        if family == nil && form == .particleSeed { return "KIN · Particle Seed look" }
         if family == nil, tealBody(for: form) != nil { return form.rawValue }
+        if family == nil, form == .kin, usesProto(treatment) { return "First Light · Proto expression" }
         let base: String
         if resolvedImage(form: form, family: family, treatment: treatment) != nil {
             base = "\(family?.title ?? form.rawValue) · \(treatment.rawValue)"
@@ -154,9 +185,15 @@ enum CompanionVisualAsset {
     static func appearanceID(form: CompanionForm, family: EvolutionFamily?, treatment: CompanionVisualTreatment,
                              recipe: CompanionAppearanceRecipe? = nil, naturalVariation: CompanionNaturalVariation? = nil,
                              equipment: CompanionEquipment = .empty,
-                             assetAvailable: Bool? = nil) -> String {
-        let base = baseAppearanceID(form: form, family: family, treatment: treatment, recipe: recipe,
+                             assetAvailable: Bool? = nil, seedColor: CompanionSeedColor = .original,
+                             pointProgress: Double = 107.0 / 119.0) -> String {
+        if LiminalV008Runtime.applies(form: form, family: family, treatment: treatment), let asset = LiminalV008Runtime.asset {
+            return liminalAppearanceID(manifestSHA256: asset.manifestSHA256, seedColor: seedColor,
+                equipment: equipment, pointProgress: pointProgress)
+        }
+        let original = baseAppearanceID(form: form, family: family, treatment: treatment, recipe: recipe,
             naturalVariation: naturalVariation, assetAvailable: assetAvailable)
+        let base = SeedColorRendering.identity(base: original, form: form, family: family, color: seedColor)
         guard !equipment.isEmpty else { return base }
         // Include the complete resolved body and equipment inputs, while leaving
         // room for the hosted bridge's expression revision within 100 characters.
@@ -165,9 +202,32 @@ enum CompanionVisualAsset {
         return "e1-\(digest)"
     }
 
+    /// Cache the authenticated displayed frame, not a fractional playhead. This
+    /// keeps a source-clock half-step from returning another pose's saved PNG.
+    static func liminalAppearanceID(manifestSHA256: String, seedColor: CompanionSeedColor = .original,
+                                     equipment: CompanionEquipment = .empty,
+                                     pointProgress: Double = 107.0 / 119.0) -> String {
+        let progress = pointProgress.isFinite ? pointProgress : LiminalV008Runtime.orbProgress
+        let frame = (try? LiminalPointAsset.sourceFrameIndex(progress: progress)) ?? 107
+        let canonical = "\(manifestSHA256)\n\(LiminalSeedStyle.revision)\n\(seedColor.rawValue)\n\(equipment.canonicalIdentity)\nframe=\(frame + 1)"
+        return "liminal-v008-" + LiminalKnowledgeBindings.sha256(Data(canonical.utf8))
+    }
+
     private static func baseAppearanceID(form: CompanionForm, family: EvolutionFamily?, treatment: CompanionVisualTreatment,
                                          recipe: CompanionAppearanceRecipe?, naturalVariation: CompanionNaturalVariation?,
                                          assetAvailable: Bool?) -> String {
+        if family == nil && (form == .velaSeed || form == .velaLantern) {
+            return "\(VelaGeometry.revision):\(form.rawValue)"
+        }
+        if family == nil && form == .hamptonSeed {
+            return (assetAvailable ?? (hamptonSeedImage != nil)) ? "h1-\(hamptonSeedDigest)" : "hampton-liminal-native-fallback-v1"
+        }
+        if family == nil && form == .corePearl {
+            return (assetAvailable ?? (lightSeedImage != nil)) ? "l1-\(lightSeedDigest)" : "optical-light-v1:Core pearl"
+        }
+        if family == nil && form == .particleSeed {
+            return (assetAvailable ?? (kinSeedImage != nil)) ? "ps-\(kinSeedDigest)" : "kin-particle-native-v1"
+        }
         if family == nil, form.isOpticalLight {
             // Native geometry has a revision just like bundled artwork. The same
             // fixed frame supplies desktop previews and the retained image bridge.
@@ -177,6 +237,9 @@ enum CompanionVisualAsset {
             return (assetAvailable ?? (kinSeedImage != nil)) ? "k2-\(kinSeedDigest)" : "kin-core-seed-native-fallback-v1"
         }
         if family == nil, form == .kin {
+            if treatment == .protoStudy, assetAvailable ?? (protoImage != nil) {
+                return "p1-\(protoDigest)"
+            }
             // Both paths stay inside KinFirstLightPortrait, preserving the same
             // attention clock and core-anchored light. Only the resting body is
             // cached; a missing or unverified asset uses the retained drawing.
@@ -193,7 +256,8 @@ enum CompanionVisualAsset {
         let base = "\(form.rawValue):\(family?.rawValue ?? "origin")"
         let available = assetAvailable ?? (resolvedImage(form: form, family: family, treatment: treatment) != nil)
         let selectedRevision = family == .lumen ? lumenRevision : revision
-        let appearance = applies(form: form, family: family, treatment: treatment) && available ? "\(base):\(selectedRevision)" : base
+        let appearance = applies(form: form, family: family, treatment: treatment) && available
+            ? (treatment == .protoStudy && family == nil ? "p1-\(protoDigest)" : "\(base):\(selectedRevision)") : base
         if let family, let recipe, recipe.family == family {
             // Habitat limits IDs to 100 characters, including a possible expression
             // suffix. Hash the complete inputs; neither the recipe nor asset identity

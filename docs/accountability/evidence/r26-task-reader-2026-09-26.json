@@ -1,0 +1,388 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "R26-TASK-READER-2026-09-26",
+  "milestoneId": "R26-TASK-READER",
+  "asOf": "2026-09-26",
+  "recordedAt": "2026-09-27T05:45:20.112918+00:00",
+  "evidenceClass": "qualified-synthetic-reader-and-native-inspection",
+  "authority": "project-evidence-only",
+  "result": "PASS",
+  "resultScope": "Frozen synthetic task qualification plus native scope restriction/report inspection only. Historical ledger mismatch and live real-task integration remain separate.",
+  "sealed": true,
+  "draft": false,
+  "source": {
+    "branch": "codex/archi-encounter-composition-v1",
+    "baseCommit": "15544acf37152a400045e627a7def753e272c4ad",
+    "dirty": true,
+    "checkpointCommit": null,
+    "checkpointTree": null,
+    "cleanSource": false,
+    "sourceSurfaceDigest": "sha256:412e7968016cb66e8061187daccd40ee12b76cd7dadca3e141964e271b2b267f",
+    "inventory": "output/task-reader-2026-09-26/source-inventory.json",
+    "inventorySHA256": "sha256:30ccb27950667579ffb9ad299acd97dc9f1d2904415c9431be494d5b4d4d7c0f",
+    "scope": "Selected new reader pipeline, math, scoped native inspection, checks and result documentation. Primary authored source remains dirty."
+  },
+  "checks": [
+    {
+      "id": "local-reader",
+      "command": "task_reader.py prepare/development/fit/qualify and task_reader_export.py; existing Qwen3.5; six bounded zero-generation batches",
+      "result": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "focused-contracts",
+      "command": "4 pipeline checks, 4 helper-reported numeric checks, 10 reader-scope tests plus 1 skipped optional fixture, and 5 final review parser tests",
+      "result": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "native-install-inspection",
+      "command": "build_and_run.sh --build-only; 23 profile SHA comparisons; CUA Review calibration report showing actual run-01 result",
+      "result": "PASS",
+      "exitCode": 0
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "R26-TASK-READER-ARTIFACT-1",
+      "path": "output/task-reader-2026-09-26/source-inventory.json",
+      "digest": "sha256:30ccb27950667579ffb9ad299acd97dc9f1d2904415c9431be494d5b4d4d7c0f",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-2",
+      "path": "output/task-reader-2026-09-26/native-audit.md",
+      "digest": "sha256:fdf578c202ca64bf627fd7eca027b1e78f2bedb9ac5d8e8d67ac981ca471a7b8",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-3",
+      "path": "output/task-reader-2026-09-26/fit-audit.md",
+      "digest": "sha256:86ccb9ea856443658cbb6100516f2eb82d93b0594d49f97d0b4aa06b7d600daa",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-4",
+      "path": "output/task-reader-2026-09-26/pipeline-review.md",
+      "digest": "sha256:107a1d3e97698caba82913676b5e0b3527470fb370b155870c443d1b6bfba095",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-5",
+      "path": "output/task-reader-2026-09-26/pipeline-checks.log",
+      "digest": "sha256:32db22cd7a788e6c07dc141c236e87af50508d60b5592936b47d52f0d303c769",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-6",
+      "path": "output/task-reader-2026-09-26/native-checks.log",
+      "digest": "sha256:2031295edf77a4cd66acdee6457b9199623873f39d9b66e1d8c2cd2d35ff225c",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-7",
+      "path": "output/task-reader-2026-09-26/review-checks-final.log",
+      "digest": "sha256:d8a1577610203325ba3ebdd98693facd15b7d18ec949dbce7e532aae36e55a65",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-8",
+      "path": "output/task-reader-2026-09-26/report-install.log",
+      "digest": "sha256:72125055f451e9cd4ce50208265b68936d3f6ec34e8faa0c724afcee1ec518c9",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-9",
+      "path": "output/task-reader-2026-09-26/final-installation.json",
+      "digest": "sha256:87d051dfd3e9e04ab913d8372ef95b75ccd7282d70e2cf288e594fd430ba1441",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-10",
+      "path": "output/task-reader-2026-09-26/RESULT.md",
+      "digest": "sha256:5637fbef612af9608016b8e67ed667e12263b45b097809feedd82f86bd807264",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-11",
+      "path": "output/task-reader-2026-09-26/run-01/plan.json",
+      "digest": "sha256:8db6b8144b00b856e3084335393394484c790124c5bb731f91de84e7a75de3bc",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-12",
+      "path": "output/task-reader-2026-09-26/run-01/preparation.json",
+      "digest": "sha256:6b42517eeb4fc2fabb7aa5d56643cda8f32688f7554d04bf51a5965614f5881b",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-13",
+      "path": "output/task-reader-2026-09-26/run-01/reader.candidate.json",
+      "digest": "sha256:e2e2beed1097fe8d8655242ffe51c26469e4ed77349ba77c04f14b166a0b6bd3",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-14",
+      "path": "output/task-reader-2026-09-26/run-01/fit-seal.json",
+      "digest": "sha256:ad82d8ceb4861192cd045624b81780c3b5473c9caa4dcb62ddc87dbd1a4c9c53",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-15",
+      "path": "output/task-reader-2026-09-26/run-01/development-report.json",
+      "digest": "sha256:15b07c8102e4485a96f4df782c5ad1b48a392e7f4db477fc90827abf782e658d",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-16",
+      "path": "output/task-reader-2026-09-26/run-01/qualification-report.json",
+      "digest": "sha256:f382bbae7192a14aa5b32c42e6630667c8e7b547c50092b2ef2efa162c908838",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-17",
+      "path": "output/task-reader-2026-09-26/run-01/reader.qualified.json",
+      "digest": "sha256:b699deda8bc7bdd99b5e362c88d16accdd66c163222e89647086b44a680a7ac0",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-18",
+      "path": "output/task-reader-2026-09-26/run-01/reader-review.json",
+      "digest": "sha256:4c78fce1410f6bfe920f06faaf0a4514130482295fe3c6a7fab46937562a4949",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-19",
+      "path": "output/task-reader-2026-09-26/run-01/export-receipt.json",
+      "digest": "sha256:0a315131c6a9f43a0179fb3a97df1712fd0bbfc65991f707facb70e6a7d2e5c5",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-20",
+      "path": "output/task-reader-2026-09-26/run-01/development-00/receipt.json",
+      "digest": "sha256:42c69197d984116e90d5f52f5b2ffce565854483870bf0fc466876a760ee0120",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-21",
+      "path": "output/task-reader-2026-09-26/run-01/development-01/receipt.json",
+      "digest": "sha256:85945cc91431411a745f2f9ea14e6c26b765e35813c72175b22f7a69460c8ed7",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-22",
+      "path": "output/task-reader-2026-09-26/run-01/development-02/receipt.json",
+      "digest": "sha256:0c52e5cf0664d9a4852c6e865125e1cbbfa83c57734bddf099de6ebb9b5c17f4",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-23",
+      "path": "output/task-reader-2026-09-26/run-01/development-03/receipt.json",
+      "digest": "sha256:97d85b95f1102c453e0e86e28b8852c9117a8f396a89b5b473cd92e58166dcab",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-24",
+      "path": "output/task-reader-2026-09-26/run-01/development-04/receipt.json",
+      "digest": "sha256:bcb679e65d1afa5f05ff1834a370075c98e4abebb249c02be8970255ecac690b",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-25",
+      "path": "output/task-reader-2026-09-26/run-01/qualification-00/receipt.json",
+      "digest": "sha256:909f1a7175135ced3b496ae87a4fe60fb32cd1ef3f22d75219ec940ca35eca31",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-26",
+      "path": "output/task-reader-2026-09-26/run-01/development-00/validation.json",
+      "digest": "sha256:fc29bdf7d4cf20cbf79f3e64590c7a9053e9bf88f4a1f005f87f8b6001d5d273",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-27",
+      "path": "output/task-reader-2026-09-26/run-01/development-01/validation.json",
+      "digest": "sha256:f6d43f03ddd031cdb5b61f7ba70cad76a7f97e2c3da1cc5ddbec9da4f58271a8",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-28",
+      "path": "output/task-reader-2026-09-26/run-01/development-02/validation.json",
+      "digest": "sha256:66ef9dc0e02181b2d00efcb3f6b3a6fdb118e2d6d7723a61b3d0885a3f280072",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-29",
+      "path": "output/task-reader-2026-09-26/run-01/development-03/validation.json",
+      "digest": "sha256:9b993e9561645f8c7740c28f7de4a210cd1719844a02b5d86109afb1c836a835",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-30",
+      "path": "output/task-reader-2026-09-26/run-01/development-04/validation.json",
+      "digest": "sha256:d23f28ba025381ab1c7c831aad602a875d19bbe067fc706bf270e6c9756bcea7",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-31",
+      "path": "output/task-reader-2026-09-26/run-01/qualification-00/validation.json",
+      "digest": "sha256:1d2fcc9137b8d8a588a1695645c66c79361d1a67cde6b30b9da55b6d45f35efa",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-32",
+      "path": "output/task-reader-2026-09-26/run-01/development-00/activations.json",
+      "digest": "sha256:ef8a9f5f4127c7234ab766c3b40dee0bccf4056187db0a3d53a61ccc5647f22c",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-33",
+      "path": "output/task-reader-2026-09-26/run-01/development-01/activations.json",
+      "digest": "sha256:aed16fc5808f208a4da22e80c3d19692865095c46abe86e2d1b3a87a0aab6c73",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-34",
+      "path": "output/task-reader-2026-09-26/run-01/development-02/activations.json",
+      "digest": "sha256:48a4075c85eac2357d6e1703cb09d6a95520e40d1732718f83df1627d1e72c70",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-35",
+      "path": "output/task-reader-2026-09-26/run-01/development-03/activations.json",
+      "digest": "sha256:072aea1620c56e52a05e17f22622d3488e1adca9a1c12aba49268bf53a063367",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-36",
+      "path": "output/task-reader-2026-09-26/run-01/development-04/activations.json",
+      "digest": "sha256:65ee8d61d49b79a7ce984c5771ef740e8ef25632f2fba4137e1c9f513ba600ce",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R26-TASK-READER-ARTIFACT-37",
+      "path": "output/task-reader-2026-09-26/run-01/qualification-00/activations.json",
+      "digest": "sha256:61223cdffc225da61bdb248e4e413e6921f3d21659e66027f56d11d30bb369e0",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    }
+  ],
+  "limitations": [
+    "Existing failed readers remain failed. Changed model-layer/corpus/fitting choices prevent claiming a controlled improvement over those attempts.",
+    "No new native task measurement consumer or population reliability guarantee.",
+    "Raw activations and fitted weights remain local; this public result does not independently reproduce them.",
+    "Native app displays evidence only; no task inference/steering enabled.",
+    "Historical R18 receipt mismatch remains unrecovered; expected hash preserved."
+  ],
+  "nextPromotionCondition": "Connect a matching source-addressed task consumer and native runtime, then establish evidence on actual task inputs; keep ordinary chat/steering outside current scope."
+}

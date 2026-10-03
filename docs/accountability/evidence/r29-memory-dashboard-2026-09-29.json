@@ -1,0 +1,88 @@
+{
+  "basePublicationCommit": "e38a898a7b425a61e79db234b4cb38821592ff6c",
+  "capabilities": [
+    "Primary sidebar Memory map",
+    "Home real-record preview and counts",
+    "Memory and All activity scopes",
+    "Local Showcase with selected-record inspector",
+    "Collapsed feature directory",
+    "General-map navigation clears stale activity selection",
+    "Retained sources route to memory library"
+  ],
+  "checks": {
+    "authoredBuild": "passed",
+    "broadSuiteRun": false,
+    "curatedBuild": "passed",
+    "finalKeyboardRepair": "Curated rebuild and installed Escape/Command-W pass; no broad rerun.",
+    "focusedTestsFailed": 0,
+    "focusedTestsPassed": 14,
+    "modelCalls": 0,
+    "puzzleRuns": 0,
+    "suites": [
+      "MemoryMapSnapshotTests",
+      "KnowledgeSourceGraphTests",
+      "WorkspaceNavigationTests",
+      "CompanionGraphNavigationTests"
+    ]
+  },
+  "installation": {
+    "addedMonitoredFiles": 0,
+    "bundleIdentifier": "com.quotient.archi.desktop.review",
+    "guardedUpdater": true,
+    "installedAndCompiledMachOUUID": "EE5E012A-BB5C-3E4F-BD8F-4D9970892C17",
+    "installedAndCompiledTextSectionDumpSHA256": "35eaee7dc5489c498db2de6358a25ad37ce7c5d2763cc5c0e4e0f15c9408dc8d",
+    "installedExecutableSHA256": "95f953a6a9a3678bb02b4e449056ae18fb84cd9730a0da59bb7eea8161b09521",
+    "monitoredProfileJSONFiles": 22,
+    "previousBundleRetained": true,
+    "retainedExistingUnityRepresentationAndLiminalPackages": true,
+    "unchangedMonitoredFiles": 22
+  },
+  "installedObservation": {
+    "accessibleListSelection": true,
+    "allActivityScope": "26 records / 29 connections, not memory count",
+    "commandWClosesPresentationFinalBuild": true,
+    "escapeExitsShowcaseFinalBuild": true,
+    "fullSizeDashboardScreenshotInspected": true,
+    "homeAndSidebar": true,
+    "homeCounts": {
+      "activeLessons": 0,
+      "pages": 0,
+      "sources": 2
+    },
+    "homeShowcaseSheet": true,
+    "limits": "Visual/native interaction pass at the current desktop window size; exhaustive minimum-size, VoiceOver, dense-graph and long-session acceptance remain open.",
+    "memoryOwnerNavigationDismissesSheet": true,
+    "memoryScope": "3 records / 2 connections, including companion anchor",
+    "personalMemoryWritten": false,
+    "profileContinuity": "Liminal / Garnet preserved",
+    "showcaseScopeChangePreserved": true,
+    "sourceParticleSelection": true,
+    "sourceVersionAndBacklinksInspector": true
+  },
+  "limits": [
+    "Desktop increment; iPhone parity separate.",
+    "Showcase displays actual current-profile records and is not anonymized.",
+    "Counts distinguish retained sources, latest page records and active lessons; graph also shows historical/unavailable references.",
+    "No change to admission, archive schema, model routing or permissions.",
+    "Existing release blockers remain open; not a beta release or research efficacy demonstration."
+  ],
+  "recordedDate": "2026-09-29",
+  "schema": "archi-memory-dashboard-delivery/v1",
+  "sourceScope": {
+    "desktop/Sources/ARCHiDesktop/ARCHiDesktopApp.swift": "bb7bf095d03814c1bc4c644a8bf8959201e954010aaf5064e8b094f50200fdeb",
+    "desktop/Sources/ARCHiDesktop/CompanionGraphView.swift": "3930419c18d536c92f2fad8219f54d8e7f7c80dfbad61acecba235b0837ef146",
+    "desktop/Sources/ARCHiDesktop/CompanionGraphWorkspace.swift": "66cafe7cc20de57b15150a53c0042273c8aaab303cdd5c65e4aba2a5242e237f",
+    "desktop/Sources/ARCHiDesktop/CompanionStore.swift": "4591e2233b9f462dc4aca1ec32bc077c08b3be1b281cf1b97435cadf2153c9eb",
+    "desktop/Sources/ARCHiDesktop/HomeFeatureDirectory.swift": "9f2db79ddae61dd5bbd128ed14e02b40971cc25fdaad6c3322698e8faf251f2f",
+    "desktop/Sources/ARCHiDesktop/HomeMemoryMapCard.swift": "f327f692c448ecd4b5ff1ed941ac5b22a9359508ba4aa32728c534144bbe2b51",
+    "desktop/Sources/ARCHiDesktop/HomeWorkspace.swift": "404836c9b12875fb744f2daa48acdeb28d87f6697b4fb1d938bbbe542ca3c826",
+    "desktop/Sources/ARCHiDesktop/KnowledgePageGraph.swift": "77cfce4cbc67556f2f6bbafba71fc072cdfd6cd87eeea53a9043b0dfa96c199e",
+    "desktop/Sources/ARCHiDesktop/MemoryMapSnapshot.swift": "57643441db81b6fc67e43bb7af52b5eaa26501d69ad73a6ba658911039bcfb89",
+    "desktop/Sources/ARCHiDesktop/WorkspaceNavigation.swift": "2684ad9f8193cca7b5e8b861930f6468c3acef727855b2dd30a088ea4d9c5807",
+    "desktop/Sources/ARCHiDesktop/WorkspaceView.swift": "21e0b3f573f7f7f1631be812aa6430c0185fd9f1e6145883cba1f802f975f3c1",
+    "desktop/Tests/ARCHiDesktopTests/KnowledgeSourceGraphTests.swift": "32257e2cfbb9e6ee444f33859585734ae8880574bbe662becacb73795bb7a82f",
+    "desktop/Tests/ARCHiDesktopTests/MemoryMapSnapshotTests.swift": "ca877615f2405e5f9a2c96af9656a9416cb4e01ec8250f5be4ae85f63be00f89",
+    "desktop/Tests/ARCHiDesktopTests/WorkspaceHomeTests.swift": "7d68b5aa9a256e473e011f3c8d644c0d22df79bc3e8f4e927fa7a2d896de6764"
+  },
+  "status": "implemented-installed-focused"
+}

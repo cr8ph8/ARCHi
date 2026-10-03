@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-02",
+  "recordedUTC": "2026-10-03T06:39:54.017649+00:00",
+  "scope": "Guarded local desktop installation of reconciled source and capability-7 Liminal renderer; focused synthetic runtime qualification; partial personal walkthrough",
+  "authoredSourceCommit": "0f0cdfa13794ececbbc628387c610428c2fbb9e7",
+  "curatedSourceCommit": "4ec8bd2a42e0011cef4241e057dee2b6d5866560",
+  "installation": {
+    "version": "0.7.0",
+    "build": "1",
+    "guardedUpdater": true,
+    "normalQuitAfterDraftExport": true,
+    "reopened": true,
+    "strictRecursiveSignature": true,
+    "signatureScope": "Local ad-hoc development signing; no notarization or distribution approval",
+    "compiledExecutableUUIDMatchesStage": true,
+    "nativeBinaryByteEqualityClaim": false,
+    "expectedStageInstallDifference": "ARCHiReactorPython changes from the staging path to the installed path; re-signing changes executable signature bytes",
+    "rollbackPriorExecutableMatches": true,
+    "profileFilesCompared": 24,
+    "profileFilesUnchanged": true,
+    "priorResourcesCompared": 435,
+    "priorResourcesMissing": 0,
+    "priorResourceChanges": 11,
+    "changesRestrictedToUnityHelper": true,
+    "unexportedDraftPreservedLocally": true
+  },
+  "presentation": {
+    "previousPlayerCapability": 4,
+    "installedPlayerCapability": 7,
+    "sourceAsset": "liminal-v008",
+    "lightStyle": "liminal-light-flow/v12",
+    "finishSHA256": "392f3f6aae7a6f550b417cf75a92e25071be37851489ccf19bfbebb4d20becdf",
+    "lightSHA256": "451164aa6eee794ed2bcf4729ab6ef3cb408889ed318fd7239cb76ce119e7c29",
+    "originalSeedAndBaseAssetPreserved": true
+  },
+  "verification": {
+    "unityPlay": {
+      "passedAssertions": 612,
+      "failedAssertions": 0,
+      "observedSourceFrames": 85,
+      "physicsSteps": 323,
+      "metalDraws": true,
+      "syntheticRecordsOnly": true,
+      "gpuBufferReadbackClaim": false
+    },
+    "unitySceneContracts": {
+      "relayAssertions": 136,
+      "nativePresentationAssertions": 77
+    },
+    "unityBuild": {
+      "target": "macOS ARM64",
+      "version": "6000.5.4f1",
+      "errors": 0,
+      "warnings": 0
+    },
+    "authoredUnityInputs": {
+      "files": 1124,
+      "changed": 0,
+      "added": 0,
+      "removed": 0
+    },
+    "nativeGPU": {
+      "testsPassed": 4,
+      "testsFailed": 0,
+      "testsSkipped": 0,
+      "scope": [
+        "qualified frame and stable-ID correspondence",
+        "v11 finish captures and corruption rejection",
+        "v12 bounded light expression",
+        "static Reduce Motion and inspection"
+      ],
+      "existingTestCompilerWarningsRemain": true
+    },
+    "installedHelperIPC": {
+      "testsPassed": 1,
+      "testsFailed": 0,
+      "seconds": 10.389,
+      "phases": [
+        {
+          "phase": "seed",
+          "acknowledged": true
+        },
+        {
+          "phase": "ball",
+          "acknowledged": true
+        },
+        {
+          "phase": "beast",
+          "acknowledged": true
+        },
+        {
+          "phase": "light-withdrawn",
+          "acknowledged": true
+        },
+        {
+          "phase": "finish-withdrawn",
+          "acknowledged": true
+        },
+        {
+          "phase": "structure-withdrawn",
+          "acknowledged": true
+        },
+        {
+          "phase": "finish-restored",
+          "acknowledged": true
+        }
+      ],
+      "syntheticSession": true,
+      "personalProfileOpened": false,
+      "ownedPlayerTerminated": true
+    },
+    "installedPersonalWalkthrough": {
+      "memoryMapOpened": true,
+      "realNodeSelectionOpenedVersionSourcesAndBacklinks": true,
+      "arenaRoundTripComplete": false,
+      "blocker": "Computer-use ScreenCaptureKit returned -3812 after the successful memory selection; no Arena UI acceptance claimed"
+    },
+    "modelCalls": 0,
+    "puzzleRuns": 0,
+    "broadBenchmarkSuite": false,
+    "phoneUpdated": false,
+    "measured30fps": false
+  },
+  "phoneReadiness": {
+    "installedVersion": "0.6.5",
+    "installedBuild": "11",
+    "currentSourceNeedsFreshPlayPackaging": true,
+    "developmentSigningExpiresUTC": "2026-10-05T00:34:18Z",
+    "desktopMemoryGraphSync": false,
+    "phoneNativeMetalV008": false,
+    "liveAppleIntelligenceAvailabilityChecked": false
+  },
+  "remaining": [
+    "Installed personal desktop-to-Arena-to-desktop, profile/color/reduced-motion walkthrough",
+    "Sustained active frame-rate measurement and dense-graph/accessibility checks",
+    "Fresh iPhone source packaging, signing and preservation-aware device walkthrough",
+    "Useful method Apply, owner judgment, restart and reuse evidence",
+    "Existing cross-owner recovery, rights, CI authorization, another-Mac distribution and release gates"
+  ],
+  "privacy": "Public aggregate receipt only. Private profile IDs, record contents and hashes, screenshots, drafts, runtime session IDs and device identifiers are excluded.",
+  "localEvidence": "output/runtime-delivery-2026-10-03",
+  "pullRequest": "https://github.com/cr8ph8/ARCHi/pull/1"
+}

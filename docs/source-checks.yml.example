@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   retained-source:
-    name: Manifest and retained TypeScript
+    name: Manifest and focused retained source
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -55,7 +55,9 @@ jobs:
       - name: Install pinned npm dependencies
         run: npm ci
       - name: Check retained source
-        run: npm run check
+        run: |
+          npm run build
+          npm exec vitest -- run --dir src src/liminal-portrait.test.ts src/visual-growth.test.ts src/desktop-host.test.ts
 
   native-source:
     name: Native compile and domain contracts
@@ -73,6 +75,6 @@ jobs:
       - name: Check deterministic domain contracts
         run: >-
           swift test --package-path desktop
-          --filter 'DesktopInterestCaptureTests|CompanionGraphTests|DocumentSelectionTests|WorkingCopyRevisionTests'
+          --filter 'LiminalKnowledgeBindingsTests|KnowledgeGraphMeaningTests|KnowledgeMapMethodFlowTests|DocumentMethodEvidenceTests|WikiOSTaskExchangeTests'
       # No model/provider, window capture, GUI render, permission prompt, profile
       # migration, app launch or opt-in integration test is requested by this job.

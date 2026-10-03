@@ -14,7 +14,17 @@ struct AssistantRequest: Sendable {
     let placementRevision: UInt64
     let settings: AssistantSettingsSnapshot
     let localLessons: [LessonSnapshot]
+    let localProfile: PersonalContextSnapshot?
     let localConversation: [AssistantConversationExchange]
+    let localControl: HamptonQ2EDecision?
+    let localReading: DocumentReadingPlan?
+    let localKnowledge: KnowledgePageContext?
+    /// A request-scoped acquisition draft; never a lesson, dialogue or outcome.
+    let localMethodDraft: KnowledgeMethodDraftRequest?
+    let localConceptDraft: KnowledgeConceptDraftRequest?
+    var isKnowledgeAcquisition: Bool { localMethodDraft != nil || localConceptDraft != nil }
+    /// Native provenance only; page prose is not an instruction or cloud input.
+    let localProcedureKnowledge: [KnowledgePageBinding]?
     let revisionTarget: RevisionTarget?
     let companion: LocalQiMon.Character?
     var selection: DocumentSelection? = nil
@@ -26,18 +36,30 @@ struct AssistantRequest: Sendable {
          placementRevision: UInt64, tone: String, replyLength: Double, selection: DocumentSelection? = nil,
          role: EvolutionRole? = nil, helpStyle: EvolutionHelpStyle? = nil,
          localLessons: [LessonSnapshot] = [], revisionTarget: RevisionTarget? = nil,
-         companion: LocalQiMon.Character? = nil, localConversation: [AssistantConversationExchange] = []) {
+         companion: LocalQiMon.Character? = nil, localConversation: [AssistantConversationExchange] = [],
+         localProfile: PersonalContextSnapshot? = nil, localControl: HamptonQ2EDecision? = nil,
+         localReading: DocumentReadingPlan? = nil, localKnowledge: KnowledgePageContext? = nil,
+         localProcedureKnowledge: [KnowledgePageBinding]? = nil,
+         localMethodDraft: KnowledgeMethodDraftRequest? = nil,
+         localConceptDraft: KnowledgeConceptDraftRequest? = nil) {
         self.init(prompt: prompt, sourceName: sourceName, sourceText: sourceText,
             sourceRevision: sourceRevision, placementRevision: placementRevision,
             settings: AssistantSettingsSnapshot(tone: tone, replyLength: replyLength, role: role, helpStyle: helpStyle),
             selection: selection, localLessons: localLessons, revisionTarget: revisionTarget, companion: companion,
-            localConversation: localConversation)
+            localConversation: localConversation, localProfile: localProfile, localControl: localControl,
+            localReading: localReading, localKnowledge: localKnowledge, localProcedureKnowledge: localProcedureKnowledge,
+            localMethodDraft: localMethodDraft, localConceptDraft: localConceptDraft)
     }
 
     init(prompt: String, sourceName: String?, sourceText: String, sourceRevision: UInt64,
          placementRevision: UInt64, settings: AssistantSettingsSnapshot, selection: DocumentSelection? = nil,
          localLessons: [LessonSnapshot] = [], revisionTarget: RevisionTarget? = nil,
-         companion: LocalQiMon.Character? = nil, localConversation: [AssistantConversationExchange] = []) {
+         companion: LocalQiMon.Character? = nil, localConversation: [AssistantConversationExchange] = [],
+         localProfile: PersonalContextSnapshot? = nil, localControl: HamptonQ2EDecision? = nil,
+         localReading: DocumentReadingPlan? = nil, localKnowledge: KnowledgePageContext? = nil,
+         localProcedureKnowledge: [KnowledgePageBinding]? = nil,
+         localMethodDraft: KnowledgeMethodDraftRequest? = nil,
+         localConceptDraft: KnowledgeConceptDraftRequest? = nil) {
         self.prompt = prompt
         self.sourceName = sourceName
         self.sourceText = sourceText
@@ -46,7 +68,14 @@ struct AssistantRequest: Sendable {
         self.settings = settings
         self.selection = selection
         self.localLessons = localLessons
+        self.localProfile = localProfile
         self.localConversation = localConversation
+        self.localControl = localControl
+        self.localReading = localReading
+        self.localKnowledge = localKnowledge
+        self.localMethodDraft = localMethodDraft
+        self.localConceptDraft = localConceptDraft
+        self.localProcedureKnowledge = localProcedureKnowledge
         self.revisionTarget = revisionTarget
         self.companion = companion
     }
@@ -56,27 +85,148 @@ struct AssistantRequest: Sendable {
     }
 
     var hasValidLocalLessons: Bool { NativePreferenceDocument.validateLessonSnapshots(localLessons) }
+    var hasValidLocalProfile: Bool { localProfile?.isValid ?? true }
     var hasValidLocalConversation: Bool { AssistantConversation.validate(localConversation) }
+    var hasValidLocalMethodDraft: Bool {
+        guard let localMethodDraft else { return true }
+        return localConceptDraft == nil && localKnowledge == localMethodDraft.context && prompt == localMethodDraft.prompt
+            && hasValidLocalKnowledge && localLessons.isEmpty && localConversation.isEmpty
+            && localProfile == nil && localProcedureKnowledge == nil && companion == nil
+    }
+    var hasValidLocalConceptDraft: Bool {
+        guard let target = localConceptDraft else { return true }
+        return target.isValid && prompt == target.prompt && localMethodDraft == nil && localKnowledge == nil
+            && localReading == nil && localControl == nil && localLessons.isEmpty && localConversation.isEmpty
+            && localProfile == nil && localProcedureKnowledge == nil && companion == nil
+            && sourceName == nil && sourceText.isEmpty && selection == nil && revisionTarget == nil
+    }
+    var hasValidLocalProcedureKnowledge: Bool {
+        guard let localProcedureKnowledge else { return true }
+        return KnowledgePageBinding.valid(localProcedureKnowledge) && revisionTarget != nil
+            && localKnowledge == nil && localReading == nil
+    }
+    var hasValidLocalKnowledge: Bool {
+        guard let localKnowledge else { return true }
+        guard localKnowledge.isValid, sourceName == nil, sourceText.isEmpty, selection == nil,
+              revisionTarget == nil, localReading == nil, localControl == nil else { return false }
+        let ids = sourceIDs + (localReading?.sourceIDs ?? [])
+            + AssistantConversation.sourceIDs(for: localConversation) + localKnowledge.sourceIDs
+        return Set(ids).count == ids.count
+    }
+    var hasValidLocalControl: Bool {
+        if let localReading {
+            guard revisionTarget == nil, sourceName != nil,
+                  localReading.matches(text: sourceText, question: prompt, selection: selection, references: localReading.references),
+                  let localControl, localControl.isValid, localControl.domain == "document-reading",
+                  localControl.contextID == localReading.sourceDigest, localControl.lane != .stop else { return false }
+            if localControl.version == HamptonQ2EController.readingNumericalVersion {
+                guard let evidence = localControl.readingEvidence,
+                      let expected = DocumentReadingPlan.make(text: sourceText, question: prompt,
+                        selection: selection, lane: localControl.lane,
+                        preferredSectionIDs: evidence.preferredSectionIDs(for: localReading.questionDigest),
+                        references: localReading.references), expected == localReading else { return false }
+            }
+            return true
+        }
+        guard let localControl else { return true }
+        guard let revisionTarget else { return false }
+        return localControl.isValid && localControl.domain == "document-revision"
+            && localControl.contextID == revisionTarget.sourceDigest && localControl.lane != .stop
+    }
 
     var localConversationDigest: String? { AssistantConversation.digest(for: localConversation) }
     var localConversationUTF8Bytes: Int { AssistantConversation.utf8ByteCount(for: localConversation) }
-    var localSourceIDs: [String] { sourceIDs + AssistantConversation.sourceIDs(for: localConversation) }
+    var localSourceIDs: [String] {
+        sourceIDs + (localReading?.sourceIDs ?? []) + AssistantConversation.sourceIDs(for: localConversation)
+            + (localKnowledge?.sourceIDs ?? []) + (localConceptDraft?.sourceIDs ?? [])
+    }
 
     func replacingLocalConversation(_ exchanges: [AssistantConversationExchange]) -> AssistantRequest {
         AssistantRequest(prompt: prompt, sourceName: sourceName, sourceText: sourceText,
             sourceRevision: sourceRevision, placementRevision: placementRevision, settings: settings,
             selection: selection, localLessons: localLessons, revisionTarget: revisionTarget,
-            companion: companion, localConversation: exchanges)
+            companion: companion, localConversation: exchanges, localProfile: localProfile, localControl: localControl,
+            localReading: localReading, localKnowledge: localKnowledge, localProcedureKnowledge: localProcedureKnowledge,
+            localMethodDraft: localMethodDraft, localConceptDraft: localConceptDraft)
     }
 
-    /// The common v4 input is unchanged. Only local requests add this separately
-    /// versioned conversation envelope; no conversation text crosses to Codex.
+    /// The common v4 input is unchanged. Local context and the fixed native work
+    /// instruction stay on the local route; none of them cross to Codex.
     var localContextInput: String {
-        guard let conversation = AssistantConversation.modelInput(for: localConversation),
-              var value = try? JSONDecoder().decode(JSONValue.self, from: Data(input.utf8)).object else { return input }
-        value["localConversation"] = conversation
+        guard hasValidLocalKnowledge, hasValidLocalProcedureKnowledge, hasValidLocalMethodDraft, hasValidLocalConceptDraft else { return "" }
+        guard var value = try? JSONDecoder().decode(JSONValue.self, from: Data(input.utf8)).object else { return input }
+        if let conversation = AssistantConversation.modelInput(for: localConversation) { value["localConversation"] = conversation }
+        if let localProfile { value["localProfile"] = localProfile.modelInput }
+        let workControl = localWorkControl
+        if let workControl { value["workControl"] = workControl }
+        if let localReading, hasValidLocalControl {
+            // Keep the full original in the native request for freshness and
+            // external-route disclosure. Only local reading uses these excerpts.
+            value["source"] = .object([
+                "name": .string(sourceName ?? "Shared copy"),
+                "revision": .string(String(sourceRevision)),
+                "fullDocumentSHA256": .string(localReading.primarySourceDigest),
+                "readingContextSHA256": .string(localReading.sourceDigest),
+                "totalSources": .number(Double(localReading.totalSources)),
+                "omittedSourceIDs": .array(localReading.omittedSourceIDs.map { .string($0) }),
+                "partial": .bool(localReading.isPartial),
+                "totalSections": .number(Double(localReading.totalSections)),
+                "sections": .array(localReading.sections.map { section in
+                    var fields: [String: JSONValue] = [
+                        "id": .string(section.id), "title": .string(section.title),
+                        "sourceID": .string(section.sourceID), "sourceTitle": .string(section.sourceTitle),
+                        "sourceSHA256": .string(section.sourceDigest),
+                        "text": .string(section.text), "sha256": .string(section.sha256),
+                        "utf16Location": .number(Double(section.location)),
+                        "utf16Length": .number(Double(section.length))
+                    ]
+                    if let provenance = localReading.references.first(where: { $0.id == section.sourceID })?.binding.provenance {
+                        fields["provenance"] = provenance.modelInput
+                    }
+                    return .object(fields)
+                })
+            ])
+        }
+        if let localKnowledge {
+            value["localKnowledge"] = localKnowledge.modelInput
+            value["sources"] = .array(localSourceIDs.map { .object(["id": .string($0), "label": .string($0)]) })
+        }
+        if let localConceptDraft {
+            value["localConceptDraft"] = localConceptDraft.modelInput
+            value["sources"] = .array(localSourceIDs.map { .object(["id": .string($0), "label": .string($0)]) })
+        }
+        if localConceptDraft == nil && localProfile == nil && localConversation.isEmpty && workControl == nil && localReading == nil && localKnowledge == nil { return input }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         return String(decoding: (try? encoder.encode(JSONValue.object(value))) ?? Data(), as: UTF8.self)
+    }
+
+    /// Only application-authored lane guidance reaches generation. Reasons,
+    /// scores, source bindings and historical observations remain native data.
+    private var localWorkControl: JSONValue? {
+        guard let localControl, hasValidLocalControl else { return nil }
+        let instruction: String
+        if localReading != nil {
+            switch localControl.lane {
+            case .retain: instruction = "Use the supplied source sections, including previously helpful context where available, to answer the current question. Recheck each claim against the current excerpts."
+            case .expand: instruction = "Build the answer from the supplied relevant sections. Identify missing coverage and avoid conclusions about omitted document content."
+            case .repair: instruction = "Reconsider the reading using the supplied wider context. Check for conflicting statements and explain remaining gaps before answering."
+            case .stop: return nil
+            }
+            return .object(["version": .string(localControl.version), "lane": .string(localControl.lane.rawValue),
+                            "instruction": .string(instruction)])
+        }
+        switch localControl.lane {
+        case .retain:
+            instruction = "Follow the user's supplied method and requirements."
+        case .expand:
+            instruction = "Propose one bounded solution to the current request, following the user's chosen method and requirements when supplied."
+        case .repair:
+            instruction = "Reassess the approach and check the current stated constraints before proposing a corrected solution."
+        case .stop:
+            return nil
+        }
+        return .object(["version": .string(localControl.version), "lane": .string(localControl.lane.rawValue),
+                        "instruction": .string(instruction)])
     }
 
     var hasValidRevisionTarget: Bool {
@@ -140,7 +290,7 @@ struct AssistantRequest: Sendable {
         if let revisionTarget { data["revisionTarget"] = revisionTarget.input }
         // Only a fixed display name crosses the assistant boundary. The local
         // owner association, origin digest and welcome date remain on this Mac.
-        if companion == .kin { data["companion"] = .object(["displayName": .string("KIN")]) }
+        if let companion { data["companion"] = .object(["displayName": .string(companion == .kin ? "KIN" : "Liminal")]) }
         if let role = settings.role { data["role"] = .string(role.rawValue) }
         if let helpStyle = settings.helpStyle { data["helpStyle"] = .string(helpStyle.rawValue) }
         return String(decoding: (try? JSONEncoder().encode(JSONValue.object(data))) ?? Data(), as: UTF8.self)
@@ -335,7 +485,12 @@ final class CodexAssistant: AssistantClient {
     }
 
     func reply(to request: AssistantRequest, onEvent: @escaping @MainActor (AssistantEvent) -> Void) async throws {
-        guard request.hasValidSelection, request.hasValidRevisionTarget else { throw AssistantFailure.protocolError }
+        // Selected knowledge pages authorize a local-only request, including
+        // its question. A direct client call cannot turn that into cloud fallback.
+        guard request.localKnowledge == nil, request.localProcedureKnowledge == nil, !request.isKnowledgeAcquisition,
+              request.hasValidSelection, request.hasValidRevisionTarget else {
+            throw AssistantFailure.protocolError
+        }
         guard connected, !busy, activeThread == nil, let directory else { throw AssistantFailure.unavailable }
         busy = true
         let owner = ownership
@@ -476,8 +631,7 @@ final class CodexAssistant: AssistantClient {
 
     private func send(_ message: JSONValue) throws {
         guard let input else { throw AssistantFailure.unavailable }
-        var data = try JSONEncoder().encode(message); data.append(10)
-        guard data.count <= 524_288 else { throw AssistantFailure.protocolError }
+        guard let data = try RevisionLiteralBudget.codexMessageData(message) else { throw AssistantFailure.protocolError }
         try input.write(contentsOf: data)
     }
 
@@ -486,7 +640,17 @@ final class CodexAssistant: AssistantClient {
         buffer.append(data)
         while let end = buffer.firstIndex(of: 10) {
             let line = buffer[..<end]; buffer.removeSubrange(...end)
-            guard line.count <= 524_288, let value = try? JSONDecoder().decode(JSONValue.self, from: line) else { stopProcess(error: .protocolError); return }
+            guard line.count <= 524_288 else { stopProcess(error: .protocolError); return }
+            let value: JSONValue
+            do {
+                // Configuration and identity readbacks are security inputs too.
+                // Reject ambiguous fields (including escaped nested duplicates)
+                // before a dictionary decoder can silently choose one value.
+                var scanner = UniqueJSONKeys(bytes: Array(line))
+                try scanner.validate()
+                value = try JSONDecoder().decode(JSONValue.self, from: line)
+                guard value.object != nil else { throw AssistantFailure.protocolError }
+            } catch { stopProcess(error: .protocolError); return }
             if value["method"] != nil && value["id"] != nil {
                 // This client grants no server-initiated action, login, or approval request.
                 stopProcess(error: .protocolError); return

@@ -6,7 +6,7 @@ final class HamptonStoreTests: XCTestCase {
     func testNativeWrapperStartsWithContextOffAndOnlyExplicitSendGenerates() async throws {
         let factory = HamptonStoreFactory()
         let store = CompanionStore(preferenceURL: preferences,
-            assistantFactory: { provider, model in factory.make(provider, model) })
+            assistantFactory: { provider, model in factory.make(provider, model) }, tokenSteward: TokenStewardStore())
         defer { store.disconnectAssistant(); factory.drain() }
         let rig = try XCTUnwrap(factory.rigs.first)
         XCTAssertEqual(store.assistantProvider, .qwen)
@@ -141,8 +141,8 @@ final class HamptonStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testPlacementAndSelectionRevisionCancelPendingContextWithoutPublishingTentativeBank() async throws {
-        for move in [true, false] {
+    func testSelectionChangesCancelPendingContextWithoutPublishingTentativeBank() async throws {
+        for clearSelection in [true, false] {
             let rig = HamptonStoreRig(), store = makeStore(rig)
             defer { store.disconnectAssistant(); rig.drain() }
             try await seed(store)
@@ -150,7 +150,7 @@ final class HamptonStoreTests: XCTestCase {
             let committedRecords = store.hamptonSnapshot.records
             let pending = try await suspendNextTurn(store, rig: rig)
             let ticket = store.contextTicket()
-            if move { store.placed(at: CGPoint(x: -375, y: 512)) }
+            if clearSelection { store.clearTextSelection() }
             else { store.selectText(range: NSRange(location: 5, length: 4), sourceRevision: store.sourceRevision) }
             XCTAssertFalse(store.isCurrent(ticket, requireVisible: false))
             XCTAssertFalse(store.isWorking)
@@ -159,20 +159,20 @@ final class HamptonStoreTests: XCTestCase {
             XCTAssertEqual(store.hamptonSnapshot.records, committedRecords)
             let after = store.hamptonSnapshot, reply = store.reply, status = store.status
             rig.reasoner.resolve(pending)
-            try await waitUntil("The stale placement/selection result should drain") { rig.reasoner.finished.contains(pending) }
+            try await waitUntil("The stale selection result should drain") { rig.reasoner.finished.contains(pending) }
             await Task.yield()
             XCTAssertEqual(store.hamptonSnapshot, after)
             XCTAssertEqual(store.reply, reply)
             XCTAssertEqual(store.status, status)
             XCTAssertEqual(store.hamptonSnapshot.turn, 1)
-            if move { XCTAssertEqual(store.position, CGPoint(x: -375, y: 512)) }
+            if clearSelection { XCTAssertNil(store.textSelection) }
             else { XCTAssertEqual(store.textSelection?.quote, "Two.") }
         }
     }
 
     @MainActor
-    func testCompletedUnscopedAnswerIsClearedWhenPlacementVisibilityOrSelectionChanges() async throws {
-        for invalidation in ["placement", "visibility", "selection"] {
+    func testCompletedUnscopedAnswerIsClearedWhenVisibilityOrSelectionChanges() async throws {
+        for invalidation in ["visibility", "selection"] {
             let rig = HamptonStoreRig(), store = makeStore(rig)
             defer { store.disconnectAssistant(); rig.drain() }
             try await seed(store)
@@ -182,7 +182,6 @@ final class HamptonStoreTests: XCTestCase {
             XCTAssertEqual(store.compareResults[.qwen]?.state, .complete)
             XCTAssertFalse(store.isWorking)
             switch invalidation {
-            case "placement": store.placed(at: CGPoint(x: -375, y: 512))
             case "visibility": store.hideCompanion()
             default: store.selectText(range: NSRange(location: 0, length: 4), sourceRevision: store.sourceRevision)
             }
@@ -397,7 +396,16 @@ final class HamptonStoreTests: XCTestCase {
     }
 
     @MainActor
-    private var preferences: URL { URL(fileURLWithPath: "/dev/null/unused") }
+    private var preferences: URL {
+        // Shared-source requests now check the profile's recovery state before
+        // dispatch. A non-directory /dev/null parent is a broken profile, not an
+        // empty in-memory fixture.
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hampton-store-\(UUID().uuidString)", isDirectory: true)
+        try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        return directory.appendingPathComponent("preferences.json")
+    }
 
     @MainActor
     private func makeStore(_ rig: HamptonStoreRig, factory: HamptonStoreFactory? = nil) -> CompanionStore {
@@ -406,7 +414,7 @@ final class HamptonStoreTests: XCTestCase {
                 if let factory { return factory.make(provider, model) }
                 XCTFail("This test should not replace its injected client")
                 return HamptonStoreCodexClient()
-            })
+            }, tokenSteward: TokenStewardStore())
     }
 
     @MainActor

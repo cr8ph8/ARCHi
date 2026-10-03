@@ -1,0 +1,94 @@
+{
+  "schema": "archi-image-region-workflow/v1",
+  "date": "2026-10-03",
+  "status": "INSTALLED_FOCUSED_CHECKS_PASSED_LIVE_WALKTHROUGH_PENDING",
+  "scope": "Native image selection, crop-only local OCR, current memory particles and reviewed-text handoff through existing work owners",
+  "newPersistentOwners": 0,
+  "modelCalls": 0,
+  "puzzleRuns": 0,
+  "phoneAppChanged": false,
+  "installedAppReplaced": true,
+  "owners": {
+    "sharedContract": "shared/ARCHiSpatial",
+    "records": "Existing ARCHi native records",
+    "handoff": "CompanionStore working copy and document methods/outcomes",
+    "particleIdentity": "Existing graph-record IDs and KnowledgeParticleView"
+  },
+  "checks": {
+    "curatedNative": {
+      "executed": 82,
+      "passed": 81,
+      "skipped": 1,
+      "failed": 0,
+      "log": "output/image-region-workflow-2026-10-03/archi-image-region-publication-contracts.log"
+    },
+    "localVision": {
+      "passed": 1,
+      "scope": "Synthetic selected ALPHA742 crop excludes BETA913 outside region; no model call",
+      "environment": "Required macOS Vision service access outside tool sandbox",
+      "log": "output/image-region-workflow-2026-10-03/archi-image-region-vision.log"
+    },
+    "sharedContracts": {
+      "passed": 13,
+      "failed": 0
+    },
+    "publicationParityTests": {
+      "passed": 13,
+      "failed": 0
+    },
+    "nativePresentation": {
+      "passed": true,
+      "fixtureRecords": 4,
+      "progress": [
+        0,
+        0.5,
+        1
+      ],
+      "scope": "Actual native Canvas/ImageRenderer with synthetic graph IDs; rendered points agree with shared geometry; not an installed interaction test"
+    },
+    "iPhoneOSSharedModule": {
+      "compiled": true,
+      "linked": true,
+      "architecture": "arm64",
+      "minimumOS": "17.0",
+      "swiftVersion": "6",
+      "strictConcurrency": true,
+      "sourceSHA256": "eeb94c3aa02c9d310a2c4299bb6ab40f0d82f6e2a33c17628994a26e1b294a8a"
+    },
+    "parity": {
+      "matched": 1013,
+      "reviewedResourcePinPairs": 4,
+      "unresolvedUnrelatedQiMonPaths": 4,
+      "fullParityPassed": false
+    },
+    "finalUIRecheck": {
+      "passed": 19,
+      "failed": 0,
+      "scope": "Import/navigation guards, bounded particles and synthetic native rendering after repeated-query preservation fix; overlaps with main suite"
+    }
+  },
+  "remaining": [
+    "Installed region selection/inspector/working-copy walkthrough",
+    "Native screen capture still fails with ScreenCaptureKit -3811 after reset; installed app process running",
+    "iPhone consumer, photo/file picker and device validation",
+    "Qualified phone particle package/rendering and measured performance",
+    "ARKit/RealityKit placement/tracking/interruption tests",
+    "Explicit versioned phone/desktop memory transfer",
+    "Existing supervised-alpha release blockers"
+  ],
+  "limits": "Component and native synthetic rendering checks are not evidence of Hampton theory validation, model training, live AR, sync, or a completed real-world learning outcome.",
+  "delivery": {
+    "status": "INSTALLED_FOCUSED_CHECKS_PASSED_LIVE_WALKTHROUGH_PENDING",
+    "installedUUID": "BE5837B6-1178-3CDE-985D-0461BBE77809",
+    "compiledUUID": "BE5837B6-1178-3CDE-985D-0461BBE77809",
+    "installedBinarySHA256": "e97beae4d09988c1a2607e193cf89a69b234320c9ed6cf3fac57b1db706178a6",
+    "strictSigningPassed": true,
+    "monitoredProfileFiles": 23,
+    "changedProfileFiles": [],
+    "rollbackRetained": true,
+    "installedWalkthroughPassed": false,
+    "processRunningAfterLaunchRequest": true,
+    "nativeCaptureFailure": "ScreenCaptureKit -3811 after tool reset and final installed launch request",
+    "postLaunchChangedProfileFiles": []
+  }
+}

@@ -7,65 +7,73 @@ struct KinArt: View {
     let size: CGFloat
     let reduceMotion: Bool
     var lightExpression: KinLightExpression = .resting
+    var treatment: CompanionVisualTreatment = .original
+    var seedColor: CompanionSeedColor = .original
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     var body: some View {
         Group {
-            if form == .kinSeed {
-                KinSeedPortrait(size: size, reduceMotion: reduceMotion, lightExpression: lightExpression)
-            } else if form == .kin {
-                KinFirstLightPortrait(size: size, reduceMotion: reduceMotion, lightExpression: lightExpression,
-                    bodyImage: CompanionVisualAsset.kinFirstLightImage)
+            if form == .kinSeed || form == .kin {
+                // One stable view and attention clock survive Keep/Return/Resume.
+                KinLivingPortrait(form: form == .kin ? .firstLight : .seed, size: size,
+                    reduceMotion: reduceMotion, lightExpression: lightExpression,
+                    bodyImage: CompanionVisualAsset.firstLightImage(treatment: treatment))
             } else {
-                TimelineView(.animation(minimumInterval: 1 / 24, paused: reduceMotion)) { time in
+                TimelineView(.animation(minimumInterval: 1 / 24, paused: reduceMotion || systemReduceMotion)) { time in
                     KinDrawing(spark: form == .kinSpark, detailed: form == .kin)
-                        .offset(y: reduceMotion ? 0 : sin(time.date.timeIntervalSinceReferenceDate * 1.4) * size * 0.014)
+                        .offset(y: reduceMotion || systemReduceMotion ? 0 : sin(time.date.timeIntervalSinceReferenceDate * 1.4) * size * 0.014)
                 }
             }
         }
+        .environment(\.companionSeedColor, seedColor)
         .frame(width: size, height: size)
-        .accessibilityLabel(form.rawValue)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(CompanionVisualAsset.label(form: form, family: nil, treatment: treatment, seedColor: seedColor))
     }
 }
 
-/// The reviewed Blender portrait or retained native drawing follows the same
-/// attention clock as Seed. The injected image keeps fallback verification local
-/// to this view; there is no user file importer or second appearance owner.
+/// Retained entry point for reviewed-body/fallback previews. Its source image is
+/// injected only for local verification, never through a user asset importer.
 struct KinFirstLightPortrait: View {
+    let size: CGFloat
+    let reduceMotion: Bool
+    let lightExpression: KinLightExpression
+    let bodyImage: NSImage?
+
+    var body: some View {
+        KinLivingPortrait(form: .firstLight, size: size, reduceMotion: reduceMotion,
+            lightExpression: lightExpression, bodyImage: bodyImage)
+    }
+}
+
+private struct KinLivingPortrait: View {
+    let form: KinPresentationTransition.Form
     let size: CGFloat
     let reduceMotion: Bool
     let lightExpression: KinLightExpression
     let bodyImage: NSImage?
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @State private var motion: KinSeedMotion?
+    @State private var transition: KinPresentationTransition?
 
     private var motionPolicy: KinSeedMotion.Policy {
         .init(mode: lightExpression.mode, reduceMotion: reduceMotion, systemReduceMotion: systemReduceMotion)
+    }
+    private var transitionPolicy: KinPresentationTransition.Policy {
+        .init(reduceMotion: reduceMotion, systemReduceMotion: systemReduceMotion)
     }
 
     var body: some View {
         let still = reduceMotion || systemReduceMotion
         TimelineView(.animation(minimumInterval: 1 / 24, paused: still)) { _ in
-            let pose = motion?.sample(at: ProcessInfo.processInfo.systemUptime)
-                ?? KinSeedMotion(at: 0, policy: motionPolicy).sample(at: 0)
-            Group {
-                if let bodyImage {
-                    Image(nsImage: bodyImage).resizable().interpolation(.high).scaledToFit()
-                } else {
-                    KinDrawing(spark: false, detailed: true)
-                }
-            }
-                .frame(width: size, height: size)
-                .overlay {
-                    if lightExpression.mode != .rest {
-                        KinLightEffects(expression: lightExpression,
-                            size: size * KinFirstLightPresentation.effectScale, reduceMotion: still)
-                            .offset(x: size * (KinFirstLightPresentation.coreX - 0.5),
-                                y: size * (KinFirstLightPresentation.coreY - 0.5))
-                            .allowsHitTesting(false)
-                            .accessibilityHidden(true)
-                    }
-                }
-                .offset(y: KinFirstLightPresentation.verticalOffset(for: pose) * size)
+            let now = ProcessInfo.processInfo.systemUptime
+            let pose = motion?.sample(at: now) ?? KinSeedMotion(at: 0, policy: motionPolicy).sample(at: 0)
+            // A static render/export always contains the exact requested body.
+            let sample = still ? KinPresentationTransition(form: form).sample(at: 0)
+                : (transition?.sample(at: now) ?? KinPresentationTransition(form: form).sample(at: 0))
+            KinPresentationFrame(size: size, pose: pose, sample: sample,
+                reduceMotion: still, lightExpression: lightExpression, bodyImage: bodyImage,
+                lightTime: still || lightExpression.mode == .hold ? 0 : now)
         }
         .frame(width: size, height: size)
         .onChange(of: motionPolicy, initial: true) { _, policy in
@@ -73,6 +81,143 @@ struct KinFirstLightPortrait: View {
             if motion == nil { motion = KinSeedMotion(at: now, policy: policy) }
             else { motion?.transition(to: policy, at: now) }
         }
+        .onChange(of: form, initial: true) { _, _ in updateTransition() }
+        .onChange(of: transitionPolicy) { _, _ in updateTransition() }
+    }
+
+    private func updateTransition() {
+        let now = ProcessInfo.processInfo.systemUptime
+        if transition == nil { transition = KinPresentationTransition(form: form, policy: transitionPolicy, at: now) }
+        else { transition?.transition(to: form, policy: transitionPolicy, at: now) }
+    }
+}
+
+/// Shared render frame for current portraits, their reversible transition, and
+/// deterministic visual checks. Only the approved portraits are dissolved. The
+/// same light expression follows their common pearl; there are no two identities.
+struct KinPresentationFrame: View {
+    let size: CGFloat
+    let pose: KinSeedMotion.Sample
+    let sample: KinPresentationTransition.Sample
+    let reduceMotion: Bool
+    let lightExpression: KinLightExpression
+    let bodyImage: NSImage?
+    var lightTime: TimeInterval = 0
+    @Environment(\.companionSeedColor) private var seedColor
+
+    var body: some View {
+        let progress = sample.bodyAmount
+        let float = KinFirstLightPresentation.verticalOffset(for: pose) * size * progress
+        ZStack {
+            if sample.seedOpacity > 0 {
+                Group {
+                    if let image = SeedColorRendering.image(for: .kinSeed, color: seedColor) {
+                        ZStack {
+                            // Emission follows the actual authored motes, behind
+                            // the selected artwork. The pearl stays untouched.
+                            KinSeedParticleEmission(image: image, expression: lightExpression,
+                                phase: emissionPhase, size: size)
+                            Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
+                        }
+                        .rotationEffect(.degrees(pose.angle))
+                    } else {
+                        KinCoreSeedFrame(phase: pose.radians)
+                            .modifier(SeedFallbackColor(color: seedColor, sourceHue: 0.105))
+                    }
+                }
+                .frame(width: size, height: size)
+                // Reserve transparent room for a full turn and soft emission;
+                // the containing desktop/window frame remains unchanged.
+                .scaleEffect(sample.seedScale * KinSeedPortraitLayout.contentScale)
+                .offset(x: size * (sample.coreX - 0.5), y: size * (sample.coreY - 0.5) + float)
+                .opacity(sample.seedOpacity)
+            }
+            if sample.bodyOpacity > 0 {
+                Group {
+                    if let bodyImage {
+                        Image(nsImage: bodyImage).resizable().interpolation(.high).scaledToFit()
+                    } else {
+                        KinDrawing(spark: false, detailed: true)
+                    }
+                }
+                .frame(width: size, height: size)
+                .scaleEffect(sample.bodyScale)
+                .offset(x: size * (sample.coreX - (0.5 + (KinFirstLightPresentation.coreX - 0.5) * sample.bodyScale)),
+                    y: size * (sample.coreY - (0.5 + (KinFirstLightPresentation.coreY - 0.5) * sample.bodyScale)) + float)
+                .opacity(sample.bodyOpacity)
+            }
+        }
+        .frame(width: size, height: size)
+        .overlay {
+            if lightExpression.mode != .rest {
+                // Use the portrait's existing sampled clock for every light
+                // layer, including settled Focus and static Reduce Motion.
+                KinLightEffectsFrame(expression: lightExpression,
+                    phase: reduceMotion || lightExpression.mode == .hold ? 0
+                        : LightFormGeometry.normalizedPhase(lightTime * 0.16),
+                    centerY: 0.5,
+                    emissionPhase: emissionPhase)
+                    .frame(width: effectSize(progress: progress), height: effectSize(progress: progress))
+                    .offset(x: size * (sample.coreX - 0.5), y: size * (sample.coreY - 0.5) + float)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(width: size, height: size)
+        // The sampled clock owns timing; a surrounding SwiftUI animation must
+        // not tween these frames or delay an accessibility/Quiet stop.
+        .transaction { $0.animation = nil }
+    }
+
+    private var emissionPhase: Double {
+        guard !reduceMotion, lightExpression.mode != .hold else { return 0 }
+        return LightFormGeometry.normalizedPhase(lightTime * 1.1)
+    }
+
+    private func effectSize(progress: Double) -> CGFloat {
+        size * (KinSeedPortraitLayout.contentScale
+            + (KinFirstLightPresentation.effectScale - KinSeedPortraitLayout.contentScale) * progress)
+    }
+}
+
+private enum KinSeedPortraitLayout {
+    static let contentScale = 0.92
+}
+
+/// Two small emission layers derived from the verified image's existing alpha.
+/// State changes add light around the motes, never recolor the selected image.
+private struct KinSeedParticleEmission: View {
+    let image: NSImage
+    let expression: KinLightExpression
+    let phase: Double
+    let size: CGFloat
+
+    var body: some View {
+        if expression.mode != .rest {
+            let intensity = KinLightEmission.intensity(mode: expression.mode, phase: phase)
+            let accent = KinLightPalette(mode: expression.mode).accent
+            ZStack {
+                source(accent: accent)
+                    .blur(radius: size * 0.011)
+                    .opacity(intensity * 0.38)
+                source(accent: accent)
+                    .blur(radius: size * 0.0035)
+                    .opacity(intensity * 0.76)
+            }
+            .mask {
+                RadialGradient(colors: [.clear, .white], center: .center,
+                    startRadius: size * KinLightEffectsGeometry.protectedCoreRadius,
+                    endRadius: size * 0.25)
+            }
+            .blendMode(.screen)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private func source(accent: Color) -> some View {
+        Image(nsImage: image).resizable().renderingMode(.template)
+            .interpolation(.high).scaledToFit().foregroundStyle(accent)
     }
 }
 
@@ -86,51 +231,6 @@ enum KinFirstLightPresentation {
     static func verticalOffset(for pose: KinSeedMotion.Sample) -> CGFloat {
         // An integer cycle count remains continuous as the shared clock wraps.
         CGFloat(sin(pose.radians * 18) * 0.014)
-    }
-}
-
-/// The authored Blender portrait circulates slowly in the same native frame.
-/// Habitat uses the fixed reference. The editable 3D scene remains its source.
-private struct KinSeedPortrait: View {
-    let size: CGFloat
-    let reduceMotion: Bool
-    let lightExpression: KinLightExpression
-    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
-    @State private var motion: KinSeedMotion?
-
-    private var motionPolicy: KinSeedMotion.Policy {
-        .init(mode: lightExpression.mode, reduceMotion: reduceMotion, systemReduceMotion: systemReduceMotion)
-    }
-
-    var body: some View {
-        let still = reduceMotion || systemReduceMotion
-        TimelineView(.animation(minimumInterval: 1 / 20, paused: still)) { _ in
-            let pose = motion?.sample(at: ProcessInfo.processInfo.systemUptime)
-                ?? KinSeedMotion(at: 0, policy: motionPolicy).sample(at: 0)
-            Group {
-                if let image = CompanionVisualAsset.kinSeedImage {
-                    Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
-                        .rotationEffect(.degrees(pose.angle))
-                } else {
-                    KinCoreSeedFrame(phase: pose.radians)
-                        .accessibilityLabel("KIN, Core Seed form")
-                }
-            }
-        }
-        .frame(width: size, height: size)
-        .overlay {
-            if lightExpression.mode != .rest {
-                KinLightEffects(expression: lightExpression, size: size, reduceMotion: still,
-                    centerY: CompanionVisualAsset.kinSeedImage == nil ? 0.465 : 0.5)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-        }
-        .onChange(of: motionPolicy, initial: true) { _, policy in
-            let now = ProcessInfo.processInfo.systemUptime
-            if motion == nil { motion = KinSeedMotion(at: now, policy: policy) }
-            else { motion?.transition(to: policy, at: now) }
-        }
     }
 }
 

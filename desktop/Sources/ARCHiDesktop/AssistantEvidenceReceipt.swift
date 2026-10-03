@@ -10,6 +10,9 @@ struct HamptonInvocationReceipt: Identifiable, Equatable, Sendable {
     let inputDigest: String
     let systemDigest: String
     let schemaDigest: String
+    var representationAccess: LocalRepresentationAccess = .notReported
+    var representationConfiguration: LocalRepresentationConfiguration = .off
+    var representationReceipt: LocalRepresentationReceipt = .notRecorded
     var outcome: Outcome = .dispatched
     var model: QwenModelMetadata? = nil
     var elapsedMilliseconds: Int? = nil
@@ -31,7 +34,7 @@ struct AssistantEvidenceSelection: Equatable, Sendable {
 
 struct AssistantEvidenceOmission: Equatable, Sendable {
     enum Kind: String, Sendable { case candidates, reminders, sessionRecords, conversation, context, lessons }
-    enum Reason: String, Sendable { case budget, disabled, expired, revoked, unmatched, otherSource }
+    enum Reason: String, Sendable { case budget, disabled, expired, revoked, unmatched, otherSource, unavailable }
     let kind: Kind
     let reason: Reason
     var ids: [String] = []
