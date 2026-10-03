@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import UniformTypeIdentifiers
 import CryptoKit
+import ARCHiSpatial
 
 enum WorkspaceSection: String, CaseIterable, Identifiable {
     case home = "Home"
@@ -158,21 +159,34 @@ final class CompanionStore: ObservableObject {
     private var pendingARC3Summaries: [String: ARC3SessionSummary] = [:]
     /// Desktop delivery may suspend the game without altering its saved data.
     let allowsPlay: Bool
-    @Published var section: WorkspaceSection = .home {
-        didSet {
+    @Published private(set) var presentedSection: WorkspaceSection = .home
+    var section: WorkspaceSection {
+        get { presentedSection }
+        set {
+            let oldValue = presentedSection
+            var destination = newValue
+            // The image draft belongs to its presenting workspace. Menu and
+            // keyboard navigation must not dismantle that host before review.
+            if isImageRegionImportPresented, destination != oldValue {
+                status = "Finish or cancel the image region draft before changing views."
+                return
+            }
             // The page editor is hosted by Memories. Keep that host alive until
             // the user explicitly saves or cancels its local editable fields.
-            if hasOpenKnowledgeDraft, section != .memory {
-                section = .memory
+            if hasOpenKnowledgeDraft, destination != .memory {
+                destination = .memory
                 knowledgePageMessage = "Save or cancel your open page or connection draft before changing views."
             }
-            if section == .play && !allowsPlay { section = .assistant }
-            if section != oldValue, focusGesturePlayback != nil { stopFocusGesture() }
-            if section != oldValue, oldValue == .context {
+            if destination == .play && !allowsPlay { destination = .assistant }
+            guard destination != oldValue else { return }
+            if focusGesturePlayback != nil { stopFocusGesture() }
+            if oldValue == .context {
                 // Retire the document's spatial reference at navigation time,
                 // before SwiftUI dismantles its native view during an update.
                 invalidateTextSelection(reason: "Work together closed. Select the passage again when you return.")
             }
+            // Publish only the accepted route, never a transient rejected view.
+            presentedSection = destination
         }
     }
     @Published var preferences = CompanionPreferences() {
@@ -226,12 +240,17 @@ final class CompanionStore: ObservableObject {
     @Published private(set) var pendingDocumentReceipt: DocumentWorkRecord?
     private var openedWorkingCopyDigest: String?
     private var exportedWorkingCopyDigest: String?
-    @Published private(set) var workingCopyIsPasted = false
+    enum WorkingCopyOrigin { case file, pasted, imageRegion }
+    @Published private(set) var workingCopyOrigin: WorkingCopyOrigin = .file
+    var workingCopyIsPasted: Bool { workingCopyOrigin == .pasted }
+    @Published private(set) var imageRegionWorkingSource: ImageRegionDocument?
+    @Published private(set) var imageRegionWorkingImage: ImageRegionImage?
     @Published var pastedDocumentDraft = PastedDocumentDraft()
+    @Published var isImageRegionImportPresented = false
     var hasUnexportedWorkingCopy: Bool {
         guard sourceName != nil, let openedWorkingCopyDigest else { return false }
         let current = SHA256.hash(data: Data(sharedText.utf8)).map { String(format: "%02x", $0) }.joined()
-        return (workingCopyIsPasted || current != openedWorkingCopyDigest) && current != exportedWorkingCopyDigest
+        return (workingCopyOrigin != .file || current != openedWorkingCopyDigest) && current != exportedWorkingCopyDigest
     }
     private var importedSourceURL: URL?
     @Published private(set) var wikiOSTask: QiWorkRequestFile?
@@ -776,12 +795,16 @@ final class CompanionStore: ObservableObject {
         onHideCompanion?()
     }
     func open(_ section: WorkspaceSection) {
+        let destination = section == .play && !allowsPlay ? .assistant : section
+        if isImageRegionImportPresented, self.section != destination {
+            status = "Finish or cancel the image region draft before changing views."
+            return
+        }
         voiceInput.cancel()
         if workspaceRoutingNotice != nil { workspaceRoutingNotice = nil }
-        let destination = section == .play && !allowsPlay ? .assistant : section
         if destination == .capabilities { showsReasoningTools = false }
         if self.section != destination { self.section = destination }
-        onOpenWorkspace?(destination)
+        onOpenWorkspace?(self.section)
     }
 
     func openReasoningTools(worlds: Bool = false) {
@@ -1142,7 +1165,7 @@ final class CompanionStore: ObservableObject {
         guard context.journalOwner == ObjectIdentifier(documentWork), context.companion == activeQiMon,
               context.sourceRevision == sourceRevision, context.sourceName == sourceName,
               context.sourceBytes == Data(sharedText.utf8) else {
-            return "Your document or profile changed. Keep this text and reopen Paste text from the current workspace."
+            return "Your document or profile changed. Keep this text and reopen the import from the current workspace."
         }
         guard canBeginPastedDocumentImport else {
             return "Finish the current request, proposal, voice draft or profile recovery before replacing the working copy."
@@ -1174,11 +1197,47 @@ final class CompanionStore: ObservableObject {
         if let reason = pastedDocumentImportBlockReason(context) { status = reason; return false }
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
         share(text: text, name: name.isEmpty ? "Pasted text" : name)
-        workingCopyIsPasted = true
+        workingCopyOrigin = .pasted
         pastedDocumentDraft = PastedDocumentDraft()
         workingCopyNotice = "Pasted copy · Export to keep. Select a passage to begin."
         status = "Pasted locally · no content sent"
         open(.context)
+        return true
+    }
+
+    /// Image pixels stay local and transient. The reviewed text and its exact
+    /// region receipt use the same source, method, apply/undo and outcome owners.
+    @discardableResult
+    func importImageRegion(_ document: ImageRegionDocument, image: ImageRegionImage,
+                           context: PastedDocumentImportContext,
+                           reviewWorkingCopy: (() -> Bool)? = nil) -> Bool {
+        guard document.source.isValid,
+              document.source.imageSHA256 == image.imageSHA256,
+              document.source.pixelWidth == image.pixelWidth,
+              document.source.pixelHeight == image.pixelHeight,
+              Self.pastedDocumentValidationMessage(text: document.text, title: document.title) == nil,
+              pastedDocumentImportBlockReason(context) == nil else {
+            status = "The image region or workspace changed. Review the current region again."
+            return false
+        }
+        let review = reviewWorkingCopy ?? {
+            self.confirmDiscardWorkingCopy(before: "using this image region", discardTitle: "Use region instead")
+        }
+        guard review(), pastedDocumentImportBlockReason(context) == nil else { return false }
+        share(text: document.text, name: document.title)
+        workingCopyOrigin = .imageRegion
+        imageRegionWorkingSource = document
+        imageRegionWorkingImage = image
+        desktopInterestSource = .init(appName: "Image region", title: document.title,
+            method: "Reviewed region text · original image unchanged", capturedAt: wallClock(),
+            digest: LessonSource.digest(of: document.text))
+        // The reviewed draft has reached its existing working-copy owner;
+        // navigation can now retire the temporary sheet without losing it.
+        isImageRegionImportPresented = false
+        open(.context)
+        selectText(range: document.contentRange, sourceRevision: sourceRevision)
+        workingCopyNotice = "Region text selected · use a saved method or ask about it. Export to keep this copy."
+        status = "Image region shared locally · nothing sent"
         return true
     }
 
@@ -1282,7 +1341,8 @@ final class CompanionStore: ObservableObject {
         sharedText = text
         openedWorkingCopyDigest = SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
         exportedWorkingCopyDigest = nil
-        workingCopyIsPasted = false
+        workingCopyOrigin = .file
+        imageRegionWorkingSource = nil; imageRegionWorkingImage = nil
         sourceName = name
         importedSourceURL = nil
         workingCopyUndo = nil
@@ -1338,8 +1398,8 @@ final class CompanionStore: ObservableObject {
         let reviewedBytes = Data(sharedText.utf8)
         let alert = NSAlert()
         alert.messageText = "Keep this draft before \(action)?"
-        alert.informativeText = workingCopyIsPasted
-            ? "This pasted copy has not been exported. Keep working to save a draft, or discard this session copy."
+        alert.informativeText = workingCopyOrigin != .file
+            ? "This imported copy has not been exported. Keep working to save a draft, or discard this session copy."
             : "Your working copy has edits that have not been exported. Keep working to export a separate draft, or discard these session edits. The original file stays unchanged."
         alert.alertStyle = .warning
         let keep = alert.addButton(withTitle: "Keep working")
@@ -1367,7 +1427,8 @@ final class CompanionStore: ObservableObject {
         wikiOSExchangeMessage = nil
         sharedText = ""; sourceName = nil; sourceRevision &+= 1
         openedWorkingCopyDigest = nil; exportedWorkingCopyDigest = nil
-        workingCopyIsPasted = false
+        workingCopyOrigin = .file
+        imageRegionWorkingSource = nil; imageRegionWorkingImage = nil
         importedSourceURL = nil; workingCopyUndo = nil; requestsRevision = false
         workingCopyNotice = "Select a text document to begin."
         compareResults = [:]
@@ -4161,6 +4222,7 @@ extension CompanionStore {
         if profileRecoveryBlock == nil, preferences != (preferenceDocument.preferences ?? CompanionPreferences()) {
             return "Save your changed appearance and rhythm settings before restoring."
         }
+        if isImageRegionImportPresented { return "Close the image region draft before restoring." }
         if pastedDocumentDraft.hasContent { return "Use or discard the pasted text draft before restoring." }
         if lessonDraft != nil { return "Keep or discard the lesson draft before restoring." }
         if hasOpenKnowledgeDraft { return "Save or discard the knowledge page or connection draft before restoring." }

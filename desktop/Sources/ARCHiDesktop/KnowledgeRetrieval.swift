@@ -65,7 +65,8 @@ enum KnowledgeRetrieval {
 
     static func search(query: String, sources: [ReadingSourceSnapshot], pages: [KnowledgePage],
                        links: [KnowledgePageLink] = [],
-                       libraryIsCurrent: Bool, maximumResults: Int = KnowledgeRetrieval.maximumResults) throws -> KnowledgeRetrievalResult {
+                       libraryIsCurrent: Bool, maximumResults: Int = KnowledgeRetrieval.maximumResults,
+                       pagesOnly: Bool = false) throws -> KnowledgeRetrievalResult {
         guard libraryIsCurrent else { throw KnowledgeRetrievalError.unavailableLibrary }
         let unsupportedControls = CharacterSet.controlCharacters.subtracting(.whitespacesAndNewlines)
         guard query.utf8.count <= maximumQueryUTF8Bytes,
@@ -161,6 +162,9 @@ enum KnowledgeRetrieval {
                 score: match.score, matchedTerms: match.terms, pageBinding: page.binding,
                 anchor: nil, supportingAnchors: page.anchors))
         }
+        // Apply requested record kind before the shared result/byte caps. A
+        // full page quota must not be consumed by discarded source passages.
+        if pagesOnly { candidates.removeAll { $0.kind != .page } }
         candidates.sort(by: precedes)
 
         let encoder = JSONEncoder()

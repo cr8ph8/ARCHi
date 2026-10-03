@@ -59,6 +59,7 @@ struct CompanionGraphWorkspace: View {
     @State private var attachmentMessage: String?
     @State private var methodAuthoring: KnowledgeMapMethodSelection?
     @State private var showsWork = false
+    @State private var imageRegionContext: PastedDocumentImportContext?
 
     init(store: CompanionStore, initialShowcase: Bool = false) {
         self.store = store
@@ -80,6 +81,11 @@ struct CompanionGraphWorkspace: View {
                 }.pickerStyle(.segmented).frame(width: 226)
                     .accessibilityIdentifier("memory-map.scope")
                 Spacer(minLength: 0)
+                Button("Image region…", systemImage: "photo.badge.magnifyingglass") {
+                    imageRegionContext = store.beginPastedDocumentImport()
+                }.buttonStyle(.borderless).font(.system(size: 11))
+                    .disabled(!store.canBeginPastedDocumentImport)
+                    .accessibilityIdentifier("memory-map.image-region")
                 Button("Work", systemImage: "arrow.triangle.branch") { showsWork.toggle() }
                     .buttonStyle(.borderless).font(.system(size: 11))
                     .accessibilityIdentifier("memory-map.work")
@@ -176,6 +182,7 @@ struct CompanionGraphWorkspace: View {
         .sheet(item: $store.inspectedDocumentMethod) { selection in
             DocumentMethodInspectionView(store: store, selection: selection)
         }
+        .sheet(item: $imageRegionContext) { ImageRegionImportSheet(store: store, context: $0) }
         .sheet(item: $methodAuthoring) { selection in
             KnowledgeMapMethodSheet(store: store, selection: selection) { saved in
                 methodAuthoring = nil

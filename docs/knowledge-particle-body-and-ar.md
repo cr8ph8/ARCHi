@@ -46,9 +46,36 @@ Direct experience may strengthen an existing lesson only through its current app
 
 ## iPhone and AR gates
 
+### 3 October addition: image regions feed the existing workflow
+
+Memory map and Work together now offer **Image region**. The native sheet loads one bounded local PNG/JPEG/HEIC/TIFF, applies its orientation, and lets the user select an exact region. Apple Vision reads only an inward-rounded raster crop; the user can instead describe the region. Neither path invokes a language model. The original file is never rewritten. Reviewing OCR is necessary: recognized text is a candidate transcription, not verified evidence about the pictured object.
+
+The shared `ARCHiSpatial` Swift package defines the normalized, upright, top-left rectangle, versioned image-source receipt and reviewed-text document. It imports Foundation, CoreGraphics and CryptoKit; it has no app state, model client, database or renderer. The desktop consumes it today. Its actual source also compiles and links for iPhoneOS arm64 with a minimum iOS 17 target; this does not wire the feature into the phone app or install it there. The publication parity check covers this package and both package manifests.
+
+The receipt binds the original image-byte SHA-256, upright dimensions, rectangle, coordinate convention, transcription method and original transcription digest. The exact reviewed body has its own UTF-16 selection range. Pixels remain transient in the native working copy; exported or explicitly retained text carries the provenance receipt. Retaining text does not promise that a missing image can later be recovered. Exported receipts are inspectable source metadata, not cryptographic proof that the user's description is true.
+
+An explicit local query finds up to six current reviewed knowledge pages using `KnowledgeRetrieval`. Page filtering occurs before the result quota; source/version and relationship availability are rechecked. The same graph IDs and `KnowledgeParticleView` draw and select those records as their anchors arc toward the image region. Reduced Motion uses the endpoint immediately. Relatedness is a navigation suggestion, not a saved relationship, an inferred preference or an earned experience. Selecting a particle opens the existing source/version/backlink inspector inside the sheet.
+
+**Use in Work together** hands only reviewed text plus receipt to the existing `CompanionStore` working copy. Existing saved-method selection, bounded context preparation, explicit Send, proposal review, apply/undo and reviewed-outcome owners remain responsible for the next steps. This addition creates no second memory/profile/evolution store. Import does not execute a method or record a successful outcome. Profile switching, restore, quit and workspace navigation cannot silently destroy an open region draft; successful handoff consumes the draft before changing its host.
+
+### Apple platform responsibilities and next gates
+
+| Responsibility | Current owner or adapter | Next scoped work |
+| --- | --- | --- |
+| Records, identity, permissions, reviewed experience | Existing native ARCHi owners; existing phone History remains separate | Versioned transfer with owner/revision/conflict checks; no silent new sync database. |
+| Image selection and coordinates | `ARCHiSpatial`, macOS ImageIO/Vision adapter | Reuse the contract from the existing iPhone target with a native photo/file picker and interruption-safe draft handling. |
+| Dense companion drawing | Existing Metal v008 renderer and Unity bridge | Qualify a retained-ID mobile point subset, shared endpoint/color rules and device performance. |
+| Model assistance | Existing native routing and `PhoneIntelligence.swift` availability-gated, text-only Foundation Models consumer | Evaluate Apple model adapters within the existing explicit-send policy. Capability/availability and endpoint approval remain separate. |
+| Real-world placement | No current phone AR session | ARKit raycasts/tracking plus a RealityKit view in the existing app; invalidate stale anchors and revalidate record selections. |
+| System entry points | Existing app workspaces | Add App Intents only after the action has one checked owner and a well-defined completion result. |
+
+Apple documents [Vision coordinates](https://developer.apple.com/documentation/vision/vndetectedobjectobservation/boundingbox) as normalized with a lower-left origin. ARCHi's persisted image contract uses top-left coordinates; this adapter avoids mixed conventions by physically cropping the oriented raster before OCR. Apple also documents [Foundation Models availability](https://developer.apple.com/documentation/foundationmodels/systemlanguagemodel), [tracked raycasts](https://developer.apple.com/documentation/realitykit/arview/trackedraycast(from:allowing:alignment:updatehandler:)) and [RealityKit anchors](https://developer.apple.com/documentation/realitykit/scene-content-anchors). These are implementation references, not evidence that ARCHi's remaining adapters exist. Current Apple documentation includes broader model options; this delivery does not add or enable cloud inference.
+
+The completion gate for this increment is separate from the AR gate: verify native selection, reviewed text, source inspection and guarded handoff, then test the phone consumer. The corresponding [delivery receipt](accountability/evidence/r03-image-region-workflow-2026-10-03.json) records actual test, packaging and installed-walkthrough status.
+
 The current phone Living Form switches three endpoint images and draws 72 cosmetic points around up to 12 visible graph anchors. `LiminalPortrait.swift` applies a small visual breath to a PNG. There is no ARKit/RealityKit session in this target and no camera usage declaration in `Info.plist`; `FieldWalkView.swift` is Core Location/MapKit. These paths must not be described as a live point body or AR implementation.
 
-The qualified local v2 package contains an 800,000-point master, a 200,000-point runtime set, and 120 frame files of 6,400,000 bytes each: **768,000,000 bytes of frame payload**, before other assets. Its current loader supports 50k/100k/200k subsets. Phone delivery needs a separately qualified deterministic subset/compression strategy with retained art IDs and receipts; simply copying endpoint PNGs or weakening hash checks is insufficient. The source coordinates are authored scene units, so world presentation also requires an explicit, checked conversion to meters and orientation.
+The qualified local v2 package contains an 800,000-point master, a 200,000-point runtime set, and 120 frame references sharing 73 distinct files of 6,400,000 bytes each: **467,200,000 bytes of stored frame payload**, before other assets. This corrects the earlier expanded-frame estimate; identical samples are already shared. Its current loader supports 50k/100k/200k subsets. Phone delivery needs a separately qualified deterministic subset/compression strategy with retained art IDs and receipts; simply copying endpoint PNGs or weakening hash checks is insufficient. The source coordinates are authored scene units, so world presentation also requires an explicit, checked conversion to meters and orientation.
 
 Implement AR inside the existing native iPhone target after the shared projection and point renderer qualify:
 

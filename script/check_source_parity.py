@@ -23,6 +23,8 @@ import sys
 TOP_LEVEL = {
     "desktop/Sources/ARCHiDesktop": {".swift"},
     "desktop/Tests/ARCHiDesktopTests": {".swift"},
+    "shared/ARCHiSpatial/Sources/ARCHiSpatial": {".swift"},
+    "shared/ARCHiSpatial/Tests/ARCHiSpatialTests": {".swift"},
     "src": {".ts", ".css"},
 }
 UNITY = "unity/ARCHi/Assets/ARCHi"
@@ -141,6 +143,12 @@ def inventory(root: Path, side: str) -> tuple[set[str], list[dict]]:
 
     for relative, suffixes in TOP_LEVEL.items():
         visit(relative, suffixes, False)
+    for relative in ("desktop/Package.swift", "shared/ARCHiSpatial/Package.swift"):
+        kind, failed = inspect(root, relative)
+        if kind == "FILE":
+            paths.add(relative)
+        elif kind != "MISSING":
+            differences.append(problem("NOT_REGULAR" if kind == "DIRECTORY" else kind, failed, side))
     visit(UNITY, {".cs", ".shader"}, True)
     # These are only ancestry checks. Never scan untracked ancillary content.
     for relative in TRACKED_ROOTS:

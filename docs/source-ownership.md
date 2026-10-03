@@ -10,7 +10,7 @@ The main ARCHi workspace is the source of changes. The curated GitHub checkout i
 4. Run `python3 script/check_source_parity.py --source /path/to/authored/ARCHi --publication /path/to/publication --policy docs/source-parity-policy.json`. Resolve missing or changed code. The policy permits only exact reviewed hash pairs for resource-pin transformations; it does not permit arbitrary divergent implementations.
 5. Review every publication path, refresh `SOURCE_SHA256SUMS`, verify its complete tracked coverage and update the existing draft PR. Never publish the authored workspace's private Git history.
 
-The parity check covers all top-level native Swift source/tests, retained TypeScript source, ARCHi Unity C#/shader source, and already-published script/vendor code. It does not certify source licensing, security, generated products, iPhone completeness or all documents. A new unpublished iPhone/authoring file remains visible in the local inventory, not silently classified as dead code.
+The parity check covers all top-level native Swift source/tests, the shared `ARCHiSpatial` source/tests and its package manifest, the desktop package manifest, retained TypeScript source, ARCHi Unity C#/shader source, and already-published script/vendor code. It does not certify source licensing, security, generated products, iPhone completeness or all documents. A new unpublished iPhone/authoring file remains visible in the local inventory, not silently classified as dead code.
 
 ## Workspace roles
 

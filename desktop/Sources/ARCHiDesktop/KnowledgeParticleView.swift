@@ -7,9 +7,9 @@ struct KnowledgeParticleView: View, @MainActor Animatable {
     let nodes: [CompanionGraphNode]
     let selectedID: String?
     var spread: Double
-    var animatableData: Double {
-        get { spread }
-        set { spread = newValue }
+    var animatableData: AnimatablePair<Double, Double> {
+        get { .init(spread, regionProgress) }
+        set { spread = newValue.first; regionProgress = newValue.second }
     }
     let pulses: Bool
     let reduceMotion: Bool
@@ -21,6 +21,9 @@ struct KnowledgeParticleView: View, @MainActor Animatable {
     var compact = false
     var interactive = true
     var growthByRecordID: [String: CompanionParticleScene.Growth] = [:]
+    /// Transient image-space attention. This never changes record bindings.
+    var regionTarget: CGRect?
+    var regionProgress: Double = 1
     let onSelect: (String) -> Void
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -40,16 +43,18 @@ struct KnowledgeParticleView: View, @MainActor Animatable {
         GeometryReader { proxy in
             let scale = max(0, min(proxy.size.width, proxy.size.height) * 0.43 - 12)
             let center = CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
-            let points = KnowledgeParticleField.displayPositions(particles: particles, frame: framing,
+            let basePoints = KnowledgeParticleField.displayPositions(particles: particles, frame: framing,
                 spread: spread, reduceMotion: still, width: proxy.size.width, height: proxy.size.height)
+            let points = KnowledgeParticleField.regionPositions(base: basePoints, target: regionTarget,
+                canvas: proxy.size, progress: still ? 1 : regionProgress)
                 .mapValues { CGPoint(x: $0.x, y: $0.y) }
             ZStack {
-                if still {
+                if still || !pulses {
                     // ImageRenderer can capture this deterministic Canvas directly.
                     // A paused TimelineView may omit its subtree in a snapshot.
                     particleCanvas(particles: particles, edges: edges, points: points,
                         center: center, scale: scale, active: active, neighbours: neighbours,
-                        time: 0, still: true)
+                        time: 0, still: still)
                         .allowsHitTesting(false)
                 } else {
                     TimelineView(.animation(minimumInterval: 1 / 15,

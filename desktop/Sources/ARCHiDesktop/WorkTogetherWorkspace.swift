@@ -11,6 +11,8 @@ struct WorkTogetherWorkspace: View {
     @State private var showsInterest = false
     @State private var showsMeetingNotes = false
     @State private var pastedDocumentContext: PastedDocumentImportContext?
+    @State private var imageRegionContext: PastedDocumentImportContext?
+    @State private var showsImageRegion = true
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -36,6 +38,7 @@ struct WorkTogetherWorkspace: View {
         }
         .sheet(isPresented: $showsMeetingNotes) { MeetingNotesImportSheet(store: store) }
         .sheet(item: $pastedDocumentContext) { PastedDocumentImportSheet(store: store, context: $0) }
+        .sheet(item: $imageRegionContext) { ImageRegionImportSheet(store: store, context: $0) }
     }
 
     private var workbenchHeader: some View {
@@ -59,6 +62,10 @@ struct WorkTogetherWorkspace: View {
             Button("Look here", systemImage: "scope") { showsInterest.toggle() }
                 .buttonStyle(.borderless).accessibilityIdentifier("work.interest")
                 .popover(isPresented: $showsInterest) { DesktopInterestCard(store: store).frame(width: 350).padding(12) }
+            Button("Image region…", systemImage: "photo.badge.magnifyingglass") {
+                imageRegionContext = store.beginPastedDocumentImport()
+            }.buttonStyle(.borderless).disabled(!store.canBeginPastedDocumentImport)
+                .accessibilityIdentifier("work.image-region")
             Button("Place ARCHi", systemImage: "viewfinder") { showsPlacement.toggle() }
                 .buttonStyle(.borderless)
                 .accessibilityIdentifier("work.placement")
@@ -102,6 +109,11 @@ struct WorkTogetherWorkspace: View {
             if store.desktopInterestSource != nil {
                 DesktopInterestSharingNotice(store: store).padding(10)
             }
+            if let image = store.imageRegionWorkingImage, let document = store.imageRegionWorkingSource {
+                DisclosureGroup("Original image region · text edits affect the copy below", isExpanded: $showsImageRegion) {
+                    ImageRegionCanvas(image: image, region: document.source.region).frame(height: 180)
+                }.font(.caption).padding(10)
+            }
             Divider()
             SharedDocumentView(store: store)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -122,7 +134,9 @@ struct WorkTogetherWorkspace: View {
                 Text(store.sourceName ?? "Your working copy")
                     .font(.system(size: 12, weight: .medium)).lineLimit(1)
                     .help(store.sourceName ?? "Choose a UTF-8 text document")
-                Text(store.hasUnexportedWorkingCopy ? (store.workingCopyIsPasted ? "Pasted copy · Export to keep" : "Session edits · Export to keep")
+                Text(store.workingCopyOrigin == .imageRegion
+                     ? (store.hasUnexportedWorkingCopy ? "Region copy · Export to keep" : "Region copy exported")
+                     : store.hasUnexportedWorkingCopy ? (store.workingCopyIsPasted ? "Pasted copy · Export to keep" : "Session edits · Export to keep")
                      : store.workingCopyIsPasted ? "Pasted copy exported"
                      : store.desktopInterestSource != nil ? "Captured copy · original window unchanged" : "Original file unchanged")
                     .font(.system(size: 10)).foregroundStyle(.secondary)

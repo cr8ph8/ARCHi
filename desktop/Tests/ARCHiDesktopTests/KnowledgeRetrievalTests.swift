@@ -102,6 +102,33 @@ final class KnowledgeRetrievalTests: XCTestCase {
         XCTAssertTrue(limited.isPartial)
     }
 
+    func testPageOnlySearchAppliesKindFilterBeforeMixedResultQuota() throws {
+        let source = source(text: (1...6).map { "# Needle \($0)\nNeedle source passage \($0).\n" }.joined())
+        let reviewed = page(source: source, title: "Reviewed interpretation", body: "A concise interpretation of the cited evidence.")
+        let mixed = try KnowledgeRetrieval.search(query: "needle", sources: [source], pages: [reviewed],
+            libraryIsCurrent: true, maximumResults: 6)
+        XCTAssertEqual(mixed.hits.count, 6)
+        XCTAssertTrue(mixed.hits.allSatisfy { $0.kind == .section },
+                      "Higher-ranked source passages consume the ordinary mixed quota.")
+        XCTAssertEqual(mixed.omittedHitCount, 1)
+        let explicitMixed = try KnowledgeRetrieval.search(query: "needle", sources: [source], pages: [reviewed],
+            libraryIsCurrent: true, maximumResults: 6, pagesOnly: false)
+        XCTAssertEqual(explicitMixed, mixed, "Existing callers retain mixed retrieval by default.")
+
+        let pageOnly = try KnowledgeRetrieval.search(query: "needle", sources: [source], pages: [reviewed],
+            libraryIsCurrent: true, maximumResults: 6, pagesOnly: true)
+        XCTAssertEqual(pageOnly.hits.count, 1)
+        XCTAssertEqual(pageOnly.hits.first?.pageBinding, reviewed.binding)
+        XCTAssertEqual(pageOnly.hits.first?.supportingAnchors, reviewed.anchors)
+        XCTAssertEqual(pageOnly.matchingCount, 1)
+        XCTAssertEqual(pageOnly.omittedHitCount, 0)
+
+        let changed = ReadingSourceSnapshot(id: source.id, title: source.title, revision: 2, text: source.text)
+        XCTAssertTrue(try KnowledgeRetrieval.search(query: "needle", sources: [changed], pages: [reviewed],
+            libraryIsCurrent: true, maximumResults: 6, pagesOnly: true).hits.isEmpty,
+            "Restricting result kind must not bypass exact supporting-source validation.")
+    }
+
     func testEncodedContextCapOmitsWholeOversizedPageWithoutClippingSourceText() throws {
         let source = source(text: "Needle is the exact source word.")
         let page = page(source: source, title: "Needle", body: String(repeating: "\"", count: 8_100) + " needle")

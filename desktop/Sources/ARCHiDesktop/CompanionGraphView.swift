@@ -201,6 +201,7 @@ struct CompanionGraphGeometry {
 struct CompanionGraphView: View {
     let snapshot: CompanionGraphSnapshot
     let onOpen: (CompanionGraphTarget) -> Void
+    var allowsTargetNavigation = true
     var reduceMotion = false
     var seedColor: CompanionSeedColor = .original
     var onAsk: ((CompanionGraphNode) -> Void)?
@@ -247,7 +248,8 @@ struct CompanionGraphView: View {
          seedAppearance: CompanionParticleAppearance? = nil,
          liminalGraphSource: LiminalGraphMorphSource? = nil,
          selectionID: String? = nil,
-         onSelectionChange: ((String?) -> Bool)? = nil) {
+         onSelectionChange: ((String?) -> Bool)? = nil,
+         allowsTargetNavigation: Bool = true) {
         self.snapshot = snapshot
         self.onOpen = onOpen
         self.reduceMotion = reduceMotion; self.seedColor = seedColor
@@ -257,6 +259,7 @@ struct CompanionGraphView: View {
         self.particleScene = particleScene; self.seedAppearance = seedAppearance
         self.liminalGraphSource = liminalGraphSource
         self.selectionID = selectionID; self.onSelectionChange = onSelectionChange
+        self.allowsTargetNavigation = allowsTargetNavigation
         _layout = State(initialValue: initialLayout)
         _localSelectionID = State(initialValue: initialSelectionID)
         _isShowcase = State(initialValue: initialShowcase)
@@ -801,7 +804,7 @@ struct CompanionGraphView: View {
                     Label(node.status, systemImage: node.presentationState.symbol)
                         .font(.system(size: 10, weight: .medium)).foregroundStyle(graphColor(node.kind)).padding(.vertical, 4)
                 }
-                if let target = node.target {
+                if allowsTargetNavigation, let target = node.target {
                     Button(openTitle(target), systemImage: "arrow.up.right") { onOpen(target) }
                         .buttonStyle(.bordered).controlSize(.small).padding(.vertical, 5)
                         .accessibilityIdentifier("companion-graph.open-target")

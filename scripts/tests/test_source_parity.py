@@ -86,6 +86,20 @@ class SourceParityTests(unittest.TestCase):
         self.assertEqual(report["differences"], [])
         self.assertEqual(before, self.snapshot(self.root))
 
+    def test_shared_apple_source_and_manifests_are_checked_without_indexing(self):
+        paths = ("desktop/Package.swift", "shared/ARCHiSpatial/Package.swift",
+                 "shared/ARCHiSpatial/Sources/ARCHiSpatial/ImageRegion.swift",
+                 "shared/ARCHiSpatial/Tests/ARCHiSpatialTests/ImageRegionTests.swift")
+        for path in paths:
+            self.put_both(path)
+        code, report = self.run_check()
+        self.assertEqual(code, 0)
+        self.assertEqual(report["counts"]["matched"], 5)
+        self.put(self.publication, paths[2], b"drift")
+        code, report = self.run_check()
+        self.assertEqual(code, 1)
+        self.assertEqual(report["differences"][0]["path"], paths[2])
+
     def test_byte_drift_new_source_and_publication_only_files_fail(self):
         self.put(self.publication, self.path, b"changed\n")
         self.put(self.source, "src/new.ts")

@@ -200,7 +200,7 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
             .receive(on: RunLoop.main).sink { [weak self] _ in
                 self?.refreshInterestPresentation()
             }.store(in: &subscriptions)
-        store.$section.removeDuplicates().dropFirst().sink { [weak self] _ in
+        store.$presentedSection.removeDuplicates().dropFirst().sink { [weak self] _ in
             self?.dismissChatBubble()
         }.store(in: &subscriptions)
         NotificationCenter.default.addObserver(

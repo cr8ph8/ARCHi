@@ -52,6 +52,30 @@ struct KnowledgeParticleField {
     }
 
     private static let maximumCoordinate = 1_000_000.0
+    /// A bounded quadratic arc over the existing ID positions. The endpoint is
+    /// derived from ID, not result rank, so filtering does not reshuffle it.
+    static func regionPositions(base: [String: Vector], target: CGRect?, canvas: CGSize,
+                                progress: Double) -> [String: Vector] {
+        guard let target, !target.isNull, !target.isInfinite,
+              [target.origin.x, target.origin.y, target.size.width, target.size.height, canvas.width, canvas.height].allSatisfy(\.isFinite),
+              target.size.width > 0, target.size.height > 0, canvas.width > 36, canvas.height > 36,
+              CGRect(origin: .zero, size: canvas).contains(target) else { return base }
+        let u = progress.isFinite ? min(1, max(0, progress)) : 0
+        let t = u * u * (3 - 2 * u)
+        func bounded(_ p: Vector) -> Vector {
+            // Keep both the selection ring and reviewed-support satellites in frame.
+            .init(x: min(canvas.width - 18, max(18, p.x)), y: min(canvas.height - 18, max(18, p.y)))
+        }
+        return base.reduce(into: [:]) { result, pair in
+            let (id, start) = pair
+            let angle = fraction(id, salt: "region-anchor") * 2 * .pi
+            let end = bounded(.init(x: target.midX + cos(angle) * (target.width / 2 + 22),
+                                    y: target.midY + sin(angle) * (target.height / 2 + 22)))
+            let mid = (start + end) * 0.5
+            let control = bounded(mid + .init(x: -sin(angle), y: cos(angle)) * min(60, (end - start).length * 0.25))
+            result[id] = start * ((1 - t) * (1 - t)) + control * (2 * (1 - t) * t) + end * (t * t)
+        }
+    }
     let particles: [Particle]
     let edges: [CompanionGraphEdge]
     let omittedCount: Int

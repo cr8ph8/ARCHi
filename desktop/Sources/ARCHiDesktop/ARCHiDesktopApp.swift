@@ -453,6 +453,7 @@ final class DesktopDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if store.preferenceRetention == .changed {
             return ("Save your appearance and conversation preferences in Memories before switching. Your current companion stays open.", .memory)
         }
+        if store.isImageRegionImportPresented { return ("Use or close the image region draft before switching.", store.section) }
         if store.pastedDocumentDraft.hasContent { return ("Use or discard your pasted text draft before switching.", .context) }
         if store.lessonDraft != nil { return ("Keep or discard your lesson draft before switching.", .memory) }
         if store.hasOpenKnowledgeDraft { return ("Save or discard your knowledge page or connection draft before switching.", .memory) }
