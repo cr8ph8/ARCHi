@@ -6,15 +6,25 @@ import SwiftUI
 struct KnowledgeProcedureCandidateView: View {
     @ObservedObject var store: CompanionStore
     let page: KnowledgePage
+    private let saveCandidate: ((String, String, DocumentWorkRequirements) -> DocumentProcedureUse?)?
+    private let onSaved: ((DocumentProcedureUse) -> Void)?
+    private let saveIssue: String?
     @State private var expanded = false
     @State private var title: String
     @State private var instruction = ""
     @State private var requirements = DocumentWorkRequirements()
     @State private var saveMessage: String?
 
-    init(store: CompanionStore, page: KnowledgePage) {
+    init(store: CompanionStore, page: KnowledgePage, startsExpanded: Bool = false,
+         saveCandidate: ((String, String, DocumentWorkRequirements) -> DocumentProcedureUse?)? = nil,
+         saveIssue: String? = nil,
+         onSaved: ((DocumentProcedureUse) -> Void)? = nil) {
         self.store = store
         self.page = page
+        self.saveCandidate = saveCandidate
+        self.onSaved = onSaved
+        self.saveIssue = saveIssue
+        _expanded = State(initialValue: startsExpanded)
         _title = State(initialValue: page.title)
     }
 
@@ -40,7 +50,7 @@ struct KnowledgeProcedureCandidateView: View {
         return nil
     }
     private var canSave: Bool {
-        store.canKeepDocumentProcedure
+        saveIssue == nil && store.canKeepDocumentProcedure
             && page.state == .reviewed && page.kind == .concept
             && store.readingSources.availability(of: page) == nil
             && !trimmedTitle.isEmpty && !trimmedInstruction.isEmpty && textIssue == nil
@@ -71,17 +81,29 @@ struct KnowledgeProcedureCandidateView: View {
                     Text(textIssue).foregroundStyle(.orange)
                         .accessibilityIdentifier("knowledge.procedure-text-issue.\(identifier)")
                 }
+                if let saveIssue {
+                    Text(saveIssue).foregroundStyle(.orange)
+                        .accessibilityIdentifier("knowledge.procedure-context-issue.\(identifier)")
+                }
                 if let unavailable = store.readingSources.availability(of: page) {
                     Text(unavailable).foregroundStyle(.orange)
                         .accessibilityIdentifier("knowledge.procedure-availability.\(identifier)")
                 }
                 Button("Save candidate") {
-                    if store.keepKnowledgeProcedure(page: page, title: title,
-                                                    instruction: instruction, requirements: requirements) {
+                    guard canSave else { return }
+                    var saved: DocumentProcedureUse?
+                    if let saveCandidate {
+                        saved = saveCandidate(title, instruction, requirements)
+                    } else {
+                        _ = store.keepKnowledgeProcedure(page: page, title: title,
+                            instruction: instruction, requirements: requirements, onSaved: { saved = $0 })
+                    }
+                    if let saved {
                         title = ""
                         instruction = ""
                         requirements = DocumentWorkRequirements()
                         if ownsMethodDraft { store.discardKnowledgeMethodDraft() }
+                        onSaved?(saved)
                     }
                     saveMessage = store.knowledgePageMessage
                 }
@@ -122,7 +144,7 @@ struct KnowledgeProcedureCandidateView: View {
                     store.draftKnowledgeMethod(page: page, requirements: requirements)
                 }
                 .buttonStyle(.bordered)
-                .disabled(!store.canDraftKnowledgeMethod(page: page))
+                .disabled(saveIssue != nil || !store.canDraftKnowledgeMethod(page: page))
                 .accessibilityIdentifier("knowledge.draft-procedure.\(identifier)")
             }
             if ownsMethodDraft, let message = store.knowledgeMethodDraftMessage {
@@ -130,7 +152,7 @@ struct KnowledgeProcedureCandidateView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("knowledge.procedure-draft-status.\(identifier)")
             }
-            if let draft = store.currentKnowledgeMethodDraft(for: page) {
+            if saveIssue == nil, let draft = store.currentKnowledgeMethodDraft(for: page) {
                 draftPreview(draft)
             }
         }

@@ -180,6 +180,8 @@ public static class ARCHiPortBuild
         ArenaValidation.Validate();
         ArenaMultiplayerValidation.Validate();
         PersonalSeedValidation.Validate();
+        bool hasLiminalFinish=VerifyLiminalFinish();
+        bool hasLiminalLight=VerifyLiminalLight();
         Directory.CreateDirectory(Path.GetDirectoryName(artifact));
         var options = new BuildPlayerOptions
         {
@@ -213,9 +215,34 @@ public static class ARCHiPortBuild
             + "\t<key>ARCHiNativeArenaProtocol</key>\n\t<integer>1</integer>\n"
             + "\t<key>ARCHiSeedAppearanceVersion</key>\n\t<integer>1</integer>\n"
             + "\t<key>ARCHiPersonalSeedVersion</key>\n\t<integer>1</integer>\n"
-            + "\t<key>ARCHiLiminalPointAssetVersion</key>\n\t<integer>4</integer>\n");
+            + "\t<key>ARCHiLiminalPointAssetVersion</key>\n\t<integer>7</integer>\n"
+            + (hasLiminalFinish?"\t<key>ARCHiLiminalPointFinishSHA256</key>\n\t<string>"+ARCHi.Port.LiminalPointFinish.ExpectedManifestSHA256+"</string>\n":"")
+            + (hasLiminalLight?"\t<key>ARCHiLiminalPointLightStyle</key>\n\t<string>"+ARCHi.Port.LiminalParticleRenderer.LightStyleRevision+"</string>\n\t<key>ARCHiLiminalPointLightSHA256</key>\n\t<string>"+ARCHi.Port.LiminalPointLight.ExpectedManifestSHA256+"</string>\n":""));
         File.WriteAllText(plistPath, plist);
         Debug.Log("ARCHI_PORT_MAC_BUILD_SUCCEEDED " + artifact);
+    }
+
+    private static bool VerifyLiminalFinish()
+    {
+        string root=Path.Combine(Application.streamingAssetsPath,"LiminalV008");
+        string finish=Path.Combine(root,"finish-v11");
+        if(!Directory.Exists(finish))return false;
+        string sourceDigest=ARCHi.Port.LiminalPointAsset.Hash(File.ReadAllBytes(Path.Combine(root,"manifest.json")));
+        var asset=ARCHi.Port.LiminalPointAsset.Load(root,sourceDigest,System.Threading.CancellationToken.None);
+        ARCHi.Port.LiminalPointFinish.Load(finish,ARCHi.Port.LiminalPointFinish.ExpectedManifestSHA256,asset,System.Threading.CancellationToken.None);
+        return true;
+    }
+
+    private static bool VerifyLiminalLight()
+    {
+        string root=Path.Combine(Application.streamingAssetsPath,"LiminalV008"),light=Path.Combine(root,"light-v12");
+        if(!Directory.Exists(light))return false;
+        var token=System.Threading.CancellationToken.None;
+        string sourceDigest=ARCHi.Port.LiminalPointAsset.Hash(File.ReadAllBytes(Path.Combine(root,"manifest.json")));
+        var asset=ARCHi.Port.LiminalPointAsset.Load(root,sourceDigest,token);
+        var finish=ARCHi.Port.LiminalPointFinish.Load(Path.Combine(root,"finish-v11"),ARCHi.Port.LiminalPointFinish.ExpectedManifestSHA256,asset,token);
+        ARCHi.Port.LiminalPointLight.Load(light,asset,finish,token);
+        return true;
     }
 
     private static Receipt InspectScene(Scene scene)

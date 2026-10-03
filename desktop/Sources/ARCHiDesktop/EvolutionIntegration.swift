@@ -92,6 +92,7 @@ struct CompanionPresenceArt: View {
     var seedColor: CompanionSeedColor = .original
     var snapshotOnly = false
     var pointSnapshotImage: NSImage? = nil
+    @Environment(\.liminalPointStructure) private var pointStructure
     @Environment(\.liminalPointProgress) private var pointProgress
     @Environment(\.liminalLightExpression) private var inheritedLightExpression
     private var effectiveLightExpression: KinLightExpression { lightExpression ?? inheritedLightExpression }
@@ -113,9 +114,9 @@ struct CompanionPresenceArt: View {
     static func png(form: CompanionForm, family: EvolutionFamily?, treatment: CompanionVisualTreatment = .original,
                     recipe: CompanionAppearanceRecipe? = nil, naturalVariation: CompanionNaturalVariation? = nil,
                     equipment: CompanionEquipment = .empty, seedColor: CompanionSeedColor = .original,
-                    pointProgress: Double = LiminalV008Runtime.orbProgress) -> Data? {
+                    pointProgress: Double = LiminalV008Runtime.orbProgress, pointStructure: LiminalPointStructure? = nil) -> Data? {
         let usesPoints = LiminalV008Runtime.applies(form: form, family: family, treatment: treatment)
-        let pointImage = usesPoints ? LiminalV008Runtime.snapshot(progress: pointProgress, seedColor: seedColor) : nil
+        let pointImage = usesPoints ? LiminalV008Runtime.snapshot(progress: pointProgress, seedColor: seedColor, structure: pointStructure) : nil
         guard !usesPoints || pointImage != nil else { return nil }
         let renderer = ImageRenderer(content: CompanionPresenceArt(form: form, family: family, size: 256, reduceMotion: true,
             treatment: treatment, recipe: recipe, naturalVariation: naturalVariation, equipment: equipment, seedColor: seedColor, snapshotOnly: true, pointSnapshotImage: pointImage))
@@ -153,7 +154,7 @@ struct CompanionPresenceArt: View {
                 } else if !snapshotOnly {
                     LiminalAnimatedPresence(asset: asset, progress: pointProgress,
                         reduceMotion: reduceMotion || systemReduceMotion, seedColor: seedColor,
-                        lightExpression: effectiveLightExpression)
+                        lightExpression: effectiveLightExpression, structure: pointStructure)
                 }
             } else if family == nil, CompanionVisualAsset.tealBody(for: form) != nil {
                 // These authored bodies are static studies. Keep native, reduced

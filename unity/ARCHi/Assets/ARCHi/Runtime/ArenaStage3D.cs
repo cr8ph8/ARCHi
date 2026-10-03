@@ -298,7 +298,10 @@ namespace ARCHi.Port
         private void OnFieldEvidenceChanged(ArenaFieldTrainingBody body)
         {
             if(body.State?.EvolutionState!=FieldTrainingEvolutionState.FieldEvidenceReady)return;
-            if(body==CompanionTraining)companionReadinessAge=StaticMotion?2:0;
+            if(body==CompanionTraining){
+                companionReadinessAge=StaticMotion?2:0;
+                if(!StaticMotion)pointRenderer?.PulseStructure();
+            }
             if(body==RivalTraining)rivalReadinessAge=StaticMotion?2:0;
             UpdateReadiness(0);
         }

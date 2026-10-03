@@ -39,7 +39,7 @@ final class ARCGraphIntegrationTests: XCTestCase {
         XCTAssertEqual(result.target, .arcEvidence(proposalHash: record.id))
         XCTAssertTrue(result.details.contains(.init(label: "Bundle hash", value: record.bundleHash)))
         XCTAssertTrue(result.details.contains { $0.value.contains("Exact 1 · Incorrect 1") })
-        XCTAssertEqual(graph.edges.filter { $0.label == "rescored from" }.count, 1)
+        XCTAssertEqual(graph.edges.filter { $0.label == "independently rescored as" }.count, 1)
         XCTAssertEqual(graph.edges.filter { $0.label == "accounted by" }.count, 1)
         XCTAssertEqual(graph.nodes.filter { $0.kind == .invocation }.count, 0)
 

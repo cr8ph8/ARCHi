@@ -96,3 +96,16 @@ Work together now accepts **Paste text…** through the existing working-copy ow
 Nine focused owner/retention checks passed. The guarded updater installed the curated build with rollback; compiled/installed code identity and signature match. All 22 monitored profile files and bundled Unity/representation/reader/Liminal payloads were unchanged across installation. The installed intake, exact selection and unimported-draft Quit retention were observed.
 
 One real local-only `qwen3.5:9b` request used 3,447 input and 424 output tokens (18.722 s client time). It returned a shorter project-status proposal, but changed numeric literals and omitted an explicit caveat. Apply remained disabled; the source stayed unchanged. No Helpful feedback, method Keep or development credit was submitted. This is an observed blocked outcome, not successful transfer. Existing release blockers remain open. [Receipt](docs/accountability/evidence/r30-paste-intake-2026-09-30.json).
+
+
+## 2 October 2026 — One authored source and GitHub cleanup
+
+Reconciled publication's memory/evidence/method-flow additions into the main authored workspace, preserving its Liminal structure/finish/light, exact-session binding and WikiOS handoff. Thirty-four changes were merged; three conflicts were resolved explicitly. Method targets now contribute their exact ID/revision/digest to particle evidence. The curated draft receives that reviewed source with four exact asset-pin differences. A read-only parity checker rejects new drift, missing code, symlinks and stale exceptions.
+
+Both native source builds passed. The focused native run passed 55 cases and skipped one explicit GPU/package qualification. Updater staging passed 13 cases, parity contracts 12, retained Field/portrait/relay contracts 77. The public TypeScript/PWA build passes without withheld phone portraits; authored portrait bytes remain intact. Five production compiler warning sites were removed; historical accessibility-test deprecations remain. No model call, puzzle run, app installation or phone update occurred. Unity compile/play acceptance was not rerun.
+
+Desktop R1 was archived using Git worktree move and locked: all 18,412 file/link bytes, targets and modes plus branch/HEAD/status matched afterward. The already missing temporary worktree registration was pruned while retaining its branch/commit. Only ignored build/dependency caches from the historical distribution were removed (about 673 MiB); its tracked state remained clean. Other authored research/assets and the SigGraph common Git database remain intact.
+
+README, contribution/architecture/security guidance and formatting defaults now identify the one authored source and outbound publication workflow. GitHub private vulnerability reporting was enabled and read back. The Muse cyberdeck review maps display/input to existing native owners; no hosted Muse dependency, unrestricted device executor or hardware connection was installed. Source review does not clear existing release/rights/runtime gates.
+
+[Reconciliation receipt](docs/accountability/evidence/r02-source-reconciliation-2026-10-02.json) · [Source ownership](docs/source-ownership.md) · [Muse device reference](docs/research/muse-cyberdeck-2026-10-02.md).

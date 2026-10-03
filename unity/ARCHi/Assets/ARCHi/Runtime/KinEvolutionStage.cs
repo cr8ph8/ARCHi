@@ -16,7 +16,9 @@ namespace ARCHi.Port
         private bool usesAuthoredClips;
         private Quaternion leftRest, rightRest, crestRest;
         private SkinnedMeshRenderer[] shapes;
+        private Vector2[] unfoldWindows;
         private Renderer[] renderers;
+        private readonly List<Renderer> facialDetails = new List<Renderer>();
         private Material bodyMaterial;
         private float clock, from, target, transitionStart, progress;
         private bool staticMotion = true;
@@ -59,9 +61,15 @@ namespace ARCHi.Port
             bodyMaterial = CreateMaterial(bodyShader, proto ? "Proto aqua light" : "KIN crimson body",
                 proto ? new Color(.18f, .76f, .67f, .55f) : new Color(.3f, .027f, .075f),
                 proto ? new Color(.55f, 1, .89f) : new Color(1, .52f, .2f));
+            bodyMaterial.SetFloat("_Metallic", proto ? .08f : .14f);
+            bodyMaterial.SetFloat("_Glossiness", .60f);
+            bodyMaterial.SetColor("_EmissionColor", proto ? new Color(.018f,.055f,.045f) : new Color(.038f,.006f,.014f));
             var pearl = CreateMaterial(shader, "KIN constant heart", new Color(.95f, .85f, .66f), new Color(1, .86f, .65f));
-            pearl.SetColor("_EmissionColor", new Color(.8f, .65f, .4f));
+            pearl.SetFloat("_Metallic", .04f);
+            pearl.SetColor("_EmissionColor", new Color(.38f, .29f, .15f));
             var gold = CreateMaterial(shader, "KIN golden filaments", new Color(.58f, .32f, .095f), new Color(1, .65f, .28f));
+            gold.SetFloat("_Metallic", .48f);
+            gold.SetColor("_EmissionColor", new Color(.12f,.065f,.012f));
             foreach (var child in model.GetComponentsInChildren<Transform>())
             {
                 child.gameObject.layer = ArtLayer;
@@ -73,12 +81,25 @@ namespace ARCHi.Port
             rightRest = rightArm == null ? Quaternion.identity : rightArm.localRotation;
             crestRest = crest == null ? Quaternion.identity : crest.localRotation;
             shapes = model.GetComponentsInChildren<SkinnedMeshRenderer>();
+            unfoldWindows = new Vector2[shapes.Length];
+            for (int i = 0; i < shapes.Length; i++)
+            {
+                var part = shapes[i].name.ToLowerInvariant();
+                // Authored animation paths stay intact. Only KIN's retained CompactSeed morphs
+                // use a layered presentation front; Proto keeps its existing clip-driven rig.
+                unfoldWindows[i] = proto ? new Vector2(0,1)
+                    : part.Contains("crest") ? new Vector2(.34f,1)
+                    : part.Contains("arm") ? new Vector2(.22f,.95f)
+                    : part.Contains("grounded") || part.Contains("foot") ? new Vector2(.14f,.88f)
+                    : new Vector2(.04f,.82f);
+            }
             renderers = model.GetComponentsInChildren<Renderer>();
             var eyeInk = proto ? CreateMaterial(shader, "Proto violet eyes", new Color(.012f, .018f, .085f), new Color(.35f, .2f, .7f)) : null;
             var mint = proto ? CreateMaterial(shader, "Proto mint details", new Color(.16f, .6f, .51f), new Color(.5f, 1, .88f)) : null;
             foreach (var renderer in renderers)
             {
                 var name = renderer.name.ToLowerInvariant();
+                if (name.Contains("eye") || name.Contains("smile")) facialDetails.Add(renderer);
                 if (proto)
                 {
                     renderer.sharedMaterial = name.Contains("heart") || name.Contains("core") || name.Contains("glint") ? pearl
@@ -89,23 +110,32 @@ namespace ARCHi.Port
                 renderer.sharedMaterial = name.Contains("heart") || name.Contains("core") || name.Contains("eye") ? pearl
                     : name.Contains("current") || name.Contains("brow") || name.Contains("smile") ? gold : bodyMaterial;
             }
-            AddLight("KIN warm key", new Color(1, .82f, .65f), 1.7f, new Vector3(30, -30, 0));
-            AddLight("KIN cool rim", new Color(.3f, .85f, 1), 1.1f, new Vector3(30, 160, 0));
+            AddLight("KIN warm key", new Color(1, .86f, .72f), 1.05f, new Vector3(32, -32, 0));
+            AddLight("KIN cool rim", new Color(.40f, .78f, 1), .82f, new Vector3(24, 154, 0));
+            AddLight("KIN soft face fill", new Color(.70f, .78f, 1), .30f, new Vector3(-10, 26, 0));
             var cameraObject = new GameObject("Native evolution presentation camera");
             cameraObject.transform.SetParent(transform, false);
             stageCamera = cameraObject.AddComponent<Camera>();
             stageCamera.cullingMask = 1 << ArtLayer;
             stageCamera.clearFlags = CameraClearFlags.SolidColor;
-            stageCamera.backgroundColor = new Color(.075f, .137f, .161f, 0);
+            stageCamera.backgroundColor = Color.clear;
+            stageCamera.allowHDR = true;
+            stageCamera.allowMSAA = true;
             stageCamera.orthographic = true;
             stageCamera.orthographicSize = 1.95f;
             stageCamera.transform.localPosition = new Vector3(0, 1.6f, -7);
             stageCamera.transform.localRotation = Quaternion.identity;
             stageCamera.nearClipPlane = .1f;
             stageCamera.farClipPlane = 20;
-            Texture = new RenderTexture(768, 768, 24, RenderTextureFormat.ARGB32) { name = "KIN native evolution presentation", antiAliasing = 2 };
+            Texture = new RenderTexture(768, 768, 24, RenderTextureFormat.ARGBHalf) { name = "KIN native evolution presentation", antiAliasing = 2 };
             Texture.Create();
             stageCamera.targetTexture = Texture;
+            var finish = cameraObject.AddComponent<ArenaBloom>();
+            finish.PreserveAlpha = true;
+            finish.Strength = .12f;
+            finish.Threshold = .95f;
+            finish.Exposure = 1.05f;
+            finish.Vignette = 0;
             // Explicit rendering avoids an idle camera consuming frames when Seed is shown.
             stageCamera.enabled = false;
             RenderPose();
@@ -149,17 +179,24 @@ namespace ARCHi.Port
         private void RenderPose()
         {
             float breath = staticMotion ? 0 : Mathf.Sin(clock * 1.6f);
-            modelRoot.localPosition = new Vector3(0, breath * .025f, 0);
+            float unfolding = IsAnimating ? Mathf.Sin(Mathf.PI * progress) : 0;
+            modelRoot.localPosition = new Vector3(0, breath * .018f + unfolding * .025f, 0);
             if (currentClip != null && authoredModel != null)
                 currentClip.SampleAnimation(authoredModel, staticMotion ? (currentClip == pointClip ? currentClip.length * .5f : 0) : Mathf.Repeat(clock, currentClip.length));
-            if (!usesAuthoredClips && leftArm != null) leftArm.localRotation = leftRest * Quaternion.Euler(0, breath * 2, 0);
-            if (!usesAuthoredClips && rightArm != null) rightArm.localRotation = rightRest * Quaternion.Euler(0, -breath * 2, 0);
-            if (crest != null) crest.localRotation = crestRest * Quaternion.Euler(0, 0, breath * 1.5f);
-            foreach (var shape in shapes) if (shape.sharedMesh.blendShapeCount > 0) shape.SetBlendShapeWeight(0, 100 * (1 - progress));
-            foreach (var renderer in renderers)
-                if (renderer.name.ToLowerInvariant().Contains("eye") || renderer.name.ToLowerInvariant().Contains("smile")) renderer.enabled = progress > .6f;
+            if (!usesAuthoredClips && leftArm != null) leftArm.localRotation = leftRest * Quaternion.Euler(0, breath * 2 + unfolding * 8, 0);
+            if (!usesAuthoredClips && rightArm != null) rightArm.localRotation = rightRest * Quaternion.Euler(0, -breath * 2 - unfolding * 8, 0);
+            if (!usesAuthoredClips && crest != null) crest.localRotation = crestRest * Quaternion.Euler(0, 0, breath * 1.5f - unfolding * 3);
+            for (int i = 0; i < shapes.Length; i++)
+            {
+                if (shapes[i].sharedMesh.blendShapeCount == 0) continue;
+                var window = unfoldWindows[i];
+                float amount = usesAuthoredClips ? progress : Mathf.SmoothStep(0,1,Mathf.InverseLerp(window.x,window.y,progress));
+                shapes[i].SetBlendShapeWeight(0, 100 * (1 - amount));
+            }
+            foreach (var detail in facialDetails) detail.enabled = progress > .64f;
             bodyMaterial.SetFloat("_Evolving", IsAnimating ? 1 : 0);
             bodyMaterial.SetFloat("_ScanY", Mathf.Lerp(2.6f, .1f, progress));
+            if (bodyMaterial.HasProperty("_Pulse")) bodyMaterial.SetFloat("_Pulse", staticMotion ? 0 : Mathf.Max(0,breath)*.25f);
             stageCamera.Render();
         }
 
@@ -168,8 +205,8 @@ namespace ARCHi.Port
             var material = new Material(shader) { name = label };
             material.SetColor("_Color", color);
             material.SetColor("_RimColor", rim);
-            material.SetFloat("_Metallic", .46f);
-            material.SetFloat("_Glossiness", .78f);
+            material.SetFloat("_Metallic", .16f);
+            material.SetFloat("_Glossiness", .64f);
             materials.Add(material);
             return material;
         }

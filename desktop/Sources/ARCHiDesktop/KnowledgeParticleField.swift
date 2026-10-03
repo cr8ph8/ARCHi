@@ -22,11 +22,45 @@ struct KnowledgeParticleField {
         let constellation: Vector
         let phase: Double
     }
+    /// Only inputs that change this field belong in its view-local cache key.
+    /// Authored titles, details, status and chat text remain outside the layout.
+    struct Topology: Equatable, Sendable {
+        struct Node: Equatable, Sendable {
+            let nodeID: String
+            let kind: CompanionGraphKind
+        }
+        let nodes: [Node]
+        let edges: [CompanionGraphEdge]
+        let omittedCount: Int
+    }
+
+    /// A camera transform over particle coordinates, separate from their layout.
+    struct Frame: Equatable, Sendable {
+        let center: Vector
+        let halfExtent: Double
+
+        init(center: Vector, halfExtent: Double) {
+            self.center = KnowledgeParticleField.finitePosition(center) ?? .zero
+            self.halfExtent = halfExtent.isFinite
+                ? min(KnowledgeParticleField.maximumCoordinate * 2, max(0.24, halfExtent)) : 1
+        }
+
+        func normalize(_ position: Vector) -> Vector {
+            guard let position = KnowledgeParticleField.finitePosition(position) else { return .zero }
+            return (position - center) * (1 / halfExtent)
+        }
+    }
+
+    private static let maximumCoordinate = 1_000_000.0
     let particles: [Particle]
     let edges: [CompanionGraphEdge]
     let omittedCount: Int
 
     init(snapshot: CompanionGraphSnapshot) {
+        self.init(topology: Self.topology(of: snapshot))
+    }
+
+    static func topology(of snapshot: CompanionGraphSnapshot) -> Topology {
         // IDs, not array indices or particle proximity, own the correspondence.
         var seen = Set<String>()
         let sorted = snapshot.nodes.sorted { $0.id < $1.id }
@@ -37,26 +71,34 @@ struct KnowledgeParticleField {
         let validEdges = snapshot.edges.sorted { $0.id < $1.id }.filter {
             ids.contains($0.source) && ids.contains($0.target) && edgeIDs.insert($0.id).inserted
         }
-        edges = Array(validEdges.prefix(CompanionGraph.maximumEdges))
-        omittedCount = snapshot.truncatedCount + max(0, sorted.count - nodes.count)
+        let edges = Array(validEdges.prefix(CompanionGraph.maximumEdges))
+        let omittedCount = snapshot.truncatedCount + max(0, sorted.count - nodes.count)
             + max(0, validEdges.count - edges.count)
+        return .init(nodes: nodes.map { .init(nodeID: $0.id, kind: $0.kind) },
+            edges: edges, omittedCount: omittedCount)
+    }
+
+    init(topology: Topology) {
+        let nodes = topology.nodes
+        edges = topology.edges
+        omittedCount = topology.omittedCount
         let anchors: [Vector] = nodes.map { node in
             if node.kind == .companion { return .zero }
             let group = Double(CompanionGraphKind.allCases.firstIndex(of: node.kind) ?? 0)
             let angle = group * 2 * .pi / Double(CompanionGraphKind.allCases.count)
-            let offset = Self.unit(node.id, salt: "position")
+            let offset = Self.unit(node.nodeID, salt: "position")
             return Vector(x: cos(angle) * 0.55, y: sin(angle) * 0.55) + offset * 0.24
         }
         var relaxed = anchors
         // A bounded deterministic layout: repel crowding, weakly attract recorded
         // neighbours, and retain a type anchor. Forces carry no epistemic meaning.
-        let indices = Dictionary(uniqueKeysWithValues: nodes.enumerated().map { ($0.element.id, $0.offset) })
+        let indices = Dictionary(uniqueKeysWithValues: nodes.enumerated().map { ($0.element.nodeID, $0.offset) })
         for _ in 0..<36 {
             var force = nodes.indices.map { (anchors[$0] - relaxed[$0]) * 0.04 }
             for a in nodes.indices {
                 for b in nodes.indices where b > a {
                     var delta = relaxed[a] - relaxed[b]
-                    if delta.length < 1e-6 { delta = Self.unit(nodes[a].id + nodes[b].id, salt: "separate") * 0.01 }
+                    if delta.length < 1e-6 { delta = Self.unit(nodes[a].nodeID + nodes[b].nodeID, salt: "separate") * 0.01 }
                     let push = delta * (0.0014 / max(0.002, delta.length * delta.length))
                     force[a] = force[a] + push; force[b] = force[b] - push
                 }
@@ -72,12 +114,39 @@ struct KnowledgeParticleField {
             }
         }
         particles = nodes.enumerated().map { index, node in
-            let point = Self.unit(node.id, salt: "orb")
-            let radius = 0.20 + 0.16 * Self.fraction(node.id, salt: "radius")
-            return .init(nodeID: node.id, kind: node.kind,
+            let point = Self.unit(node.nodeID, salt: "orb")
+            let radius = 0.20 + 0.16 * Self.fraction(node.nodeID, salt: "radius")
+            return .init(nodeID: node.nodeID, kind: node.kind,
                 orb: node.kind == .companion ? .zero : point * radius,
-                constellation: relaxed[index], phase: Self.fraction(node.id, salt: "phase") * 2 * .pi)
+                constellation: relaxed[index], phase: Self.fraction(node.nodeID, salt: "phase") * 2 * .pi)
         }
+    }
+
+    /// Supply the complete field and the unfiltered focus neighbourhood IDs.
+    /// Search changes visibility only; it must not change this camera's inputs.
+    static func framing(particles: [Particle], spread: Double, reduceMotion: Bool,
+                        focusIDs: Set<String>? = nil) -> Frame {
+        let positions = particles.compactMap { particle -> Vector? in
+            guard focusIDs?.contains(particle.nodeID) ?? true else { return nil }
+            return finitePosition(position(particle, spread: spread, reduceMotion: reduceMotion))
+        }
+        guard let first = positions.first else { return .init(center: .zero, halfExtent: 1) }
+        var low = first, high = first
+        for point in positions.dropFirst() {
+            low.x = min(low.x, point.x); low.y = min(low.y, point.y)
+            high.x = max(high.x, point.x); high.y = max(high.y, point.y)
+        }
+        let center = (low + high) * 0.5
+        let radius = max(high.x - low.x, high.y - low.y) * 0.5
+        // Keep particle centers inside 72% of the frame, with extra space for
+        // halos and nearby labels. A minimum extent avoids single-node zoom.
+        return .init(center: center, halfExtent: radius / 0.72 + 0.04)
+    }
+
+    private static func finitePosition(_ position: Vector) -> Vector? {
+        guard position.x.isFinite, position.y.isFinite else { return nil }
+        return .init(x: min(maximumCoordinate, max(-maximumCoordinate, position.x)),
+            y: min(maximumCoordinate, max(-maximumCoordinate, position.y)))
     }
 
     /// Endpoint-exact bounded local curl; reduced motion removes the deviation.

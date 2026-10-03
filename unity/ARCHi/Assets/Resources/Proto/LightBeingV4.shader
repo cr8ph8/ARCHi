@@ -29,7 +29,8 @@ Shader "ARCHi/Light Being V4" {
     if(_Role>3.5&&_Role<5.5)opacity=1-smoothstep(.12,.40,p);
     if(_Role>5.5)opacity=smoothstep(.06,.23,p)*(1-smoothstep(.47,.78,p));
     clip(opacity-.001);
-    float rim=pow(1-saturate(abs(dot(normalize(i.normal),normalize(i.view)))),4);
+    float facing=saturate(abs(dot(normalize(i.normal),normalize(i.view))));
+    float rim=pow(1-facing,3.5);
     float3 color=i.color.rgb;
     #ifdef UNITY_COLORSPACE_GAMMA
     color=LinearToGammaSpace(color);
@@ -38,15 +39,16 @@ Shader "ARCHi/Light Being V4" {
      float3 normal=normalize(i.normal),view=normalize(i.view);
      float3 key=normalize(float3(-.50,.75,-.65));
      float diffuse=saturate(dot(normal,key));
-     float sheen=pow(saturate(dot(normal,normalize(key+view))),42)*.68;
-     color=_Color.rgb*(.24+.65*diffuse+rim*1.7)+float3(.85,.95,1)*sheen;
-     opacity*=.70+rim*.24;
+     float sheen=pow(saturate(dot(normal,normalize(key+view))),26)*.22;
+     float inner=pow(facing,2)*.08;
+     color=_Color.rgb*(.30+.65*diffuse+rim*.72+inner)+float3(.74,.91,1)*sheen;
+     opacity*=.79+rim*.14;
     }else if(_Role>3.5&&_Role<4.5){
-     opacity*=.28+rim*.60;color=_Color.rgb*(.70+rim*3.6);
+     opacity*=.24+rim*.52;color=_Color.rgb*(.66+rim*1.35);
     }else if(_Role>5.5){
-     opacity*=i.color.a;color*=2.3;
+     opacity*=i.color.a;color*=1.4;
     }else{
-     float gain=(_Role>1.5&&_Role<2.5)?5.0:(_Role>2.5?1.3:1.0);
+     float gain=(_Role>1.5&&_Role<2.5)?2.0:(_Role>2.5?1.05:1.0);
      color*=gain;
     }
     return float4(color,saturate(opacity));

@@ -20,11 +20,16 @@ Shader "ARCHi/Living Jewel" {
   half _Metallic, _Glossiness, _Pulse, _ScanY, _Evolving;
   void surf(Input IN, inout SurfaceOutputStandard o) {
    o.Albedo = _Color.rgb;
+   half facing=saturate(dot(normalize(IN.viewDir),o.Normal));
+   half rim=pow(1-facing,3.8);
    o.Metallic = _Metallic;
-   o.Smoothness = _Glossiness;
-   half rim = pow(1-saturate(dot(normalize(IN.viewDir), o.Normal)),3.5);
-   half scan = exp(-pow((IN.worldPos.y-_ScanY)*13,2))*_Evolving;
-   o.Emission = _EmissionColor.rgb*(1+_Pulse*.7) + _RimColor.rgb*(rim*.32+scan*2.4);
+   o.Smoothness = saturate(_Glossiness-rim*.12);
+   o.Occlusion = .92+.08*facing;
+   half scan=exp(-pow((IN.worldPos.y-_ScanY)*14,2))*saturate(_Evolving);
+   half softScan=exp(-pow((IN.worldPos.y-_ScanY)*5,2))*saturate(_Evolving);
+   half3 glow=max(0,_EmissionColor.rgb)*(1+saturate(_Pulse)*.18)
+      +_RimColor.rgb*(rim*.21+pow(1-facing,1.7)*.035+scan*.72+softScan*.12);
+   o.Emission=glow/(1+max(glow.r,max(glow.g,glow.b))*.35);
    o.Alpha=1;
   }
   ENDCG

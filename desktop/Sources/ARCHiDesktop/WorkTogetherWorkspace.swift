@@ -17,6 +17,11 @@ struct WorkTogetherWorkspace: View {
         VStack(spacing: 0) {
             workbenchHeader
             Divider()
+            if let message = store.wikiOSExchangeMessage {
+                Text(message).font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20).padding(.vertical, 6)
+                    .accessibilityIdentifier("wikios.exchange.message")
+            }
             GeometryReader { geometry in
                 HStack(spacing: 0) {
                     documentPane
@@ -41,6 +46,16 @@ struct WorkTogetherWorkspace: View {
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
+            Button("Memory map", systemImage: "point.3.connected.trianglepath.dotted") {
+                if let use = store.preparedDocumentProcedure {
+                    _ = store.openDocumentMethodMap(use)
+                } else {
+                    // Retain the exact map record that opened this workspace.
+                    // The graph re-resolves it; missing records are not replaced.
+                    store.open(.nodeLab)
+                }
+            }
+            .buttonStyle(.borderless).accessibilityIdentifier("work.memory-map")
             Button("Look here", systemImage: "scope") { showsInterest.toggle() }
                 .buttonStyle(.borderless).accessibilityIdentifier("work.interest")
                 .popover(isPresented: $showsInterest) { DesktopInterestCard(store: store).frame(width: 350).padding(12) }
@@ -125,6 +140,12 @@ struct WorkTogetherWorkspace: View {
                 .accessibilityLabel("Export working copy")
                 .accessibilityIdentifier("work.export")
                 .help("Save a separate text draft")
+            if store.wikiOSTask != nil {
+                Button("Return…", systemImage: "arrow.uturn.backward.circle") { _ = store.beginWikiOSReturnReview() }
+                    .disabled(store.wikiOSExchangeBlockReason != nil || store.wikiOSExchangeReview != nil)
+                    .accessibilityLabel("Return work to WikiOS").accessibilityIdentifier("wikios.return.open")
+                    .help("Review and return this working copy to its WikiOS task")
+            }
             Menu {
                 Button(store.sourceName == nil ? "Choose document…" : "Change document…") { store.chooseDocument() }
                 Button("Paste text…") { pastedDocumentContext = store.beginPastedDocumentImport() }

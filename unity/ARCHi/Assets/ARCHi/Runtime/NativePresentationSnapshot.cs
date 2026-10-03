@@ -10,11 +10,11 @@ namespace ARCHi.Port
     public sealed class NativePresentationSnapshot
     {
         public const string SeedDigest = "02066c89c597edf6b0f9d3c9f5706323cfefa8163c94b8407ec48cd7e57bf5e6";
-        public const string LightSeedDigest = "bc8b05e36156af6bb28459fa160b118315c14d1d319e04c23d861b7416d3018b";
-        public const string HamptonSeedDigest = "2f8ac5d79dae36bed3e91cbd55f53b2f86d5317b464c119d9c14d37512044c18";
-        public const string HamptonGarnetDigest = "4926755798476430159df3923399242d0f564ea11fa3f8895f769f60655128a9";
+        public const string LightSeedDigest = "867b75f54b17619c9eaca563515221e5f7b5e49385b9f29cad8b5216213dd9c4";
+        public const string HamptonSeedDigest = "9ffb19a74959c29fd1ff46848937c2745c08b543b0c70871e99c4c5c606916a1";
+        public const string HamptonGarnetDigest = "6a60509d41e00d8dd6b204dd894b988498b6e38dabbc29349db058046e7228d0";
         public const string BodyDigest = "96dcfec5654287a22c5d53357dcc47dc7a6a92cd4458da381c45fe074f32de2d";
-        public const string ProtoBodyDigest = "c1de08a1afb9532d3cd459f9d166dcc58f4d05852ba3fb98d6c3f4bb3319b338";
+        public const string ProtoBodyDigest = "f64051b207446340c9e813c35e89087afc6fac068ca0d7ec38d22d86e56ac688";
         public const int MaximumBytes = 16384;
         public const double MaximumAge = 5;
         public int schemaVersion;
@@ -26,7 +26,10 @@ namespace ARCHi.Port
         // derived value out of its field serializer and admit only an actual wire
         // descriptor below, so legacy snapshots remain descriptor-free.
         [NonSerialized] public NativePointPresentation pointPresentation;
+        [NonSerialized] public LiminalPointStructure pointStructure;
         public string pointKnowledgeSHA256;
+        public string pointFinishSHA256;
+        public string pointLightStyle;
         public string SeedColor => string.IsNullOrEmpty(seedColor) ? "original" : seedColor;
         public string SeedAppearance => string.IsNullOrEmpty(seedAppearance)?"kinParticles":seedAppearance;
         public string ExpectedSeedDigest => SeedAppearance == "hamptonLiminal"
@@ -63,7 +66,7 @@ namespace ARCHi.Port
                     { reason = "Missing or repeated presentation field: " + field; return false; }
                 if (TopLevelFieldCount(json, "appearance") > 1)
                 { reason = "Repeated appearance field."; return false; }
-                foreach (var field in new[] { "staffPalette", "staffCrown", "sessionKind", "destination", "destinationRevision", "seedAppearance", "seedColor", "pointPresentation", "pointKnowledgeSHA256" })
+                foreach (var field in new[] { "staffPalette", "staffCrown", "sessionKind", "destination", "destinationRevision", "seedAppearance", "seedColor", "pointPresentation", "pointKnowledgeSHA256", "pointStructure", "pointFinishSHA256", "pointLightStyle" })
                     if (TopLevelFieldCount(json, field) > 1)
                     { reason = "Repeated staff recipe field."; return false; }
                 var value = JsonUtility.FromJson<NativePresentationSnapshot>(json);
@@ -112,6 +115,10 @@ namespace ARCHi.Port
                     || (!string.IsNullOrEmpty(value.pointKnowledgeSHA256) && (value.pointPresentation == null
                         || !Regex.IsMatch(value.pointKnowledgeSHA256, "^[0-9a-f]{64}$"))))
                 { reason = "Point presentation descriptor was rejected."; return false; }
+                if (TopLevelField(json, "pointStructure", out var structureJSON) == 1 && structureJSON != "null")
+                    LiminalPointStructure.TryRead(structureJSON, value, out value.pointStructure);
+                if(value.pointPresentation==null||value.pointFinishSHA256!=LiminalPointFinish.ExpectedManifestSHA256)value.pointFinishSHA256=null;
+                if(value.pointFinishSHA256==null||value.pointLightStyle!=LiminalParticleRenderer.LightStyleRevision)value.pointLightStyle=null;
                 if (double.IsNaN(now) || double.IsInfinity(now) || double.IsNaN(value.updatedAtUnix) || double.IsInfinity(value.updatedAtUnix)
                     || value.updatedAtUnix <= 0 || now - value.updatedAtUnix > MaximumAge || value.updatedAtUnix - now > MaximumAge)
                 { reason = "Native presentation heartbeat expired."; return false; }
@@ -133,7 +140,7 @@ namespace ARCHi.Port
         // not nested keys or text inside a string.
         internal static int TopLevelFieldCount(string json, string field) => TopLevelField(json,field,out _);
 
-        private static int TopLevelField(string json,string field,out string fieldJSON)
+        internal static int TopLevelField(string json,string field,out string fieldJSON)
         {
             fieldJSON=null;
             int depth = 0, count = 0;
@@ -184,6 +191,9 @@ namespace ARCHi.Port
             && a.SessionKind == b.SessionKind && a.Destination == b.Destination && a.destinationRevision == b.destinationRevision
             && NativePointPresentation.Same(a.pointPresentation, b.pointPresentation)
             && (a.pointKnowledgeSHA256 ?? "") == (b.pointKnowledgeSHA256 ?? "")
+            && (a.pointStructure?.Digest ?? "") == (b.pointStructure?.Digest ?? "")
+            && (a.pointFinishSHA256 ?? "") == (b.pointFinishSHA256 ?? "")
+            && (a.pointLightStyle ?? "") == (b.pointLightStyle ?? "")
             && a.seedAssetSHA256 == b.seedAssetSHA256 && a.bodyAssetSHA256 == b.bodyAssetSHA256;
     }
 }

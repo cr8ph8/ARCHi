@@ -263,7 +263,7 @@ enum CompanionItemCatalog {
         return .registered
     }
 
-    /// Arena is disabled, and this registry authorizes no canonical effects.
+    /// Local Arena practice is available; this registry authorizes no canonical effects.
     /// Local pointing is a desktop utility, not a battle-stat modifier. Even an
     /// exact registered recipe cannot grant a canonical Arena effect this release.
     static func canonicalArenaEffects(for package: CompanionItemPackage) -> [String] {

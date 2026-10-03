@@ -123,7 +123,7 @@ final class EvolutionIntegrationTests: XCTestCase {
         store.prompt = "Explain the shared source."
         store.submit()
         try await wait { !store.isWorking }
-        XCTAssertEqual(store.compareResults[.qwen]?.state, .complete)
+        XCTAssertEqual(store.compareResults[.qwen]?.state, .complete, "Current request status: \(store.status)")
     }
     @MainActor private func wait(_ condition: () -> Bool) async throws {
         for _ in 0..<200 { if condition() { return }; try await Task.sleep(for: .milliseconds(5)) }
@@ -142,7 +142,7 @@ private final class EvolutionFixtureAssistant: LocalRoleClient {
         return LocalRoleResult(requestID: request.id, role: request.role,
             text: String(decoding: try JSONEncoder().encode(payload), as: UTF8.self),
             model: QwenModelMetadata(name: "evolution-fixture", family: "qwen", parameterSize: "fixture",
-                quantization: "fixture", digest: "fixture-only"), elapsedMilliseconds: 0)
+                quantization: "fixture", digest: String(repeating: "e", count: 64)), elapsedMilliseconds: 0)
     }
     func disconnect() {}
     func shutdown() async {}

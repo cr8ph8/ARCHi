@@ -9,11 +9,11 @@ extension CompanionStore {
         let id = CompanionVisualAsset.appearanceID(form: presentationForm, family: selectedFamily,
             treatment: preferences.visualTreatment, recipe: recipe, naturalVariation: presentationNaturalVariation,
             equipment: preferences.equipment, seedColor: preferences.seedColor,
-            pointProgress: preferences.liminalPointProgress)
+            pointProgress: preferences.liminalPointProgress) + (liveLiminalPointStructure.map { "-structure-" + $0.digest } ?? "")
         let bytes = reactor.appearanceID == id ? reactor.referencePNG : CompanionPresenceArt.png(
             form: presentationForm, family: selectedFamily, treatment: preferences.visualTreatment,
             recipe: recipe, naturalVariation: presentationNaturalVariation, equipment: preferences.equipment, seedColor: preferences.seedColor,
-            pointProgress: preferences.liminalPointProgress)
+            pointProgress: preferences.liminalPointProgress, pointStructure: liveLiminalPointStructure)
         reactor.updateReference(id: id,
             label: CompanionVisualAsset.label(form: presentationForm, family: selectedFamily,
                 treatment: preferences.visualTreatment, recipe: recipe, naturalVariation: presentationNaturalVariation,
@@ -29,7 +29,7 @@ extension CompanionStore {
         reactor.appearanceID == CompanionVisualAsset.appearanceID(form: presentationForm, family: presentationFamily,
             treatment: preferences.visualTreatment, recipe: presentationRecipe,
             naturalVariation: presentationNaturalVariation, equipment: preferences.equipment, seedColor: preferences.seedColor,
-            pointProgress: preferences.liminalPointProgress)
+            pointProgress: preferences.liminalPointProgress) + (liveLiminalPointStructure.map { "-structure-" + $0.digest } ?? "")
     }
 }
 
@@ -63,6 +63,7 @@ struct LiveCompanionPresence: View {
                     .environment(\.liminalPointProgress, role == .cursor ? LiminalV008Runtime.orbProgress : store.preferences.liminalPointProgress)
             }
         }.frame(width: size, height: size)
+        .modifier(LiminalStructureScope(store: store))
         .accessibilityValue(store.activeQiMon == nil ? "" : store.kinLightExpression.label)
     }
 }

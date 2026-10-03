@@ -15,6 +15,7 @@ struct HostedPlayDownloadReceipt: Equatable {
 typealias HostedPlayAppearanceRenderer = @MainActor (CompanionForm, EvolutionFamily?, CompanionVisualTreatment,
     CompanionAppearanceRecipe?, CompanionNaturalVariation?, CompanionEquipment, CompanionSeedColor) -> Data?
 typealias HostedPlayPointSnapshotRenderer = @MainActor (CompanionEquipment, CompanionSeedColor, Double) -> Data?
+typealias HostedPlayStructureSnapshotRenderer = @MainActor (CompanionEquipment, CompanionSeedColor, Double, LiminalPointStructure) -> Data?
 
 @MainActor
 final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, WKDownloadDelegate {
@@ -62,6 +63,8 @@ final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WK
     private(set) var appearanceDeliveryDiagnostics: [String] = []
     private let appearanceRenderer: HostedPlayAppearanceRenderer
     private let pointSnapshotRenderer: HostedPlayPointSnapshotRenderer
+    private let structureSnapshotRenderer: HostedPlayStructureSnapshotRenderer
+    var presentedAppearanceID: String? { appearance?.id }
     private var retryAppearanceAfterReady: (@MainActor () -> Void)?
     var onVisibilityChanged: ((Bool) -> Void)?
     var onJourneyOriginChanged: ((String) -> Void)?
@@ -93,9 +96,13 @@ final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WK
          }, pointSnapshotRenderer: @escaping HostedPlayPointSnapshotRenderer = { equipment, seedColor, progress in
              CompanionPresenceArt.png(form: .hamptonSeed, family: nil, treatment: .liminalV008,
                 equipment: equipment, seedColor: seedColor, pointProgress: progress)
+         }, structureSnapshotRenderer: @escaping HostedPlayStructureSnapshotRenderer = { equipment, seedColor, progress, structure in
+             CompanionPresenceArt.png(form: .hamptonSeed, family: nil, treatment: .liminalV008,
+                equipment: equipment, seedColor: seedColor, pointProgress: progress, pointStructure: structure)
          }) {
         self.profile = profile; self.assetDirectory = assetDirectory; self.appearanceRenderer = appearanceRenderer
         self.pointSnapshotRenderer = pointSnapshotRenderer
+        self.structureSnapshotRenderer = structureSnapshotRenderer
         super.init()
     }
 
@@ -234,12 +241,13 @@ final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WK
                           expressionPNG: Data? = nil, expressionRevision: UInt64 = 0,
                           recipe: CompanionAppearanceRecipe? = nil, naturalVariation: CompanionNaturalVariation? = nil,
                           equipment: CompanionEquipment = .empty, seedColor: CompanionSeedColor = .original,
-                          pointProgress: Double = 107.0 / 119.0) {
+                          pointProgress: Double = 107.0 / 119.0, pointStructure: LiminalPointStructure? = nil) {
         let usingExpression = expressionPNG != nil && !reduceMotion
-        let id = CompanionVisualAsset.appearanceID(form: form, family: family, treatment: treatment,
+        let baseID = CompanionVisualAsset.appearanceID(form: form, family: family, treatment: treatment,
             recipe: recipe, naturalVariation: naturalVariation, equipment: equipment, seedColor: seedColor,
             pointProgress: pointProgress)
             + (usingExpression ? "-expression-\(expressionRevision)" : "")
+        let id = pointStructure.map { "liminal-live-" + LiminalKnowledgeBindings.sha256(Data((baseID + ":" + $0.digest).utf8)) } ?? baseID
         // A newer request, including a return to the last successfully drawn
         // appearance, retires a previous failed request's one readiness retry.
         retryAppearanceAfterReady = nil
@@ -251,12 +259,25 @@ final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WK
             // Keep the legacy renderer injection unchanged. The point path owns
             // qualification/fallback and receives the same body pose as native.
             let progress = pointProgress.isFinite ? pointProgress : LiminalV008Runtime.orbProgress
-            bytes = pointSnapshotRenderer(equipment, seedColor, min(1, max(0, progress)))
+            if let pointStructure {
+                bytes = structureSnapshotRenderer(equipment, seedColor, min(1, max(0, progress)), pointStructure)
+            } else { bytes = pointSnapshotRenderer(equipment, seedColor, min(1, max(0, progress))) }
         } else {
             bytes = appearanceRenderer(form, family, treatment, recipe, naturalVariation, equipment, seedColor)
         }
         guard let bytes, bytes.count < 1_400_000 else {
             recordAppearanceDelivery("render-unavailable id=\(id)")
+            if pointStructure != nil || appearance?.id.hasPrefix("liminal-live-") == true {
+                // Never keep withdrawn/private derived geometry visible after a
+                // failed replacement. A verified Seed (or empty pixels if even
+                // its resource is unavailable) is an explicit fallback only.
+                if let fallback = Self.structureUnavailablePNG(color: seedColor) {
+                    appearance = (id + "-render-unavailable", "Liminal · Seed fallback; structure unavailable",
+                                  "data:image/png;base64," + fallback.base64EncodedString(), true)
+                    recordAppearanceDelivery("retired-derived-appearance id=\(id)")
+                    sendAppearance()
+                } else { appearance = nil }
+            }
             // ImageRenderer may be unavailable before AppKit finishes starting.
             // Retain the latest requested inputs for one later ready transition;
             // this never spins, changes the Journey, or starts a second host.
@@ -264,7 +285,7 @@ final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WK
                 self?.updateAppearance(form: form, family: family, reduceMotion: reduceMotion,
                     treatment: treatment, expressionPNG: expressionPNG, expressionRevision: expressionRevision,
                     recipe: recipe, naturalVariation: naturalVariation, equipment: equipment, seedColor: seedColor,
-                    pointProgress: pointProgress)
+                    pointProgress: pointProgress, pointStructure: pointStructure)
             }
             return
         }
@@ -272,6 +293,17 @@ final class HostedPlayHost: NSObject, ObservableObject, WKNavigationDelegate, WK
             recipe: recipe, naturalVariation: naturalVariation, equipment: equipment, seedColor: seedColor)
         appearance = (id, label, "data:image/png;base64," + bytes.base64EncodedString(), reduceMotion)
         sendAppearance()
+    }
+
+    private static func structureUnavailablePNG(color: CompanionSeedColor) -> Data? {
+        if let image = SeedColorRendering.image(for: .hamptonSeed, color: color),
+           let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
+           let png = bitmap.representation(using: .png, properties: [:]) { return png }
+        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 1, pixelsHigh: 1,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 4, bitsPerPixel: 32) else { return nil }
+        bitmap.bitmapData?.initialize(repeating: 0, count: 4)
+        return bitmap.representation(using: .png, properties: [:])
     }
 
     private func sendAppearance() {

@@ -392,7 +392,7 @@ final class ARC3SessionStore: ObservableObject {
         self.startedAt = nil; self.activeGameID = nil
     }
 
-    private struct Episode: Codable {
+    private struct Episode: Encodable {
         let schema = "archi.arc3.native-episode.v1"
         let source = "local-public-game-observation"
         let scope = "task-local transition predictions; no companion growth or benchmark claim"

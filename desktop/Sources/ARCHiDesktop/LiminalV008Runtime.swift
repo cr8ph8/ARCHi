@@ -39,17 +39,25 @@ enum LiminalV008Runtime {
     static func applies(form: CompanionForm, family: EvolutionFamily?, treatment: CompanionVisualTreatment) -> Bool {
         form == .hamptonSeed && family == nil && treatment == .liminalV008 && asset != nil
     }
-    static func snapshot(progress: Double, seedColor: CompanionSeedColor = .original) -> NSImage? {
+    static func snapshot(progress: Double, seedColor: CompanionSeedColor = .original, structure: LiminalPointStructure? = nil) -> NSImage? {
         guard let asset else { return nil }
-        if let data = try? LiminalMetalView.snapshotPNGData(asset: asset, progress: progress, seedColor: seedColor) {
+        if let data = try? LiminalMetalView.snapshotPNGData(asset: asset, progress: progress, seedColor: seedColor, structure: structure) {
             return NSImage(data: data)
         }
+        return fallbackSnapshot(asset: asset, progress: progress, seedColor: seedColor, structure: structure)
+    }
+
+    static func fallbackSnapshot(asset: LiminalPointAsset, progress: Double,
+                                 seedColor: CompanionSeedColor = .original, structure: LiminalPointStructure? = nil) -> NSImage? {
+        // A reference fallback cannot claim to contain the requested live recipe.
+        guard structure == nil || structure?.particleCount == 0 else { return nil }
         if abs(progress - orbProgress) < 0.001 {
             return SeedColorRendering.image(for: .hamptonSeed, color: LiminalSeedStyle.color(seedColor))
         }
         // The authored body fallback carries Original colors only. Do not present
-        // that image as an exact personal-color capture after a GPU failure.
-        guard seedColor == .original, let data = try? asset.endpointPNGData(progress: progress) else { return nil }
+        // that image as a refined or personal-color capture after a GPU failure.
+        guard asset.finish == nil, seedColor == .original,
+              let data = try? asset.endpointPNGData(progress: progress) else { return nil }
         return NSImage(data: data)
     }
 }
@@ -92,10 +100,10 @@ struct LiminalV008AppearanceCard: View {
                         }
                         Picker("Shape", selection: $store.preferences.liminalPointProgress) {
                             Text("Seed orb").tag(LiminalV008Runtime.orbProgress)
-                            Text("Curled").tag(LiminalV008Runtime.curledProgress)
-                            Text("Standing").tag(LiminalV008Runtime.standingProgress)
+                            Text("Ball / Coin").tag(LiminalV008Runtime.curledProgress)
+                            Text("Beast Form").tag(LiminalV008Runtime.standingProgress)
                         }.pickerStyle(.segmented)
-                        Text("Light responds to ARCHi’s activity. Inspect pauses the presentation so you can explore its knowledge.")
+                        Text("Supported learning adds small constellations that follow each form. Light responds to ARCHi’s activity. Inspect pauses the presentation so you can explore its knowledge.")
                             .font(.caption).foregroundStyle(.secondary)
                         HStack {
                             Button("Keep this appearance") { store.rememberPreferences = true; store.savePreferences() }
@@ -121,9 +129,11 @@ private struct LiminalKnowledgePreview: View {
     @State private var inspection = false
     @State private var map: LiminalKnowledgeBindings?
     @State private var sidecar: LiminalKnowledgeBindings.Sidecar?
+    @State private var inspectionUnavailableReason: String?
     @State private var sessionID = UUID().uuidString
     @State private var origin: String?
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.liminalPointStructure) private var pointStructure
     var body: some View {
         TimelineView(.periodic(from: .now, by: 2)) { context in
             let graph = store.companionGraphSnapshot(at: context.date)
@@ -138,7 +148,7 @@ private struct LiminalKnowledgePreview: View {
                 LiminalAnimatedPresence(asset: asset, progress: store.preferences.liminalPointProgress,
                     reduceMotion: store.preferences.reduceMotion || store.preferences.quiet || systemReduceMotion,
                     seedColor: store.preferences.seedColor,
-                    lightExpression: store.kinLightExpression, inspection: inspection,
+                    lightExpression: store.kinLightExpression, structure: pointStructure, inspection: inspection,
                     selectableIDs: inspection ? sidecar?.bindings.map(\.anchorID) ?? [] : [],
                     onSelectArtID: { id in
                         guard inspection, let sidecar,
@@ -153,8 +163,8 @@ private struct LiminalKnowledgePreview: View {
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }.allowsHitTesting(false).accessibilityHidden(true)
                     }
-                Text(inspection ? (sidecar?.bindings.isEmpty != false ? "No knowledge records are available to inspect yet." : "Select an anchor to inspect its current source, version and connections.")
-                     : "Your color. Your constellation.")
+                Text(inspectionUnavailableReason ?? (inspection ? (sidecar?.bindings.isEmpty != false ? "No knowledge records are available to inspect yet." : "Select an anchor to inspect its current source, version and connections.")
+                     : "Your color. Your constellation."))
                     .font(.caption).foregroundStyle(.secondary)
             }
             .onChange(of: graph, initial: true) { _, graph in refresh(graph) }
@@ -162,11 +172,18 @@ private struct LiminalKnowledgePreview: View {
         }
     }
     private func refresh(_ graph: CompanionGraphSnapshot) {
-        guard let digest = store.activeQiMon?.originDigest else { sidecar = nil; return }
+        guard let digest = store.activeQiMon?.originDigest else {
+            sidecar = nil; inspectionUnavailableReason = nil; return
+        }
         if origin != digest { map = nil; sidecar = nil; sessionID = UUID().uuidString; origin = digest }
         do {
             if map == nil { map = try LiminalKnowledgeBindings(manifestSHA256: asset.manifestSHA256, lowDetailIDs: asset.lowDetailIDs) }
-            sidecar = try map?.project(graph, sessionID: sessionID, originDigest: digest)
-        } catch { sidecar = nil }
+            let projection = try map?.projectForPresentation(graph, sessionID: sessionID, originDigest: digest)
+            sidecar = projection?.sidecar
+            inspectionUnavailableReason = projection?.inspectionUnavailableReason
+        } catch {
+            sidecar = nil
+            inspectionUnavailableReason = "Knowledge inspection is unavailable because its current record bindings could not be checked. Liminal’s appearance remains available."
+        }
     }
 }

@@ -31,7 +31,7 @@ namespace ARCHi.Port
             public double updatedAtUnix;
             public bool active;
             public int pointAssetVersion, pointLODCount;
-            public string pointManifestSHA256, pointKnowledgeSHA256, pointState;
+            public string pointManifestSHA256, pointKnowledgeSHA256, pointStructureDigest, pointFinishSHA256, pointLightStyle, pointState;
             public float pointRenderedProgress;
         }
         [Serializable] private sealed class PointSelection {
@@ -175,9 +175,12 @@ namespace ARCHi.Port
                     staffPalette = current.staffPalette, staffCrown = current.staffCrown,
                     sessionKind = current.SessionKind, destination = current.Destination,
                     destinationRevision = current.destinationRevision, currentArea = port.Arena == null ? "companion" : "arena",
-                    pointAssetVersion = port.PointRenderer?.Ready == true ? 4 : 0,
+                    pointAssetVersion = port.PointRenderer?.Ready == true ? 7 : 0,
                     pointManifestSHA256 = port.PointRenderer?.ManifestSHA256,
                     pointKnowledgeSHA256 = port.PointRenderer?.KnowledgeSHA256,
+                    pointStructureDigest = port.PointRenderer?.StructureDigest,
+                    pointFinishSHA256 = port.PointRenderer?.FinishSHA256,
+                    pointLightStyle = port.PointRenderer?.LightStyle,
                     pointLODCount = port.PointRenderer?.PointCount ?? 0,
                     pointRenderedProgress = port.PointRenderer?.RenderedProgress ?? 0,
                     pointState = port.PointRenderer?.Status,

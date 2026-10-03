@@ -21,13 +21,17 @@ enum KnowledgePageGraph {
             guard nodes.count < CompanionGraph.maximumNodes else { truncated += 1; return false }
             nodes.append(node); ids.insert(node.id); return true
         }
-        func link(_ from: String, _ to: String, _ label: String) {
-            let id = key(["edge", from, to, label])
+        func link(_ from: String, _ to: String, _ label: String,
+                  relationship: CompanionGraphRelationship = .recorded,
+                  rationale: String? = nil, reference: String? = nil) {
+            // Separate reviewed declarations retain their own identity and reason.
+            let id = reference ?? key(["edge", from, to, label])
             guard !edgeIDs.contains(id) else { return }
             guard ids.contains(from), ids.contains(to), edges.count < CompanionGraph.maximumEdges else {
                 truncated += 1; return
             }
-            edges.append(.init(id: id, source: from, target: to, label: label)); edgeIDs.insert(id)
+            edges.append(.init(id: id, source: from, target: to, label: label,
+                relationship: relationship, rationale: rationale, reference: reference)); edgeIDs.insert(id)
         }
         func addSource(_ identity: ReadingSourceParent, provenance: ReadingSourceProvenanceReceipt? = nil) -> String? {
             let id = sourceKey(identity)
@@ -54,14 +58,15 @@ enum KnowledgePageGraph {
             guard add(.init(id: id, title: retained?.title ?? "Unavailable source version",
                 subtitle: "Source v\(identity.revision)", kind: .source,
                 status: issue == nil ? "Retained source" : "Needs source review",
-                details: details, target: .memory)) else { return nil }
+                details: details, target: .memory,
+                presentationState: issue == nil ? .recorded : .unavailable)) else { return nil }
             return id
         }
         func addSource(_ binding: ReadingSourceBinding) -> String? {
             guard let id = addSource(.init(binding: binding), provenance: binding.provenance) else { return nil }
             for parent in binding.provenance?.parents ?? [] {
                 guard let parentID = addSource(parent) else { continue }
-                link(id, parentID, "derived from")
+                link(id, parentID, "derived from", relationship: .derivedFrom)
             }
             return id
         }
@@ -70,16 +75,22 @@ enum KnowledgePageGraph {
             let issue = library.availability(of: page)
             let stale = !page.anchors.allSatisfy { library.quote(for: $0) != nil }
             let status = page.state == .withdrawn ? "Withdrawn" : stale ? "Needs source review" : issue == nil ? "Reviewed · current sources" : page.state.title
+            let presentation: CompanionGraphPresentationState = page.state == .withdrawn ? .withdrawn
+                : page.state == .draft ? .candidate : (stale || issue != nil) ? .needsReview : .reviewed
             guard add(.init(id: id, title: page.title, subtitle: "\(page.kind.title) · v\(page.revision)",
                 kind: .knowledge, status: status,
                 details: [.init(label: "Your note", value: page.body),
+                    .init(label: "Page review", value: page.state.title),
                     .init(label: "Availability", value: issue ?? "Source passages are current. User review is not factual certification."),
+                    .init(label: "Page ID", value: page.id),
+                    .init(label: "Revision", value: String(page.revision)),
+                    .init(label: "Digest", value: page.binding.digest),
                     .init(label: "Meaning", value: "This authored page is not automatically supplied to a model or counted as learning.")],
-                target: .knowledgePage(id: page.id))) else { continue }
+                target: .knowledgePage(id: page.id), presentationState: presentation)) else { continue }
             if ids.contains("companion-archi") { link("companion-archi", id, "authored memory") }
             for anchor in page.anchors {
                 guard let sourceID = addSource(anchor.source) else { continue }
-                link(id, sourceID, "source passage")
+                link(id, sourceID, "source passage", relationship: .sourcePassage)
             }
         }
         // Only exact current reviewed connections enter the graph. Old endpoints
@@ -87,7 +98,9 @@ enum KnowledgePageGraph {
         for connection in library.latestKnowledgeLinks.sorted(by: { $0.identity < $1.identity }) {
             guard library.availability(of: connection) == nil else { continue }
             link(nodeID(connection.from), nodeID(connection.to),
-                 "declared " + connection.kind.title.lowercased())
+                 "declared " + connection.kind.title.lowercased(),
+                 relationship: .init(declaration: connection.kind),
+                 rationale: connection.rationale, reference: connection.identity)
         }
         // Kept sources have their own identity even before a page cites them.
         // Reuse exactly the same version key as passage and parent references.

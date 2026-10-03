@@ -16,6 +16,11 @@ Shader "ARCHi/Liminal Baked Point Cloud" {
    StructuredBuffer<PointSample> _FrameA;
    StructuredBuffer<PointSample> _FrameB;
    StructuredBuffer<uint> _Knowledge;
+   struct FinishAnnotation { float3 direction; uint flags; };
+   StructuredBuffer<FinishAnnotation> _Finish;
+   float _FinishActive;
+   float _LightStyleActive,_LightStylePass,_LightStyleLOD,_LightStylePhase;
+   float4 _FinishWeights,_FinishSeed;
    float4x4 _PointLocalToWorld;
    float _FrameBlend, _Opacity, _Inspection, _Palette, _PointScale, _LightIntensity;
    float4 _LightCue;
@@ -36,24 +41,56 @@ Shader "ARCHi/Liminal Baked Point Cloud" {
     PointSample a=_FrameA[instance],b=_FrameB[instance];
     float3 p=lerp(a.position,b.position,_FrameBlend);
     float radius=max(.00001,lerp(a.radius,b.radius,_FrameBlend));
+    float3 color=max(0,lerp(a.color,b.color,_FrameBlend));
+    float emission=lerp(a.emission,b.emission,_FrameBlend);
+    uint finishFlags=0u;
+    if(_FinishActive>.5) {
+     FinishAnnotation finish=_Finish[instance];
+     finishFlags=finish.flags;
+     if((finish.flags&1u)!=0u) {
+      p=_FinishSeed.xyz+finish.direction*_FinishSeed.w;
+      color=float3(1,.40,.028);radius=min(radius,.0007);emission=1.8;
+     } else {
+      float residual=((finish.flags&2u)!=0u?_FinishWeights.x:0)+((finish.flags&4u)!=0u?_FinishWeights.y:0);
+      color=lerp(color,float3(.16,.004,.0015),residual);emission=lerp(emission,.4,residual);
+      float tail=(finish.flags&8u)!=0u?_FinishWeights.x:0;
+      color=lerp(color,float3(.55,.055,.008),tail);emission=lerp(emission,.5,tail);
+     }
+     radius*=2;emission*=.5;
+    }
+    if(_LightStyleActive>.5 && (finishFlags&1u)==0u) {
+     float peak=max(color.r,max(color.g,color.b));
+     color*=1.15*pow(max(peak,.00001),-.28);
+    }
     float3 world=mul(_PointLocalToWorld,float4(p,1)).xyz;
     float3 view=mul(UNITY_MATRIX_V,float4(world,1)).xyz;
     uint knowledge=_Knowledge[instance];
     float anchor=_Inspection>.5 && knowledge==2?1:0;
     float pixelRadius=(unity_OrthoParams.w>.5?1:max(abs(view.z),.001))/(max(abs(UNITY_MATRIX_P._m11),.001)*_ScreenParams.y);
-    float screenRadius=max(radius*_PointScale,pixelRadius);
+    // The expression above is half a physical pixel. Qualified v11 points
+    // receive the same 0.8-pixel radius floor as the native Metal renderer.
+    float bodyPixelRadius=_LightStyleActive>.5?pixelRadius*2.5*_LightStyleLOD:_FinishActive>.5?pixelRadius*1.6:pixelRadius;
+    float screenRadius=max(radius*_PointScale,bodyPixelRadius);
     screenRadius=lerp(screenRadius,max(screenRadius*2.5,pixelRadius*6),anchor);
+    if(_LightStyleActive>.5 && _LightStylePass>.5)screenRadius*=2.4;
     view.xy+=corners[vertex]*screenRadius;
     v2f o;o.pos=mul(UNITY_MATRIX_P,float4(view,1));o.corner=corners[vertex];
-    o.color=palette(max(0,lerp(a.color,b.color,_FrameBlend)));
+    o.color=palette(color);
     o.color=lerp(o.color,float3(.9,.65,.16),anchor*.55);
     o.color=lerp(o.color,_LightCue.rgb*max(o.color.r,max(o.color.g,o.color.b)),_LightCue.a*.25);
-    o.emission=clamp(lerp(a.emission,b.emission,_FrameBlend),0,8);return o;
+    o.emission=clamp(emission,0,8);return o;
    }
    float4 frag(v2f i):SV_Target {
     float r2=dot(i.corner,i.corner);clip(1-r2);
-    float alpha=saturate(exp(-r2*4)*(1-r2)*_Opacity);
     float3 radiance=min(i.color*i.emission*_LightIntensity,8);
+    float alpha;
+    if(_LightStyleActive>.5) {
+     if(_LightStylePass>.5) {
+      clip(max(radiance.r,max(radiance.g,radiance.b))-.12);
+      alpha=.035*exp(-3*r2)*_Opacity;
+     } else alpha=.72*exp(-2.2*r2)*(1-smoothstep(.6,1,r2))*_Opacity;
+    } else alpha=exp(-r2*4)*(1-r2)*_Opacity;
+    alpha=saturate(alpha);
     float3 presentationColor=1-exp(-radiance);
     // Linear Rec.709 -> tone map -> sRGB (Gamma project) -> premultiply -> composite.
     // Encode before premultiplication so translucent edges retain the same color.

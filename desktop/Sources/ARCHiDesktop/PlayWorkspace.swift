@@ -5,6 +5,7 @@ struct PlayWorkspace: View {
     @ObservedObject var store: CompanionStore
     @ObservedObject var host: HostedPlayHost
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.liminalPointStructure) private var pointStructure
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -65,6 +66,7 @@ struct PlayWorkspace: View {
         .onChange(of: store.evolution.revision) { _, _ in updateAppearance() }
         .onChange(of: store.reactor.frameRevision) { _, _ in updateAppearance() }
         .onChange(of: systemReduceMotion) { _, _ in updateAppearance() }
+        .onChange(of: pointStructure) { _, _ in updateAppearance() }
     }
 
     private func updateAppearance() {
@@ -75,6 +77,6 @@ struct PlayWorkspace: View {
             expressionRevision: store.reactor.frameRevision,
             recipe: store.presentationRecipe, naturalVariation: store.presentationNaturalVariation,
             equipment: store.preferences.equipment, seedColor: store.preferences.seedColor,
-            pointProgress: store.preferences.liminalPointProgress)
+            pointProgress: store.preferences.liminalPointProgress, pointStructure: pointStructure)
     }
 }

@@ -30,6 +30,48 @@ final class UnityPresentationTests: XCTestCase {
         XCTAssertFalse(ack.matches(snapshot, now: now))
         ack.pointManifestSHA256 = digest; ack.pointKnowledgeSHA256 = nil
         XCTAssertFalse(ack.matches(snapshot, now: now))
+        ack.pointKnowledgeSHA256 = snapshot.pointKnowledgeSHA256
+        let bodyOnly = snapshot
+        snapshot.pointStructure = .init(schemaVersion: 1, recipeVersion: LiminalPointStructure.version,
+            sessionID: snapshot.sessionID, originDigest: snapshot.originDigest, manifestSHA256: digest,
+            evidenceDigest: String(repeating: "d", count: 64), detail: 1,
+            nodes: [.init(contentID: String(repeating: "e", count: 64), anchorID: 10, applications: 1)])
+        XCTAssertFalse(snapshot.hasSamePresentation(as: bodyOnly))
+        XCTAssertFalse(ack.matches(snapshot, now: now), "Legacy body rendering cannot acknowledge current node geometry")
+        ack.pointAssetVersion = 5
+        XCTAssertFalse(ack.matches(snapshot, now: now))
+        ack.pointStructureDigest = snapshot.pointStructure?.digest
+        XCTAssertTrue(ack.matches(snapshot, now: now))
+        ack.pointStructureDigest = String(repeating: "f", count: 64)
+        XCTAssertFalse(ack.matches(snapshot, now: now), "Old recipe acknowledgments must not mark corrected geometry current")
+        ack.pointStructureDigest = snapshot.pointStructure?.digest
+        snapshot.pointFinishSHA256 = LiminalPointFinish.expectedSHA256
+        XCTAssertFalse(ack.matches(snapshot, now: now), "Source-body rendering cannot acknowledge the refined finish")
+        ack.pointAssetVersion = 6
+        XCTAssertFalse(ack.matches(snapshot, now: now))
+        ack.pointFinishSHA256 = snapshot.pointFinishSHA256
+        XCTAssertTrue(ack.matches(snapshot, now: now))
+        let finishedOnly = snapshot
+        snapshot.pointLightStyle = LiminalSurfaceLight.style
+        XCTAssertFalse(snapshot.hasSamePresentation(as: finishedOnly))
+        XCTAssertFalse(ack.matches(snapshot, now: now), "Legacy finish cannot acknowledge surface light")
+        ack.pointAssetVersion = 7
+        XCTAssertFalse(ack.matches(snapshot, now: now))
+        ack.pointLightStyle = LiminalSurfaceLight.style
+        XCTAssertTrue(ack.matches(snapshot, now: now))
+        ack.pointLightStyle = "unreviewed-style"
+        XCTAssertFalse(ack.matches(snapshot, now: now))
+        ack.pointLightStyle = LiminalSurfaceLight.style
+        snapshot.pointLightStyle = nil
+        XCTAssertFalse(ack.matches(snapshot, now: now), "Withdrawing light must retire its old acknowledgment")
+        ack.pointLightStyle = nil
+        XCTAssertTrue(ack.matches(snapshot, now: now))
+        ack.pointFinishSHA256 = String(repeating: "f", count: 64)
+        XCTAssertFalse(ack.matches(snapshot, now: now))
+        snapshot.pointFinishSHA256 = nil
+        XCTAssertFalse(ack.matches(snapshot, now: now), "Withdrawing the finish must retire its old acknowledgment")
+        ack.pointFinishSHA256 = nil
+        XCTAssertTrue(ack.matches(snapshot, now: now))
     }
 
     @MainActor func testWorldOutcomesRequireSeparateCapabilityAndClearWithSession() async throws {

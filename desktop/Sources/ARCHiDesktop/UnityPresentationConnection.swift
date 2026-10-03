@@ -43,6 +43,25 @@ struct UnityPresentationSnapshot: Codable, Equatable {
     var seedColor: String? = nil
     var pointPresentation: LiminalPointPresentation? = nil
     var pointKnowledgeSHA256: String? = nil
+    var pointStructure: LiminalPointStructure? = nil
+    var pointFinishSHA256: String? = nil
+    var pointLightStyle: String? = nil
+
+    /// The body descriptor stays present even when anchor capacity makes the
+    /// current inspection sidecar empty. Bind both to this exact session.
+    mutating func attachPointPresentation(_ descriptor: LiminalPointPresentation,
+                                         knowledge: LiminalKnowledgeBindings.Sidecar) throws -> Data {
+        guard descriptor.isValid, knowledge.schemaVersion == 1,
+              knowledge.sessionID == sessionID, knowledge.originDigest == originDigest,
+              knowledge.manifestSHA256 == descriptor.manifestSHA256,
+              LiminalKnowledgeBindings.isDigest(knowledge.graphDigest) else {
+            throw LiminalKnowledgeBindings.BindingError.invalidIdentity
+        }
+        let bytes = try knowledge.data()
+        pointPresentation = descriptor
+        pointKnowledgeSHA256 = LiminalKnowledgeBindings.sha256(bytes)
+        return bytes
+    }
 
     func hasSamePresentation(as other: Self) -> Bool {
         sessionID == other.sessionID && originDigest == other.originDigest && body == other.body
@@ -55,6 +74,7 @@ struct UnityPresentationSnapshot: Codable, Equatable {
             && sessionKind == other.sessionKind && destination == other.destination
             && destinationRevision == other.destinationRevision && seedAppearance == other.seedAppearance && seedColor == other.seedColor
             && pointPresentation == other.pointPresentation && pointKnowledgeSHA256 == other.pointKnowledgeSHA256
+            && pointStructure == other.pointStructure && pointFinishSHA256 == other.pointFinishSHA256 && pointLightStyle == other.pointLightStyle
     }
 
     @MainActor static func capture(store: CompanionStore, sessionID: UUID, revision: Int,
@@ -127,6 +147,9 @@ struct UnityPresentationAcknowledgment: Codable {
     var seedAssetSHA256: String? = nil
     var bodyAssetSHA256: String? = nil
     var pointAssetVersion: Int? = nil
+    var pointStructureDigest: String? = nil
+    var pointFinishSHA256: String? = nil
+    var pointLightStyle: String? = nil
     var pointManifestSHA256: String? = nil
     var pointKnowledgeSHA256: String? = nil
 
@@ -140,14 +163,19 @@ struct UnityPresentationAcknowledgment: Codable {
                 || (seedAssetSHA256 == snapshot.seedAssetSHA256 && bodyAssetSHA256 == snapshot.bodyAssetSHA256))
             && Self.recipeField(staffPalette, matches: snapshot.staffPalette)
             && Self.recipeField(staffCrown, matches: snapshot.staffCrown)
+            && Self.recipeField(pointFinishSHA256, matches: snapshot.pointFinishSHA256)
+            && Self.recipeField(pointLightStyle, matches: snapshot.pointLightStyle)
             && (sessionKind ?? "companion") == (snapshot.sessionKind ?? "companion")
             && (destination ?? "companion") == (snapshot.destination ?? "companion")
             && (destinationRevision ?? 0) == (snapshot.destinationRevision ?? 0)
             && ((snapshot.sessionKind == nil && snapshot.destination == nil && snapshot.destinationRevision == nil) || currentArea != nil)
             && (currentArea == nil || UnityPresentationDestination(rawValue: currentArea!) != nil)
-            && (snapshot.pointPresentation == nil || (pointAssetVersion == 4
+            && (snapshot.pointPresentation == nil || ([4, 5, 6, 7].contains(pointAssetVersion ?? 0)
                 && pointManifestSHA256 == snapshot.pointPresentation?.manifestSHA256
-                && pointKnowledgeSHA256 == snapshot.pointKnowledgeSHA256))
+                && pointKnowledgeSHA256 == snapshot.pointKnowledgeSHA256
+                && (snapshot.pointStructure == nil || ([5, 6, 7].contains(pointAssetVersion ?? 0) && pointStructureDigest == snapshot.pointStructure?.digest))
+                && (snapshot.pointFinishSHA256 == nil || ([6, 7].contains(pointAssetVersion ?? 0) && pointFinishSHA256 == snapshot.pointFinishSHA256))
+                && (snapshot.pointLightStyle == nil || (pointAssetVersion == 7 && pointLightStyle == LiminalSurfaceLight.style))))
             && renderer == "unity-companion" && updatedAtUnix.isFinite
             && now.timeIntervalSince1970 - updatedAtUnix >= -5
             && now.timeIntervalSince1970 - updatedAtUnix <= 5
@@ -308,7 +336,7 @@ struct UnityPresentationAcknowledgment: Codable {
 
     static func supportsPointAssets(_ url: URL) -> Bool {
         isCompatiblePlayer(url)
-            && (Bundle(url: url)?.object(forInfoDictionaryKey: "ARCHiLiminalPointAssetVersion") as? NSNumber)?.intValue == 4
+            && [4, 5, 6, 7].contains((Bundle(url: url)?.object(forInfoDictionaryKey: "ARCHiLiminalPointAssetVersion") as? NSNumber)?.intValue ?? 0)
     }
 
     func choosePlayer() {
@@ -509,6 +537,8 @@ struct UnityPresentationAcknowledgment: Codable {
                     systemReduceMotion: systemReduceMotion ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
                     destination: requestedDestination, destinationRevision: destinationRevision, localPractice: isLocalPractice)
         else { throw PresentationError.noCompanion }
+        var inspectionUnavailableReason: String?
+        var structureUnavailableReason: String?
         if LiminalV008Runtime.applies(form: store.presentationForm, family: store.presentationFamily, treatment: store.preferences.visualTreatment),
            store.preferences.seedAppearance == .hamptonLiminal,
            let selectedPlayer, Self.supportsPointAssets(selectedPlayer),
@@ -516,9 +546,34 @@ struct UnityPresentationAcknowledgment: Codable {
             if pointBindings == nil {
                 pointBindings = try LiminalKnowledgeBindings(manifestSHA256: asset.manifestSHA256, lowDetailIDs: asset.lowDetailIDs)
             }
-            let sidecar = try pointBindings!.project(store.companionGraphSnapshot(at: now),
+            let projection = try pointBindings!.projectForPresentation(store.companionGraphSnapshot(at: now),
                 sessionID: snapshot.sessionID, originDigest: snapshot.originDigest)
-            let bytes = try sidecar.data()
+            let sidecar = projection.sidecar
+            inspectionUnavailableReason = projection.inspectionUnavailableReason
+            let descriptor = LiminalPointPresentation(schemaVersion: 1, assetID: "liminal-v008",
+                manifestSHA256: asset.manifestSHA256, progress: store.preferences.liminalPointProgress,
+                motion: snapshot.reduceMotion || snapshot.quiet ? "reduced" : "sampled",
+                color: store.preferences.seedColor.rawValue, visible: snapshot.visible && snapshot.active)
+            let structure = store.liminalPointStructure(sessionID: snapshot.sessionID, asset: asset, at: now)
+            let pointVersion = (Bundle(url: selectedPlayer)?.object(forInfoDictionaryKey: "ARCHiLiminalPointAssetVersion") as? NSNumber)?.intValue ?? 0
+            if [5, 6, 7].contains(pointVersion) {
+                snapshot.pointStructure = structure
+            } else if structure?.particleCount ?? 0 > 0 {
+                structureUnavailableReason = "This Unity copy shows the base appearance. Learning patterns need the updated player."
+            }
+            if let finish = asset.finish {
+                if [6, 7].contains(pointVersion), Bundle(url: selectedPlayer)?.object(forInfoDictionaryKey: "ARCHiLiminalPointFinishSHA256") as? String == finish.digest {
+                    snapshot.pointFinishSHA256 = finish.digest
+                } else {
+                    structureUnavailableReason = "This Unity copy shows the earlier appearance. The internal golden Seed needs the updated player."
+                }
+            }
+            if snapshot.pointFinishSHA256 == LiminalPointFinish.expectedSHA256, let light = asset.surfaceLight {
+                if pointVersion == 7, Bundle(url: selectedPlayer)?.object(forInfoDictionaryKey: "ARCHiLiminalPointLightSHA256") as? String == light.digest {
+                    snapshot.pointLightStyle = LiminalSurfaceLight.style
+                } else { structureUnavailableReason = "This Unity copy shows the earlier appearance. Flowing light needs the updated player." }
+            }
+            let bytes = try snapshot.attachPointPresentation(descriptor, knowledge: sidecar)
             let digest = LiminalKnowledgeBindings.sha256(bytes)
             if digest != pointSidecarDigest {
                 let target = snapshotURL.appendingPathExtension("knowledge")
@@ -526,11 +581,6 @@ struct UnityPresentationAcknowledgment: Codable {
                 try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: target.path)
             }
             pointSidecar = sidecar; pointSidecarDigest = digest
-            snapshot.pointPresentation = .init(schemaVersion: 1, assetID: "liminal-v008",
-                manifestSHA256: asset.manifestSHA256, progress: store.preferences.liminalPointProgress,
-                motion: snapshot.reduceMotion || snapshot.quiet ? "reduced" : "sampled",
-                color: store.preferences.seedColor.rawValue, visible: snapshot.visible && snapshot.active)
-            snapshot.pointKnowledgeSHA256 = digest
         } else {
             pointSidecar = nil; pointSidecarDigest = nil
         }
@@ -546,6 +596,8 @@ struct UnityPresentationAcknowledgment: Codable {
             status = isLocalPractice ? "Unity Arena · local roster practice. Nothing is saved to a companion."
                 : "Unity is following your desktop companion. Seed remains your cursor."
         } else { status = "Sharing presentation with Unity; waiting for its render acknowledgment." }
+        if let inspectionUnavailableReason { status += " " + inspectionUnavailableReason }
+        if let structureUnavailableReason { status += " " + structureUnavailableReason }
     }
 
     func readAcknowledgment(now: Date = Date()) {

@@ -6,12 +6,17 @@ import simd
 /// Art direction only. The preserved v008 samples and graph IDs remain exact.
 /// Frame-based framing follows the displayed sample, including slow disk reads.
 enum LiminalSeedStyle {
-    static let revision = "garnet-seed/v2"
+    static let revision = "garnet-seed/v5-retained-seed"
     static func weight(frame: Int) -> Float {
         let t = min(1, max(0, Float(frame - 90) / 18))
         return t * t * (3 - 2 * t)
     }
-    static func framing(center: SIMD3<Float>, span: Float, frame: Int) -> (center: SIMD3<Float>, span: Float) {
+    static func framing(center: SIMD3<Float>, span: Float, frame: Int, refined: Bool = false) -> (center: SIMD3<Float>, span: Float) {
+        if refined {
+            let w = LiminalPointFinish.weights(frame: frame)
+            return (SIMD3(center.x, 1.25 * w.x + 1.15 * (w.y + w.z), center.z),
+                    3.5 * w.x + 2.5 * w.y + 1.9 * w.z)
+        }
         let amount = weight(frame: frame)
         return (center + (SIMD3<Float>(0, 1.15, center.z) - center) * amount,
                 span + (1.90 - span) * amount)
@@ -31,6 +36,8 @@ struct LiminalMetalView: NSViewRepresentable {
     var lightIntensity: Float = 1
     var lightExpression: KinLightExpression = .resting
     var inspection = false
+    var structure: LiminalPointStructure? = nil
+    var structureElapsed: Double? = nil
     var selectableIDs: [UInt32] = []
     var onSelectArtID: ((UInt32) -> Void)? = nil
 
@@ -47,12 +54,13 @@ struct LiminalMetalView: NSViewRepresentable {
     static func snapshotPNGData(asset: LiminalPointAsset, progress: Double,
                                 seedColor: CompanionSeedColor = .original,
                                 lightIntensity: Float = 1, lightMode: KinLightMode = .rest,
-                                unixTime: Double = 0, reduceMotion: Bool = true, inspection: Bool = false) throws -> Data {
+                                unixTime: Double = 0, reduceMotion: Bool = true, inspection: Bool = false,
+                                structure: LiminalPointStructure? = nil, structureElapsed: Double? = nil) throws -> Data {
         guard let device = MTLCreateSystemDefaultDevice() else { throw LiminalMetalFailure.unavailable }
         let renderer = try LiminalMetalPipeline(device: device)
         let seedTexture = renderer.seedTexture(color: seedColor)
         let pair = try asset.framePair(progress: progress, detail: .medium)
-        let buffers = try renderer.buffers(pair)
+        let buffers = try renderer.buffers(pair, structure: structure, asset: asset, elapsed: reduceMotion || inspection ? nil : structureElapsed)
         let description = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm,
             width: 512, height: 512, mipmapped: false)
         description.usage = [.renderTarget]
@@ -69,7 +77,9 @@ struct LiminalMetalView: NSViewRepresentable {
             uniforms: .init(asset: asset, size: CGSize(width: 512, height: 512), fraction: pair.fraction,
                             seedColor: seedColor, lightIntensity: lightIntensity, frame: pair.lower.frame,
                             seedAvailable: seedTexture != nil, inspection: inspection,
-                            light: .sample(mode: lightMode, unixTime: unixTime, reduced: reduceMotion || inspection)), seedTexture: seedTexture)
+                            light: .sample(mode: lightMode, unixTime: unixTime, reduced: reduceMotion || inspection),
+                            phase: LiminalSurfaceLight.phase(unixTime: unixTime, moving: !reduceMotion && !inspection && lightMode != .rest),
+                            count: pair.lower.pointCount), seedTexture: seedTexture)
         let completed = DispatchSemaphore(value: 0)
         command.addCompletedHandler { _ in completed.signal() }
         command.commit()
@@ -99,18 +109,21 @@ private enum LiminalMetalFailure: Error { case unavailable, snapshotFailed }
 /// No geometry shader is used: each authored point becomes six instanced quad
 /// vertices. This path works on native Metal and has a direct Unity quad analogue.
 private struct LiminalMetalPipeline {
-    struct Buffers { let lower: MTLBuffer; let upper: MTLBuffer; let anchors: MTLBuffer }
+    struct Buffers { let lower: MTLBuffer; let upper: MTLBuffer; let anchors: MTLBuffer; let finish: MTLBuffer; let curves: MTLBuffer?; let curveCount: Int; let structure: MTLBuffer?; let structureCount: Int }
     struct Uniforms {
         var centerAndScale: SIMD4<Float>
         var viewportAndFraction: SIMD4<Float>
         var tintAndAmount: SIMD4<Float>
         var intensityAndPadding: SIMD4<Float>
         var lightCue: SIMD4<Float>
+        var finishWeights: SIMD4<Float>
+        var finishSeed: SIMD4<Float>
+        var displayStyle: SIMD4<Float>
         init(asset: LiminalPointAsset, size: CGSize, fraction: Float,
              seedColor: CompanionSeedColor, lightIntensity: Float, frame: Int,
              seedAvailable: Bool, inspection: Bool = false,
-             light: LiminalLightFrame = .sample(mode: .rest, unixTime: 0)) {
-            let framing = LiminalSeedStyle.framing(center: asset.center, span: asset.span, frame: frame)
+             light: LiminalLightFrame = .sample(mode: .rest, unixTime: 0), phase: Float = 0, count: Int = 100000) {
+            let framing = LiminalSeedStyle.framing(center: asset.center, span: asset.span, frame: frame, refined: asset.finish != nil)
             centerAndScale = SIMD4(framing.center, 2 / framing.span)
             viewportAndFraction = SIMD4(Float(max(1, size.width)), Float(max(1, size.height)), fraction, 0)
             let palette: Float
@@ -123,9 +136,16 @@ private struct LiminalMetalPipeline {
             case .pearl: palette = 5
             }
             // Matches the Unity palette function, preserving neutral/gold points.
-            tintAndAmount = SIMD4(palette, 0, 0, 0)
+            tintAndAmount = SIMD4(asset.finish != nil && seedColor == .garnet ? 0 : palette, 0, 0, 0)
+            // Body finish and light decorate the same retained Seed. Installing
+            // either package must not withdraw its authenticated artwork.
             let seed = seedAvailable && !inspection ? LiminalSeedStyle.weight(frame: frame) : 0
             lightCue = SIMD4(light.accent, light.glow)
+            finishWeights = SIMD4(LiminalPointFinish.weights(frame: frame), asset.finish == nil ? 0 : 1)
+            finishSeed = LiminalPointFinish.seed(frame: frame)
+            let flowing = asset.finish != nil && asset.surfaceLight != nil && !inspection
+            displayStyle = SIMD4(flowing ? 1 : 0, 0, min(1.45, max(0.8, sqrt(100000 / Float(max(1,count))))), flowing ? phase : 0)
+            if flowing { centerAndScale.w *= LiminalSurfaceLight.breath(phase: phase) }
             intensityAndPadding = SIMD4((lightIntensity.isFinite ? min(2, max(0, lightIntensity)) : 1) * light.intensity,
                                         inspection ? 1 : 0, 1 - 0.85 * seed, seed)
         }
@@ -134,6 +154,7 @@ private struct LiminalMetalPipeline {
     let queue: MTLCommandQueue
     let state: MTLRenderPipelineState
     let seedState: MTLRenderPipelineState
+    let curveState: MTLRenderPipelineState
     init(device: MTLDevice) throws {
         self.device = device
         guard let queue = device.makeCommandQueue() else { throw LiminalMetalFailure.unavailable }
@@ -154,6 +175,9 @@ private struct LiminalMetalPipeline {
         descriptor.vertexFunction = library.makeFunction(name: "liminal_seed_vertex")
         descriptor.fragmentFunction = library.makeFunction(name: "liminal_seed_fragment")
         seedState = try device.makeRenderPipelineState(descriptor: descriptor)
+        descriptor.vertexFunction = library.makeFunction(name: "liminal_curve_vertex")
+        descriptor.fragmentFunction = library.makeFunction(name: "liminal_curve_fragment")
+        curveState = try device.makeRenderPipelineState(descriptor: descriptor)
     }
     @MainActor func seedTexture(color: CompanionSeedColor) -> MTLTexture? {
         guard let image = SeedColorRendering.image(for: .hamptonSeed, color: LiminalSeedStyle.color(color)),
@@ -169,7 +193,8 @@ private struct LiminalMetalPipeline {
         }
         return texture
     }
-    func buffers(_ pair: LiminalPointAsset.FramePair, anchorIndices: [Int] = []) throws -> Buffers {
+    func buffers(_ pair: LiminalPointAsset.FramePair, anchorIndices: [Int] = [], structure: LiminalPointStructure? = nil,
+                 asset: LiminalPointAsset? = nil, elapsed: Double? = nil) throws -> Buffers {
         func make(_ data: Data) throws -> MTLBuffer {
             guard let buffer = data.withUnsafeBytes({ bytes in
                 bytes.baseAddress.flatMap { device.makeBuffer(bytes: $0, length: bytes.count, options: .storageModeShared) }
@@ -178,12 +203,17 @@ private struct LiminalMetalPipeline {
         }
         let first = try make(pair.lower.data)
         let second = pair.lower.data == pair.upper.data ? first : try make(pair.upper.data)
+        let finish = try make(asset?.finish.map { Data($0.annotations.prefix(pair.lower.pointCount * 16)) } ?? Data(repeating: 0, count: 16))
         var anchors = [UInt32](repeating: 0, count: pair.lower.pointCount)
         for index in anchorIndices where anchors.indices.contains(index) { anchors[index] = 1 }
         guard let anchorBuffer = anchors.withUnsafeBytes({ device.makeBuffer(bytes: $0.baseAddress!, length: $0.count, options: .storageModeShared) }) else {
             throw LiminalMetalFailure.unavailable
         }
-        return .init(lower: first, upper: second, anchors: anchorBuffer)
+        let motif = asset.flatMap { asset in structure.map { $0.samples(frame: pair.lower, asset: asset, elapsed: elapsed) } } ?? []
+        let curves = asset?.finish == nil ? [] : (asset?.surfaceLight?.segments(frame: pair.lower.frame) ?? [])
+        return .init(lower: first, upper: second, anchors: anchorBuffer, finish: finish,
+                     curves: curves.isEmpty ? nil : try make(LiminalSurfaceLight.packed(curves)), curveCount: curves.count,
+                     structure: motif.isEmpty ? nil : try make(LiminalPointStructure.packed(motif)), structureCount: motif.count)
     }
     func encode(command: MTLCommandBuffer, pass: MTLRenderPassDescriptor, buffers: Buffers,
                 count: Int, uniforms: Uniforms, seedTexture: MTLTexture?) throws {
@@ -192,7 +222,14 @@ private struct LiminalMetalPipeline {
         encoder.setVertexBuffer(buffers.lower, offset: 0, index: 0)
         encoder.setVertexBuffer(buffers.upper, offset: 0, index: 1)
         encoder.setVertexBuffer(buffers.anchors, offset: 0, index: 3)
+        encoder.setVertexBuffer(buffers.finish, offset: 0, index: 4)
         var copy = uniforms
+        if copy.displayStyle.x > 0.5 {
+            copy.displayStyle.y = 1
+            encoder.setVertexBytes(&copy, length: MemoryLayout<Uniforms>.stride, index: 2)
+            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: count)
+            copy.displayStyle.y = 0
+        }
         encoder.setVertexBytes(&copy, length: MemoryLayout<Uniforms>.stride, index: 2)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: count)
         if uniforms.intensityAndPadding.w > 0, let seedTexture {
@@ -201,14 +238,39 @@ private struct LiminalMetalPipeline {
             encoder.setFragmentBytes(&copy, length: MemoryLayout<Uniforms>.stride, index: 2)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
         }
+        if uniforms.displayStyle.x > 0.5, let curves = buffers.curves, buffers.curveCount > 0 {
+            encoder.setRenderPipelineState(curveState)
+            encoder.setVertexBuffer(curves, offset: 0, index: 5)
+            for halo: Float in [1,0] {
+                copy.displayStyle.y = halo
+                encoder.setVertexBytes(&copy, length: MemoryLayout<Uniforms>.stride, index: 2)
+                encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: buffers.curveCount)
+            }
+        }
+        // Same independent decoration pass as Unity: after the authored Seed,
+        // with steady gold, full opacity, and no inherited activity amplification.
+        if uniforms.intensityAndPadding.y == 0, let motif = buffers.structure, buffers.structureCount > 0 {
+            var motifUniforms = uniforms
+            motifUniforms.intensityAndPadding = SIMD4(1, 0, 1, 0)
+            motifUniforms.lightCue = .zero
+            motifUniforms.tintAndAmount = .zero
+            motifUniforms.finishWeights = .zero
+            motifUniforms.displayStyle = .zero
+            encoder.setRenderPipelineState(state)
+            encoder.setVertexBytes(&motifUniforms, length: MemoryLayout<Uniforms>.stride, index: 2)
+            encoder.setVertexBuffer(motif, offset: 0, index: 0)
+            encoder.setVertexBuffer(motif, offset: 0, index: 1)
+            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: buffers.structureCount)
+        }
         encoder.endEncoding()
     }
     private static let shader = """
     #include <metal_stdlib>
     using namespace metal;
     struct Point { packed_float3 p; packed_float3 cd; float radius; float emission; };
-    struct Uniforms { float4 centerScale; float4 viewportFraction; float4 tintAmount; float4 intensity; float4 lightCue; };
-    struct Raster { float4 position [[position]]; float2 local; float3 color; float opacity; };
+    struct Uniforms { float4 centerScale; float4 viewportFraction; float4 tintAmount; float4 intensity; float4 lightCue; float4 finishWeights; float4 finishSeed; float4 displayStyle; };
+    struct Finish { packed_float3 direction; uint flags; };
+    struct Raster { float4 position [[position]]; float2 local; float3 color; float opacity; float style; float glow; };
     float3 palette(float3 c, float choice) {
         if (choice < 0.5f) return c;
         float hi=max(c.r,max(c.g,c.b)),lo=min(c.r,min(c.g,c.b));
@@ -219,7 +281,7 @@ private struct LiminalMetalPipeline {
     }
     vertex Raster liminal_vertex(uint vertexID [[vertex_id]], uint pointID [[instance_id]],
         const device Point *a [[buffer(0)]], const device Point *b [[buffer(1)]], constant Uniforms &u [[buffer(2)]],
-        const device uint *selected [[buffer(3)]]) {
+        const device uint *selected [[buffer(3)]], const device Finish *finish [[buffer(4)]]) {
         const float2 corners[6] = {float2(-1,-1),float2(1,-1),float2(-1,1),float2(-1,1),float2(1,-1),float2(1,1)};
         float t = u.viewportFraction.z;
         float3 p = mix(float3(a[pointID].p),float3(b[pointID].p),t);
@@ -227,12 +289,33 @@ private struct LiminalMetalPipeline {
         float anchor = u.intensity.y > 0.5f && selected[pointID] != 0 ? 1.0f : 0.0f;
         float radius = max(0.00001f,mix(a[pointID].radius,b[pointID].radius,t));
         float emission = clamp(mix(a[pointID].emission,b[pointID].emission,t),0.0f,8.0f);
+        bool goldenSeed = false;
+        if (u.finishWeights.w > 0.5f) {
+            uint flags = finish[pointID].flags;
+            if ((flags & 1u) != 0u) {
+                goldenSeed = true;
+                p = u.finishSeed.xyz + float3(finish[pointID].direction) * u.finishSeed.w;
+                cd = float3(1,0.40f,0.028f); emission = 1.8f; radius = min(radius,0.0007f);
+            } else {
+                float residual = ((flags & 2u) != 0u ? u.finishWeights.x : 0.0f)
+                    + ((flags & 4u) != 0u ? u.finishWeights.y : 0.0f);
+                cd = mix(cd,float3(0.16f,0.004f,0.0015f),residual);
+                emission = mix(emission,0.4f,residual);
+                float tail = (flags & 8u) != 0u ? u.finishWeights.x : 0.0f;
+                cd = mix(cd,float3(0.55f,0.055f,0.008f),tail);
+                emission = mix(emission,0.5f,tail);
+            }
+            radius *= 2.0f; emission *= 0.5f;
+        }
         float2 viewport = max(float2(1),u.viewportFraction.xy);
         float side = min(viewport.x,viewport.y);
         float2 aspect = side/viewport;
         float2 center = (p.xy-u.centerScale.xy)*u.centerScale.w*aspect;
-        float radiusPixels = max(0.5f,radius*u.centerScale.w*side*0.5f);
+        float floorRadius = u.displayStyle.x > 0.5f ? 1.25f*u.displayStyle.z : (u.finishWeights.w > 0.5f ? 0.8f : 0.5f);
+        float radiusPixels = max(floorRadius,radius*u.centerScale.w*side*0.5f);
         radiusPixels = mix(radiusPixels,max(radiusPixels*2.5f,3.0f),anchor);
+        if (u.displayStyle.y > 0.5f) radiusPixels *= 2.4f;
+        if (u.displayStyle.x > 0.5f && !goldenSeed) cd *= 1.15f*pow(max(max(cd.r,max(cd.g,cd.b)),0.00001f),-0.28f);
         cd = palette(cd,u.tintAmount.x);
         cd = mix(cd,u.lightCue.rgb*max(cd.r,max(cd.g,cd.b)),u.lightCue.w*0.25f);
         cd = mix(cd,float3(0.9f,0.65f,0.16f),anchor*0.55f);
@@ -240,17 +323,51 @@ private struct LiminalMetalPipeline {
         Raster out;
         out.position = float4(center+corners[vertexID]*(2.0f*radiusPixels/viewport),0.5f,1);
         out.local = corners[vertexID]; out.color = radiance; out.opacity = u.intensity.z;
+        out.style = u.displayStyle.x; out.glow = u.displayStyle.y;
         return out;
     }
     fragment float4 liminal_fragment(Raster in [[stage_in]]) {
         float squared = dot(in.local,in.local);
         if (squared >= 1.0f) discard_fragment();
         float alpha = saturate(exp(-squared*4.0f)*(1.0f-squared)*in.opacity);
+        if (in.style > 0.5f) alpha = 0.72f*exp(-2.2f*squared)*(1-smoothstep(0.6f,1.0f,squared))*in.opacity;
+        if (in.glow > 0.5f) {
+            if (max(in.color.r,max(in.color.g,in.color.b)) <= 0.12f) discard_fragment();
+            alpha = 0.035f*exp(-3.0f*squared)*in.opacity;
+        }
         float3 linear = 1.0f-exp(-in.color);
         float3 srgb = select(12.92f*linear, 1.055f*pow(linear,float3(1.0f/2.4f))-0.055f,
                              linear > 0.0031308f);
         // AppKit consumes premultiplied display-space RGBA. Encode BEFORE
         // premultiplication; the unorm target avoids a second RGB conversion.
+        return float4(srgb*alpha,alpha);
+    }
+    struct Curve { packed_float3 a; float width; packed_float3 b; float intensity; packed_float3 color; float u0; float u1; float phase; float2 pad; };
+    struct CurveRaster { float4 position [[position]]; float transverse; float3 color; float glow; float visibility; };
+    vertex CurveRaster liminal_curve_vertex(uint vertexID [[vertex_id]], uint curveID [[instance_id]],
+        const device Curve *segments [[buffer(5)]], constant Uniforms &u [[buffer(2)]]) {
+        const float2 corners[6] = {float2(0,-1),float2(1,-1),float2(0,1),float2(0,1),float2(1,-1),float2(1,1)};
+        Curve s=segments[curveID]; float2 corner=corners[vertexID];
+        float2 viewport=max(float2(1),u.viewportFraction.xy); float side=min(viewport.x,viewport.y);
+        float2 a=(float3(s.a).xy-u.centerScale.xy)*u.centerScale.w*side*0.5f;
+        float2 b=(float3(s.b).xy-u.centerScale.xy)*u.centerScale.w*side*0.5f;
+        float2 direction=(b-a)/max(length(b-a),0.00001f), normal=float2(-direction.y,direction.x);
+        float width=max(0.65f,s.width*u.centerScale.w*side*0.25f);
+        if(u.displayStyle.y>0.5f) width=width*3.8f+0.6f;
+        float2 p=mix(a,b,corner.x)+normal*width*corner.y;
+        float flow=1+0.14f*(0.5f+0.5f*cos(6.283185307f*mix(s.u0,s.u1,corner.x)-u.displayStyle.w+s.phase));
+        CurveRaster out;out.position=float4(p*2.0f/viewport,0.5f,1);out.transverse=corner.y;
+        out.color=min(palette(float3(s.color),u.tintAmount.x)*s.intensity*flow,float3(8));out.glow=u.displayStyle.y;
+        // Endpoint surface anchors do not describe the intermediate source motion.
+        // Withdraw strokes smoothly near the midpoint so they cannot cover the Seed.
+        float held=max(u.finishWeights.x,max(u.finishWeights.y,u.finishWeights.z));
+        out.visibility=smoothstep(0.0f,1.0f,clamp(2.0f*held-1.0f,0.0f,1.0f))*(1-u.intensity.w);return out;
+    }
+    fragment float4 liminal_curve_fragment(CurveRaster in [[stage_in]]) {
+        float r2=in.transverse*in.transverse;
+        float alpha=(in.glow>0.5f?0.08f*exp(-3*r2):0.86f*exp(-2*r2)*(1-smoothstep(0.6f,1.0f,r2)))*in.visibility;
+        float3 linear=1-exp(-in.color);
+        float3 srgb=select(12.92f*linear,1.055f*pow(linear,float3(1.0f/2.4f))-0.055f,linear>0.0031308f);
         return float4(srgb*alpha,alpha);
     }
     struct SeedRaster { float4 position [[position]]; float2 uv; };
@@ -278,7 +395,7 @@ private struct LiminalMetalPipeline {
 }
 
 @MainActor
-final class LiminalMetalSurface: MTKView, @preconcurrency MTKViewDelegate {
+final class LiminalMetalSurface: MTKView, MTKViewDelegate {
     private var configuration: LiminalMetalView?
     private var pipeline: LiminalMetalPipeline?
     private var seedTexture: MTLTexture?
@@ -337,14 +454,18 @@ final class LiminalMetalSurface: MTKView, @preconcurrency MTKViewDelegate {
     override func viewDidUnhide() { super.viewDidUnhide(); updateVisibility() }
 
     func configure(_ next: LiminalMetalView) {
-        if configuration?.asset.manifestSHA256 != next.asset.manifestSHA256 {
+        if configuration?.asset.manifestSHA256 != next.asset.manifestSHA256 || configuration?.asset.finish?.digest != next.asset.finish?.digest || configuration?.asset.surfaceLight?.digest != next.asset.surfaceLight?.digest {
             loading?.cancel(); loading = nil; loadingKey = nil; loadedKey = nil
             failedKey = nil
             fallbackLoading?.cancel(); fallbackLoading = nil; fallbackKey = nil
             fallbackImage.image = nil; fallbackImage.isHidden = true
             frameNumbers = nil; anchors = []; buffers = nil; detail = .medium; slowFrames = 0
         }
-        if configuration?.selectableIDs != next.selectableIDs { loadedKey = nil; anchors = [] }
+        if configuration?.selectableIDs != next.selectableIDs || configuration?.structure != next.structure {
+            loading?.cancel(); loading = nil; loadingKey = nil; loadedKey = nil; anchors = []
+            // Retire obsolete geometry immediately, even while the next frame loads.
+            if let old = buffers { buffers = .init(lower: old.lower, upper: old.upper, anchors: old.anchors, finish: old.finish, curves: old.curves, curveCount: old.curveCount, structure: nil, structureCount: 0) }
+        }
         if seedTextureColor != next.seedColor {
             seedTexture = pipeline?.seedTexture(color: next.seedColor)
             seedTextureColor = next.seedColor
@@ -423,7 +544,7 @@ final class LiminalMetalSurface: MTKView, @preconcurrency MTKViewDelegate {
     }
     private func requestFrames(_ c: LiminalMetalView, progress: Double) -> String {
         let index = (try? LiminalPointAsset.sourceFrameIndex(progress: progress)) ?? 0
-        let key = "\(c.asset.manifestSHA256):\(c.asset.manifest.frames[index].file):\(detail.rawValue)"
+        let key = "\(c.asset.manifestSHA256):\(c.asset.finish?.digest ?? "source"):\(c.asset.surfaceLight?.digest ?? "none"):\(c.asset.manifest.frames[index].file):\(detail.rawValue):\(c.structure?.digest ?? "none")"
         guard key != loadedKey, key != loadingKey, failedKey == nil, loading == nil else { return key }
         loadingKey = key
         // Only GPU buffers and bounded anchor samples survive a load. At most
@@ -439,10 +560,13 @@ final class LiminalMetalSurface: MTKView, @preconcurrency MTKViewDelegate {
                 let indices = (self.configuration?.selectableIDs ?? []).prefix(512).compactMap { id in
                     asset.artIDs.firstIndex(of: id).flatMap { $0 < frames.lower.pointCount ? $0 : nil }
                 }
-                let uploaded = try pipeline.buffers(frames, anchorIndices: indices)
+                guard self.configuration?.structure?.digest == c.structure?.digest else { return }
+                let uploaded = try pipeline.buffers(frames, anchorIndices: indices, structure: c.structure, asset: asset)
                 self.anchors = indices.compactMap { index in
                     guard let a = frames.lower.sample(at: index), let b = frames.upper.sample(at: index) else { return nil }
-                    return Anchor(id: asset.artIDs[index], lower: a, upper: b)
+                    return Anchor(id: asset.artIDs[index],
+                        lower: asset.finish?.display(a, rank: index, frame: frames.lower.frame) ?? a,
+                        upper: asset.finish?.display(b, rank: index, frame: frames.upper.frame) ?? b)
                 }
                 self.frameNumbers = (frames.lower.frame, frames.upper.frame)
                 self.pointCount = frames.lower.pointCount
@@ -479,7 +603,9 @@ final class LiminalMetalSurface: MTKView, @preconcurrency MTKViewDelegate {
                                 seedColor: c.seedColor, lightIntensity: c.lightIntensity,
                                 frame: frameNumbers!.lower, seedAvailable: seedTexture != nil,
                                 inspection: c.inspection, light: .sample(mode: c.lightExpression.mode,
-                                    unixTime: Date().timeIntervalSince1970, reduced: c.reduceMotion || c.inspection)), seedTexture: seedTexture)
+                                    unixTime: Date().timeIntervalSince1970, reduced: c.reduceMotion || c.inspection),
+                                phase: LiminalSurfaceLight.phase(unixTime: Date().timeIntervalSince1970,
+                                    moving: !c.reduceMotion && !c.inspection && c.lightExpression.mode != .rest), count: pointCount), seedTexture: seedTexture)
         } catch {
             failedKey = key; anchors = []; self.buffers = nil
             clearSurface(); updateVisibility(); return
@@ -525,7 +651,7 @@ final class LiminalMetalSurface: MTKView, @preconcurrency MTKViewDelegate {
     override func mouseDown(with event: NSEvent) {
         guard canPresentPoints, !usesFallback, let c = configuration, c.inspection, let callback = c.onSelectArtID, !c.selectableIDs.isEmpty else { return }
         let location = convert(event.locationInWindow, from: nil)
-        let framing = LiminalSeedStyle.framing(center: c.asset.center, span: c.asset.span, frame: frameNumbers?.lower ?? 1)
+        let framing = LiminalSeedStyle.framing(center: c.asset.center, span: c.asset.span, frame: frameNumbers?.lower ?? 1, refined: c.asset.finish != nil)
         let side = min(bounds.width, bounds.height), span = CGFloat(framing.span)
         var closest: (id: UInt32, distance: CGFloat)?
         // Only the owner's explicit anchors are selectable; arbitrary art points

@@ -201,6 +201,8 @@ final class DesktopDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var assistantModelObserver: AnyCancellable?
     private var isReviewingQuit = false
     private var terminationInProgress = false
+    private var launchFinished = false
+    private var pendingTaskURLs: [URL]?
 
     init(profiles: CompanionProfiles) throws {
         self.profiles = profiles
@@ -280,7 +282,28 @@ final class DesktopDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     if let store { store.unityPresentation.refresh(store: store) }
                 }
             })
-        showWorkspace(.home)
+        showWorkspace(.nodeLab)
+        launchFinished = true
+        if let urls = pendingTaskURLs { pendingTaskURLs = nil; receiveTaskFiles(urls) }
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard launchFinished else {
+            guard pendingTaskURLs == nil else { return }
+            pendingTaskURLs = urls
+            return
+        }
+        receiveTaskFiles(urls)
+    }
+
+    private func receiveTaskFiles(_ urls: [URL]) {
+        guard urls.count == 1, let url = urls.first, url.pathExtension.lowercased() == "qitask" else {
+            store.wikiOSExchangeMessage = "Open one WikiOS .qitask file at a time. Your current work is unchanged."
+            showWorkspace(store.section)
+            return
+        }
+        _ = store.stageWikiOSTask(from: url)
+        showWorkspace(store.section)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }

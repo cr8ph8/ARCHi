@@ -9,6 +9,10 @@ LAUNCH=1
 STAGE_ONLY=0
 STAGE_DIR=""
 UNITY_PLAYER=""
+LIMINAL_FINISH=""
+LIMINAL_FINISH_SHA=""
+LIMINAL_LIGHT=""
+LIMINAL_LIGHT_SHA=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --verify) VERIFY=1 ;;
@@ -20,10 +24,17 @@ while [[ $# -gt 0 ]]; do
             [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { echo "--stage-dir requires a new absolute directory path." >&2; exit 2; }
             shift; STAGE_DIR="$1" ;;
         --unity-player) shift; UNITY_PLAYER="${1:?--unity-player requires an app bundle path}" ;;
-        *) echo "Usage: $0 [--verify] [--review] [--install] [--build-only] [--stage-only [--stage-dir NEW_ABSOLUTE_DIR]] [--unity-player APP]" >&2; exit 2 ;;
+        --liminal-finish)
+            [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { echo "--liminal-finish requires a qualified finish directory." >&2; exit 2; }
+            shift; LIMINAL_FINISH="$1" ;;
+        --liminal-light)
+            [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { echo "--liminal-light requires a qualified light directory." >&2; exit 2; }
+            shift; LIMINAL_LIGHT="$1" ;;
+        *) echo "Usage: $0 [--verify] [--review] [--install] [--build-only] [--stage-only [--stage-dir NEW_ABSOLUTE_DIR]] [--unity-player APP] [--liminal-finish DIR] [--liminal-light DIR]" >&2; exit 2 ;;
     esac
     shift
 done
+[[ -z "$LIMINAL_LIGHT" || -n "$LIMINAL_FINISH" ]] || { echo "--liminal-light requires explicit --liminal-finish for the same qualified body." >&2; exit 2; }
 APP_NAME="ARCHi"
 # Retain the identifier/profile that owns the existing KIN. Renaming the
 # product must not silently create an empty identity or migrate authored saves.
@@ -89,6 +100,21 @@ if [[ -z "$UNITY_PLAYER" ]]; then
     fi
 fi
 
+# The finish is a separate, explicitly selected display mapping. Authenticate
+# its pinned manifest and the player's capability before compiling anything.
+LIMINAL_PACKAGE="${ARCHI_LIMINAL_PACKAGE:-/Applications/ARCHi.app/Contents/Resources/LiminalV008}"
+LIMINAL_QUALIFICATION="${ARCHI_LIMINAL_QUALIFICATION:-/Applications/ARCHi.app/Contents/Resources/LiminalV008-qualification.json}"
+if [[ -n "$LIMINAL_FINISH" ]]; then
+    if [[ -n "$LIMINAL_LIGHT" ]]; then
+        LIMINAL_FINISH_SHA="$(python3 "$REPO_ROOT/script/package_liminal_finish.py" check-player --allow-light "$LIMINAL_FINISH" "$LIMINAL_PACKAGE" "$UNITY_PLAYER")"
+    else
+        LIMINAL_FINISH_SHA="$(python3 "$REPO_ROOT/script/package_liminal_finish.py" check-player "$LIMINAL_FINISH" "$LIMINAL_PACKAGE" "$UNITY_PLAYER")"
+    fi
+fi
+if [[ -n "$LIMINAL_LIGHT" ]]; then
+    LIMINAL_LIGHT_SHA="$(python3 "$REPO_ROOT/script/package_liminal_light.py" check-player "$LIMINAL_LIGHT" "$LIMINAL_PACKAGE" "$LIMINAL_FINISH" "$UNITY_PLAYER")"
+fi
+
 # The native app owns the session. The retained browser game is not a build
 # dependency; Unity is copied into this app as its internal rendering helper.
 PLAY_STAGE="$(mktemp -d /private/tmp/archi-desktop-bundle.XXXXXX)"
@@ -146,15 +172,38 @@ if [[ -n "$UNITY_PLAYER" ]]; then
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$UNITY_PLAYER/Contents/Info.plist")" == "local.archi.unityport" ]] || exit 2
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :ARCHiNativePresentationProtocol' "$UNITY_PLAYER/Contents/Info.plist")" == "1" ]] || exit 2
     codesign --verify --deep --strict "$UNITY_PLAYER"
-    cp -R "$UNITY_PLAYER" "$BUNDLE_DIR/Contents/Resources/UnityCompanion.app"
+    # Separate copy-on-write files on APFS; ordinary-copy fallback elsewhere.
+    /bin/cp -cR "$UNITY_PLAYER" "$BUNDLE_DIR/Contents/Resources/UnityCompanion.app"
     # Point assets are optional and must already be source/render qualified.
     # A new native build preserves an existing qualified package by default.
-    LIMINAL_PACKAGE="${ARCHI_LIMINAL_PACKAGE:-/Applications/ARCHi.app/Contents/Resources/LiminalV008}"
-    LIMINAL_QUALIFICATION="${ARCHI_LIMINAL_QUALIFICATION:-/Applications/ARCHi.app/Contents/Resources/LiminalV008-qualification.json}"
     if [[ -d "$LIMINAL_PACKAGE" ]]; then
-        [[ "$(/usr/libexec/PlistBuddy -c 'Print :ARCHiLiminalPointAssetVersion' "$UNITY_PLAYER/Contents/Info.plist")" == "4" ]] || { echo "The selected helper cannot render the qualified Liminal source clock, garnet Seed and shared activity expression." >&2; exit 2; }
+        LIMINAL_CAPABILITY="$(/usr/libexec/PlistBuddy -c 'Print :ARCHiLiminalPointAssetVersion' "$UNITY_PLAYER/Contents/Info.plist")"
+        if [[ -n "$LIMINAL_FINISH" ]]; then
+            if [[ -n "$LIMINAL_LIGHT" ]]; then
+                [[ "$LIMINAL_CAPABILITY" == "7" ]] || { echo "The v12 light requires player capability 7." >&2; exit 2; }
+                mv "$BUNDLE_DIR/Contents/Resources/UnityCompanion.app/Contents/Resources/Data/StreamingAssets/LiminalV008/light-v12" "$PLAY_STAGE/player-light-v12"
+            else
+                [[ "$LIMINAL_CAPABILITY" == "6" ]] || { echo "Capability 7 requires explicit --liminal-light with --liminal-finish." >&2; exit 2; }
+            fi
+            # Only this generated clone is adapted. Keep the source player and
+            # its signature intact while the unchanged base validator runs.
+            mv "$BUNDLE_DIR/Contents/Resources/UnityCompanion.app/Contents/Resources/Data/StreamingAssets/LiminalV008/finish-v11" "$PLAY_STAGE/player-finish-v11"
+        else
+            case "$LIMINAL_CAPABILITY" in
+                4|5) : ;;
+                *) echo "Capabilities 6 and 7 require explicit --liminal-finish; capability 7 also requires --liminal-light." >&2; exit 2 ;;
+            esac
+        fi
         python3 "$REPO_ROOT/script/package_liminal_v008.py" "$LIMINAL_PACKAGE" "$LIMINAL_QUALIFICATION" \
             "$BUNDLE_DIR/Contents/Resources" "$BUNDLE_DIR/Contents/Resources/UnityCompanion.app/Contents/Resources/Data/StreamingAssets"
+        if [[ -n "$LIMINAL_FINISH" ]]; then
+            [[ "$(python3 "$REPO_ROOT/script/package_liminal_finish.py" package "$LIMINAL_FINISH" "$LIMINAL_PACKAGE" \
+                "$BUNDLE_DIR/Contents/Resources" "$BUNDLE_DIR/Contents/Resources/UnityCompanion.app/Contents/Resources/Data/StreamingAssets")" == "$LIMINAL_FINISH_SHA" ]] || exit 2
+        fi
+        if [[ -n "$LIMINAL_LIGHT" ]]; then
+            [[ "$(python3 "$REPO_ROOT/script/package_liminal_light.py" package "$LIMINAL_LIGHT" "$LIMINAL_PACKAGE" "$LIMINAL_FINISH" \
+                "$BUNDLE_DIR/Contents/Resources" "$BUNDLE_DIR/Contents/Resources/UnityCompanion.app/Contents/Resources/Data/StreamingAssets")" == "$LIMINAL_LIGHT_SHA" ]] || exit 2
+        fi
     elif [[ -n "${ARCHI_LIMINAL_PACKAGE:-}" ]]; then
         echo "The explicitly selected Liminal v008 package is missing. Nothing was installed." >&2
         exit 2
@@ -189,6 +238,19 @@ cat > "$BUNDLE_DIR/Contents/Info.plist" <<PLIST
 <key>CFBundleShortVersionString</key><string>0.7.0</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>
+<key>QiWorkExchangeVersion</key><integer>1</integer>
+<key>CFBundleDocumentTypes</key><array><dict>
+<key>CFBundleTypeName</key><string>WikiOS Task</string>
+<key>CFBundleTypeRole</key><string>Viewer</string>
+<key>LSHandlerRank</key><string>Alternate</string>
+<key>LSItemContentTypes</key><array><string>com.quotient.qi-task</string></array>
+</dict></array>
+<key>UTImportedTypeDeclarations</key><array><dict>
+<key>UTTypeIdentifier</key><string>com.quotient.qi-task</string>
+<key>UTTypeDescription</key><string>WikiOS Task</string>
+<key>UTTypeConformsTo</key><array><string>public.json</string></array>
+<key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>qitask</string></array></dict>
+</dict></array>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSMicrophoneUsageDescription</key><string>ARCHi uses the microphone only when you click Dictate, to prepare text you review before sending. Audio is not saved.</string>
 <key>NSSpeechRecognitionUsageDescription</key><string>ARCHi uses available on-device speech recognition to prepare a draft. No online speech fallback is used, and nothing is sent until you choose Send.</string>
@@ -196,6 +258,13 @@ cat > "$BUNDLE_DIR/Contents/Info.plist" <<PLIST
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
 </dict></plist>
 PLIST
+if [[ -n "$LIMINAL_FINISH_SHA" ]]; then
+    plutil -insert ARCHiLiminalPointFinishSHA256 -string "$LIMINAL_FINISH_SHA" "$BUNDLE_DIR/Contents/Info.plist"
+fi
+if [[ -n "$LIMINAL_LIGHT_SHA" ]]; then
+    plutil -insert ARCHiLiminalPointLightStyle -string "liminal-light-flow/v12" "$BUNDLE_DIR/Contents/Info.plist"
+    plutil -insert ARCHiLiminalPointLightSHA256 -string "$LIMINAL_LIGHT_SHA" "$BUNDLE_DIR/Contents/Info.plist"
+fi
 plutil -lint "$BUNDLE_DIR/Contents/Info.plist"
 # Finder may attach metadata after a preview is opened; remove it only from this
 # regenerated development bundle before signing the next build.
@@ -209,7 +278,7 @@ mkdir -p "$(dirname "$APP_DIR")"
 # Copy and verify before touching the previous bundle. The two final renames
 # then stay on the destination filesystem, including on a separate volume.
 INSTALL_STAGE="$(mktemp -d "$(dirname "$APP_DIR")/.archi-install.XXXXXX")"
-cp -R "$BUNDLE_DIR" "$INSTALL_STAGE/$APP_NAME.app"
+/bin/cp -cR "$BUNDLE_DIR" "$INSTALL_STAGE/$APP_NAME.app"
 # Finder/iCloud can attach metadata while a generated bundle is copied into
 # Documents. Clear it on this new staging copy before verifying its signature.
 xattr -cr "$INSTALL_STAGE/$APP_NAME.app"

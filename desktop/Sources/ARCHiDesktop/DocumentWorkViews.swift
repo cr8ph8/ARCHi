@@ -24,6 +24,9 @@ struct DocumentWorkHistory: View {
     var body: some View {
         let currentOutcome = store.currentDocumentOutcome
         VStack(alignment: .leading, spacing: 8) {
+            if let selection = store.documentMethodToTry {
+                DocumentMethodWorkSelectionView(store: store, selection: selection)
+            }
             if let outcome = currentOutcome {
                 DocumentOutcomeView(store: store, record: outcome)
                     .id(outcome.id)

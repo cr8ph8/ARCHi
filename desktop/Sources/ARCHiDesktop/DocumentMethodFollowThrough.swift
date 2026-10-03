@@ -53,12 +53,14 @@ struct DocumentMethodFollowThroughView: View {
                 Text("Your review is linked to this exact method version.")
                     .font(.caption).foregroundStyle(.secondary)
                 MethodLearningView(store: store, procedure: method, isHistorical: isHistorical)
+                mapButton(method)
             case let .kept(methods):
                 ForEach(methods) { method in
                     Label("Kept: \(method.title) · v\(method.revision)", systemImage: "bookmark")
                         .font(.caption.weight(.medium))
                     MethodLearningView(store: store, procedure: method,
                         isHistorical: !store.documentProcedures.latestProcedures.contains(method))
+                    mapButton(method)
                 }
             case .newMethod:
                 KeepDocumentProcedureView(store: store, record: record, startsExpanded: startsExpanded)
@@ -69,5 +71,13 @@ struct DocumentMethodFollowThroughView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("document.method-follow-through.\(record.id)")
+    }
+
+    private func mapButton(_ method: DocumentProcedure) -> some View {
+        Button("Show method in memory map", systemImage: "point.3.connected.trianglepath.dotted") {
+            _ = store.openDocumentMethodMap(method.binding)
+        }
+        .buttonStyle(.borderless).font(.caption)
+        .accessibilityIdentifier("document.method-follow-through.map.\(method.id).\(method.revision)")
     }
 }

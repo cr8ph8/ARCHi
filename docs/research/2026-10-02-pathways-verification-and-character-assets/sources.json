@@ -1,0 +1,50 @@
+{
+  "schema": "archi-research-intake/v1",
+  "date_local": "2026-10-02",
+  "status": "source_review_and_authoring_handoff_only",
+  "primary_sources": [
+    {
+      "id": "male-cns",
+      "title": "Sexual dimorphism in the complete Drosophila male central nervous system connectome",
+      "url": "https://www.repository.cam.ac.uk/items/d3bc46f5-a88b-4fdd-8c7f-5e8aeb538e90",
+      "doi": "10.1016/j.cell.2026.08.015",
+      "review": "Published repository record and abstract checked; Cell direct open unavailable. No connectome data downloaded."
+    },
+    {
+      "id": "ring-attractor",
+      "title": "Ring attractor dynamics in the Drosophila central brain",
+      "url": "https://research.janelia.org/jayaraman/KimRouaultScience2017_Downloads/",
+      "doi": "10.1126/science.aal4835",
+      "review": "Author research materials and bibliographic abstract inspected; no biological simulation or reproduction."
+    },
+    {
+      "id": "veriharness",
+      "title": "VeriHarness: Scaling Agentic Verification for Long-Horizon Tasks",
+      "url": "https://arxiv.org/html/2610.00972v1",
+      "version": "v1",
+      "code": [
+        "https://github.com/google-research/veriharness",
+        "https://raw.githubusercontent.com/google-research/veriharness/main/harness/driver.py",
+        "https://raw.githubusercontent.com/google-research/veriharness/main/harness/prompts/ADJUDICATE.md"
+      ],
+      "review": "Primary paper and bounded official-code review. Results remain author-reported. Code main is unpinned and no dependency was imported."
+    },
+    {
+      "id": "raven",
+      "title": "Raven: The Harness of Harnesses for Composable Agentic Intelligence",
+      "url": "https://arxiv.org/html/2609.33439v1",
+      "version": "v1",
+      "code": [
+        "https://raw.githubusercontent.com/EverMind-AI/Raven/main/raven/agent/subagent/dag_graph.py",
+        "https://raw.githubusercontent.com/EverMind-AI/Raven/main/raven/agent/subagent/dag_tool.py",
+        "https://evermind-ai.github.io/Raven/dag-orchestration/"
+      ],
+      "review": "Primary paper, official docs and bounded graph/admission code review. Main is unpinned; no general reliability guarantee or ARCHi efficacy is inferred."
+    }
+  ],
+  "evidence_limits": [
+    "Source review and proposed integration only; research results are source-reported, not independent ARCHi measurements.",
+    "Private conversations, attachment provenance and local runtime observations are excluded from this public projection.",
+    "No dependency, model call, benchmark, telemetry, appearance activation, profile write or install is established by this intake."
+  ]
+}

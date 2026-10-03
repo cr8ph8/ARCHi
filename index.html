@@ -37,9 +37,17 @@
       </section>
 
       <header class="topbar" id="topbar">
-        <button class="wordmark" id="home-button" type="button" aria-label="Return to ARCHi's habitat">
-          <span class="wordmark__mark" aria-hidden="true">◈</span>
-          <span>ARCHi</span>
+        <button class="wordmark" id="home-button" type="button">
+          <span class="wordmark__mark" aria-hidden="true">
+            <span class="wordmark__mark-default">◈</span>
+            <svg class="wordmark__mark-qi" viewBox="0 0 64 64" focusable="false" aria-hidden="true">
+              <path fill="currentColor" fill-rule="evenodd" d="M32 7C18.6 7 8 17.1 8 30.5S18.6 50 32 50s24-6.1 24-19.5S45.4 7 32 7Zm0 5.8c10.7 0 18.2 7.7 18.2 17.7S42.7 44.2 32 44.2s-18.2-3.7-18.2-13.7S21.3 12.8 32 12.8Z"/>
+              <circle cx="32" cy="30" r="3.2" fill="currentColor"/>
+              <path d="M29.2 38.2h5.6V58h-5.6z" fill="currentColor"/>
+            </svg>
+          </span>
+          <span class="wordmark__title-default">ARCHi</span>
+          <span class="wordmark__title-ios">Qi Field</span>
         </button>
         <div class="journey-status" aria-live="polite">
           <span id="stage-label">Hatchling</span>
@@ -72,6 +80,13 @@
           </div>
         </div>
         <div class="presence-console__rail">
+          <fieldset class="presence-group">
+            <legend>Portrait</legend>
+            <button class="is-active" type="button" data-liminal-portrait="presence" aria-pressed="true">Presence</button>
+            <button type="button" data-liminal-portrait="seed" aria-pressed="false">Liminal Seed</button>
+            <button type="button" data-liminal-portrait="ball" aria-pressed="false">Ball</button>
+            <button type="button" data-liminal-portrait="beast" aria-pressed="false">Beast</button>
+          </fieldset>
           <fieldset class="presence-group">
             <legend>Form</legend>
             <button type="button" data-presentation-form="core" aria-pressed="false">Core</button>
@@ -109,7 +124,7 @@
             Return
           </button>
         </div>
-        <p class="presence-console__boundary">A preview for this visit. Your Journey stays the same.</p>
+        <p class="presence-console__boundary">A preview for this visit. Your Journey stays the same. Liminal portraits show one captured view.</p>
       </details>
 
       <main class="experience" id="experience">
@@ -159,6 +174,11 @@
           </section>
           <button class="relay-entry" id="relay-entry" type="button">
             <span aria-hidden="true">⌁</span> A small repair <small>Solve a puzzle together</small>
+          </button>
+          <button class="roster-entry" id="roster-entry" type="button">
+            <span class="roster-entry__icon" aria-hidden="true">✦</span>
+            <span><strong>Raise your QiMon</strong><small>Find · train · bond · form a team</small></span>
+            <span aria-hidden="true">↗</span>
           </button>
           <p class="control-hint" id="control-hint">Arrow keys or a tap to move · F for fullscreen</p>
           </div>
@@ -217,7 +237,8 @@
           </div>
           <button class="battle-return" id="battle-return" type="button">
             <span aria-hidden="true">◈</span>
-            Return to ARCHi
+            <span class="battle-return__title-default">Return to ARCHi</span>
+            <span class="battle-return__title-ios">Return to Qi Field</span>
           </button>
         </header>
 
@@ -344,11 +365,71 @@
             <button id="battle-keep" type="button" disabled>Keep practice</button>
             <p id="battle-keep-status" role="status">Nothing is saved until you choose Keep practice.</p>
             <button id="battle-again" type="button">Build another formation</button>
+            <button id="battle-roster-return" type="button">Review QiMon training</button>
           </div>
 
           <details class="battle-history"><summary>Round by round</summary><ol class="battle-transcript" id="battle-transcript" aria-label="Complete practice round transcript"></ol></details>
         </div>
       </section>
+
+      <aside class="qimon-roster-panel" id="qimon-roster-panel" role="dialog" aria-modal="true"
+        aria-labelledby="qimon-roster-title" aria-hidden="true" hidden inert>
+        <header class="qimon-roster-panel__header">
+          <div>
+            <p class="eyebrow">QiMon · living roster</p>
+            <h2 id="qimon-roster-title">Grow your constellation.</h2>
+            <p>One continuing ARCHi, with invited QiMon whose origins and shared practice stay inspectable.</p>
+          </div>
+          <button id="qimon-roster-close" type="button" aria-label="Close QiMon roster">×</button>
+        </header>
+        <div class="qimon-roster-panel__body">
+          <div class="qimon-roster-hero" aria-hidden="true">
+            <span class="qimon-roster-hero__core"></span>
+            <span class="qimon-roster-hero__node qimon-roster-hero__node--one"></span>
+            <span class="qimon-roster-hero__node qimon-roster-hero__node--two"></span>
+            <span class="qimon-roster-hero__node qimon-roster-hero__node--three"></span>
+          </div>
+          <p class="qimon-roster-status" id="qimon-roster-status" role="status"></p>
+          <section class="qimon-roster-section" aria-labelledby="qimon-find-title">
+            <div class="qimon-roster-section__heading"><span>01 · DISCOVER</span><h3 id="qimon-find-title">Invite from a kept Field trace</h3></div>
+            <p>Explore with ARCHi, choose Keep, then review the invitation here. Old traces do not silently become recruits.</p>
+            <div id="qimon-offers" class="qimon-roster-list"></div>
+          </section>
+          <section class="qimon-roster-section" aria-labelledby="qimon-team-title">
+            <div class="qimon-roster-section__heading"><span>02 · CARE & FORMATION</span><h3 id="qimon-team-title">Your team</h3></div>
+            <p>Pick up to three invited QiMon. Training is earned from a kept one-member practice; a pair bond needs shared action in a kept two-member practice.</p>
+            <div id="qimon-members" class="qimon-roster-list"></div>
+            <div id="qimon-team-controls" class="qimon-roster-actions"></div>
+          </section>
+          <section class="qimon-roster-section" aria-labelledby="qimon-train-title">
+            <div class="qimon-roster-section__heading"><span>03 · TRAIN & BOND</span><h3 id="qimon-train-title">Shared experience</h3></div>
+            <div id="qimon-training" class="qimon-roster-list"></div>
+          </section>
+          <section class="qimon-roster-section" aria-labelledby="qimon-relay-title">
+            <div class="qimon-roster-section__heading"><span>04 · POWER EXCHANGE</span><h3 id="qimon-relay-title">Relay</h3></div>
+            <p>Earned pair edges can transfer temporary Charge in an opt-in rules v2 practice. Lasting bonds remain in the roster.</p>
+            <div id="qimon-relay" class="qimon-roster-list"></div>
+          </section>
+          <section class="qimon-roster-section" aria-labelledby="qimon-transfer-title">
+            <div class="qimon-roster-section__heading"><span>LOCAL COPY</span><h3 id="qimon-transfer-title">Take your roster with you</h3></div>
+            <p>The QiMon roster has its own copy, separate from the ARCHi Journey. Review its origin and members before replacing this phone's roster.</p>
+            <div class="qimon-roster-actions">
+              <button id="qimon-roster-review" type="button">Review roster file</button>
+              <input id="qimon-roster-file" type="file" accept="application/json,.json" hidden />
+            </div>
+            <div id="qimon-roster-import-preview" class="qimon-roster-import-preview" hidden>
+              <strong id="qimon-roster-import-title">Roster copy ready</strong>
+              <p id="qimon-roster-import-detail"></p>
+              <p>Replacing is explicit and complete. The Journey and phone History are not changed.</p>
+              <div class="qimon-roster-actions">
+                <button id="qimon-roster-import-cancel" type="button">Keep current</button>
+                <button id="qimon-roster-import-confirm" type="button">Replace roster</button>
+              </div>
+            </div>
+          </section>
+          <p class="qimon-roster-boundary">Roster data is stored separately from ARCHi's Journey. Practice cards remain available in the original Arena. No walk signal, History source, or phone note grants combat power automatically.</p>
+        </div>
+      </aside>
 
       <aside
         class="continuity-panel"

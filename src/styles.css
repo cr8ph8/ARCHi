@@ -74,6 +74,8 @@ select { min-width: 0; padding: 0 30px 0 12px; border: 1px solid var(--line); bo
 .presence-group legend { padding-inline: 5px; color: var(--muted); font-size: 10px; }
 .presence-group button, .presence-return { min-width: 35px; min-height: 40px; padding: 8px; border: 0; border-radius: 7px; background: transparent; color: #70637d; font-size: 11px; }
 .presence-group button:hover, .presence-return:hover { background: var(--lavender); }
+.presence-group button:disabled, .presence-return:disabled { opacity: 0.42; cursor: default; }
+.presence-group button:disabled:hover, .presence-return:disabled:hover { background: transparent; }
 .presence-group button.is-active, .presence-group button[aria-pressed="true"] { background: #e7ddf1; color: #61438c; }
 .presence-return { display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; color: var(--accent); border: 1px solid var(--line); }
 .presence-return.is-running { background: var(--lavender); }
@@ -528,4 +530,209 @@ html[data-desktop-host] .battle-complete { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/* The iPhone host identifies itself after the page starts. Keep the desktop
+   palette and layout intact; only its local Field receives this Qi banding. */
+.wordmark__mark-qi { display: none; }
+.wordmark__title-ios, .battle-return__title-ios { display: none; }
+html[data-archi-ios-host] {
+  color-scheme: dark;
+  --night: #0b1d22;
+  --night-deep: #071318;
+  --ink: #eff7f4;
+  --muted: #a8c0c0;
+  --cyan: #6ed6e8;
+  --gold: #eba63b;
+  --gold-bright: #f2bd62;
+  --care-energy: #eba63b;
+  --care-calm: #75c1c8;
+  --care-curiosity: #a6dce2;
+  --line: rgba(128,211,218,.22);
+  --panel: rgba(17,42,48,.97);
+  --lavender: #1b3b43;
+  --accent: #6ed6e8;
+  --accent-hover: #9be8f1;
+  --shadow: 0 18px 48px rgba(0,0,0,.34);
+}
+html[data-archi-ios-host] .wordmark { color: var(--ink); }
+html[data-archi-ios-host] .wordmark__mark-default { display: none; }
+html[data-archi-ios-host] .wordmark__mark-qi { display: block; width: 28px; height: 28px; color: var(--gold); }
+html[data-archi-ios-host] .wordmark__title-default,
+html[data-archi-ios-host] .battle-return__title-default { display: none; }
+html[data-archi-ios-host] .wordmark__title-ios,
+html[data-archi-ios-host] .battle-return__title-ios { display: inline; }
+html[data-archi-ios-host] .topbar { background: rgba(9,25,30,.94); border-color: var(--line); }
+html[data-archi-ios-host] .topbar .text-button,
+html[data-archi-ios-host] .presence-console > summary { color: var(--ink); }
+html[data-archi-ios-host] .topbar .text-button { min-height: 44px; }
+html[data-archi-ios-host] .topbar .battle-entry { color: var(--accent); background: rgba(110,214,232,.11); }
+/* Native portraits bring a dark Qi landscape. This scrim also keeps the
+   heading readable while the first portrait is still loading. */
+html[data-archi-ios-host] .habitat-heading,
+html[data-archi-ios-host] .battle-panel__header > div {
+  padding: 9px 11px;
+  border-left: 2px solid var(--gold);
+  border-radius: 12px;
+  background: rgba(7,27,33,.76);
+  text-shadow: 0 2px 12px rgba(0,0,0,.5);
+}
+html[data-archi-ios-host] .status-divider { background: var(--gold); }
+html[data-archi-ios-host] .presence-console,
+html[data-archi-ios-host] .habitat-dock,
+html[data-archi-ios-host] .proposal-panel,
+html[data-archi-ios-host] .reflection-panel,
+html[data-archi-ios-host] .field-copy,
+html[data-archi-ios-host] .field-navigator,
+html[data-archi-ios-host] .toast,
+html[data-archi-ios-host] .battle-setup,
+html[data-archi-ios-host] .battle-team-hud,
+html[data-archi-ios-host] .battle-round-seal,
+html[data-archi-ios-host] .battle-command-dock,
+html[data-archi-ios-host] .battle-complete,
+html[data-archi-ios-host] .battle-history,
+html[data-archi-ios-host] .relay-panel,
+html[data-archi-ios-host] .continuity-panel {
+  background: var(--panel);
+  color: var(--ink);
+  border-color: var(--line);
+  box-shadow: var(--shadow);
+}
+html[data-archi-ios-host] .care-action,
+html[data-archi-ios-host] .proposal-choice,
+html[data-archi-ios-host] .navigator-signal,
+html[data-archi-ios-host] .relay-choice,
+html[data-archi-ios-host] .battle-return,
+html[data-archi-ios-host] .battle-command-dock button,
+html[data-archi-ios-host] .archive-button,
+html[data-archi-ios-host] .journey-import-preview button,
+html[data-archi-ios-host] .reset-confirm button {
+  background: #17343c;
+  border-color: var(--line);
+  color: var(--ink);
+}
+html[data-archi-ios-host] .care-action:hover:not(:disabled),
+html[data-archi-ios-host] .proposal-choice:hover:not(:disabled),
+html[data-archi-ios-host] .relay-choice:hover:not(:disabled),
+html[data-archi-ios-host] .archive-button:hover {
+  background: #204650;
+}
+html[data-archi-ios-host] .care-action--primary,
+html[data-archi-ios-host] .primary-button,
+html[data-archi-ios-host] .battle-start,
+html[data-archi-ios-host] #battle-resolve,
+html[data-archi-ios-host] .battle-panel[data-opponent-mode="companion"] #battle-one-command-fieldset .battle-command-lock,
+html[data-archi-ios-host] .battle-complete button,
+html[data-archi-ios-host] #confirm-journey-import {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--night-deep);
+}
+html[data-archi-ios-host] .care-action--primary small { color: #153238; }
+html[data-archi-ios-host] .battle-panel { --battle-one: #6ed6e8; --battle-two: #eba63b; }
+html[data-archi-ios-host] .battle-return,
+html[data-archi-ios-host] .battle-command-dock .battle-command-lock { min-height: 44px; }
+html[data-archi-ios-host] #battle-command-dock:not([hidden]) { display: grid; }
+html[data-archi-ios-host] .battle-complete:not([hidden]) { display: flex; }
+html[data-archi-ios-host] .battle-panel select,
+html[data-archi-ios-host] select { background: #17343c; border-color: var(--line); color: var(--ink); }
+html[data-archi-ios-host] .battle-team-builder legend,
+html[data-archi-ios-host] .battle-team-hud__heading strong,
+html[data-archi-ios-host] .battle-team-hud--two .battle-team-hud__heading strong,
+html[data-archi-ios-host] .section-heading,
+html[data-archi-ios-host] .battle-round-seal strong { color: var(--ink); }
+html[data-archi-ios-host] .presence-group button,
+html[data-archi-ios-host] .relay-body p,
+html[data-archi-ios-host] .relay-log,
+html[data-archi-ios-host] .battle-round-seal,
+html[data-archi-ios-host] .battle-round-seal small,
+html[data-archi-ios-host] .battle-command-dock legend,
+html[data-archi-ios-host] .battle-complete strong { color: var(--ink); }
+html[data-archi-ios-host] .presence-group button.is-active,
+html[data-archi-ios-host] .presence-group button[aria-pressed="true"],
+html[data-archi-ios-host] .relay-choice[aria-pressed="true"],
+html[data-archi-ios-host] .battle-command-sealed,
+html[data-archi-ios-host] .battle-command-dock .battle-command-lock,
+html[data-archi-ios-host] .journey-import-preview {
+  background: #21464e;
+  border-color: var(--line);
+  color: var(--ink);
+}
+html[data-archi-ios-host] .battle-roster [role="listitem"] { background: #1c3b43; color: var(--ink) !important; }
+html[data-archi-ios-host] .battle-roster [role="listitem"].is-active { background: #28535c; color: var(--ink) !important; }
+html[data-archi-ios-host] .battle-integrity,
+html[data-archi-ios-host] .care-vital meter,
+html[data-archi-ios-host] .care-vital meter::-webkit-meter-bar,
+html[data-archi-ios-host] .affinity-track,
+html[data-archi-ios-host] .signal-pip,
+html[data-archi-ios-host] .composure-track { background: #23424a; }
+html[data-archi-ios-host] .relay-log { border-left-color: var(--gold); }
+html[data-archi-ios-host] .journey-import-preview .journey-import-preview__warning { color: var(--gold-bright); }
+html[data-archi-ios-host] .journey-archive__status.is-error,
+html[data-archi-ios-host] .reset-button,
+html[data-archi-ios-host] .reset-confirm p,
+html[data-archi-ios-host] #confirm-reset { color: #f3a6ad; }
+html[data-archi-ios-host] .scrim { background: rgba(2,12,16,.58); }
+
+/* The roster is a separate, inspectable layer over the current Journey. */
+.roster-entry { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 49px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel); color: var(--ink); text-align: left; }
+.roster-entry > span:nth-child(2) { display: grid; gap: 3px; flex: 1; }
+.roster-entry strong { font-size: 12px; font-weight: 600; }
+.roster-entry small { color: var(--muted); font-size: 10px; }
+.roster-entry__icon { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--gold); border-radius: 50%; color: var(--gold); box-shadow: 0 0 16px color-mix(in srgb, var(--gold) 35%, transparent); }
+.qimon-roster-panel { position: absolute; z-index: 12; inset: 0; overflow-y: auto; overscroll-behavior: contain; padding: max(31px,env(safe-area-inset-top)) max(28px,env(safe-area-inset-right)) max(34px,env(safe-area-inset-bottom)) max(28px,env(safe-area-inset-left)); background: var(--night-deep); color: var(--ink); }
+.qimon-roster-panel__header { display: flex; align-items: start; justify-content: space-between; gap: 18px; max-width: 920px; margin: 0 auto 16px; }
+.qimon-roster-panel__header h2 { margin: 0 0 8px; font-size: clamp(31px,5vw,51px); }
+.qimon-roster-panel__header p:last-child { max-width: 580px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+#qimon-roster-close { flex: 0 0 44px; width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 50%; background: var(--panel); color: var(--ink); font-size: 27px; }
+.qimon-roster-panel__body { max-width: 920px; margin: auto; }
+.qimon-roster-hero { position: relative; height: 126px; margin: 10px 0 18px; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; background: radial-gradient(circle at 50% 60%,color-mix(in srgb,var(--gold) 25%,transparent),transparent 35%), radial-gradient(circle at 50% 50%,color-mix(in srgb,var(--accent) 14%,transparent),transparent 65%), var(--panel); }
+.qimon-roster-hero::before, .qimon-roster-hero::after { content: ""; position: absolute; top: 49%; left: 50%; width: 210px; height: 1px; transform-origin: left; background: linear-gradient(90deg,var(--gold),transparent); opacity: .55; }
+.qimon-roster-hero::before { transform: rotate(-24deg); }
+.qimon-roster-hero::after { transform: rotate(27deg); }
+.qimon-roster-hero__core { position: absolute; z-index: 1; top: 50%; left: 50%; width: 49px; height: 49px; border: 2px solid var(--gold); border-radius: 50%; transform: translate(-50%,-50%); background: radial-gradient(circle,#fff9e9 0 16%,var(--gold) 22%,#7d3f29 52%,transparent 68%); box-shadow: 0 0 22px var(--gold),0 0 60px color-mix(in srgb,var(--gold) 50%,transparent); }
+.qimon-roster-hero__node { position: absolute; width: 14px; height: 14px; border: 1px solid var(--accent); border-radius: 50%; background: var(--night-deep); box-shadow: 0 0 17px var(--accent); }
+.qimon-roster-hero__node--one { top: 18%; left: 24%; }
+.qimon-roster-hero__node--two { top: 69%; left: 72%; }
+.qimon-roster-hero__node--three { top: 21%; left: 83%; }
+.qimon-roster-status { min-height: 44px; padding: 12px 15px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--accent); font-size: 12px; line-height: 1.5; }
+.qimon-roster-status.is-error { color: #f3a6ad; }
+.qimon-roster-section { margin-top: 17px; padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); }
+.qimon-roster-section__heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.qimon-roster-section__heading > span { color: var(--gold-bright); font-size: 10px; font-weight: 700; letter-spacing: .14em; }
+.qimon-roster-section h3 { margin: 0 0 8px; font-size: 19px; font-weight: 600; }
+.qimon-roster-section p { max-width: 720px; margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.qimon-roster-list { display: grid; gap: 9px; }
+.qimon-roster-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 66px; padding: 12px; border: 1px solid var(--line); border-radius: 13px; background: color-mix(in srgb,var(--night) 75%,var(--panel)); }
+.qimon-roster-card__sigil { display: grid; flex: 0 0 42px; place-items: center; width: 42px; height: 42px; border: 1px solid var(--qimon-sigil); border-radius: 14px; color: var(--qimon-sigil); background: radial-gradient(circle, color-mix(in srgb,var(--qimon-sigil) 25%,transparent),transparent 72%); box-shadow: inset 0 0 14px color-mix(in srgb,var(--qimon-sigil) 16%,transparent); font-size: 25px; line-height: 1; }
+.qimon-roster-card__text { display: grid; gap: 4px; min-width: 0; }
+.qimon-roster-card strong { font-size: 13px; }
+.qimon-roster-card small { color: var(--muted); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.qimon-roster-card button, .qimon-roster-actions button, .qimon-relay-actions button { min-height: 44px; padding: 9px 12px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent); color: var(--night-deep); font-size: 12px; font-weight: 700; }
+.qimon-roster-card input[type="checkbox"] { width: 23px; height: 23px; accent-color: var(--accent); }
+.qimon-roster-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.qimon-roster-actions button { min-height: 44px; padding: 9px 12px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent); color: var(--night-deep); font-size: 12px; font-weight: 700; }
+.qimon-roster-import-preview { margin-top: 15px; padding: 14px; border: 1px solid var(--gold); border-radius: 13px; background: color-mix(in srgb,var(--gold) 8%,var(--panel)); }
+.qimon-roster-import-preview strong { font-size: 13px; }
+.qimon-roster-import-preview p { margin: 7px 0; }
+.qimon-roster-boundary { margin: 21px 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+.qimon-relay-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.qimon-relay-actions button { min-width: 76px; }
+.qimon-relay-readout { margin: 0 0 8px !important; color: var(--ink) !important; }
+
+@media (max-width: 700px) {
+  .roster-entry { min-height: 43px; padding: 7px 9px; }
+  .roster-entry__icon { width: 25px; height: 25px; }
+  .roster-entry small { display: none; }
+  .qimon-roster-panel { padding-inline: 16px; }
+  .qimon-roster-panel__header h2 { font-size: 30px; }
+  .qimon-roster-hero { height: 105px; }
+  .qimon-roster-section { padding: 14px; }
+  .qimon-roster-card { align-items: start; flex-wrap: wrap; }
+}
+
+@media (max-width: 700px) {
+  html[data-archi-ios-host] .wordmark { gap: 7px; }
+  html[data-archi-ios-host] .habitat-dock { border-color: var(--line); }
+  html[data-archi-ios-host] .battle-setup { max-height: calc(100% - 82px); }
 }

@@ -259,6 +259,13 @@ final class TokenStewardStore: ObservableObject {
         } catch { loadError = error.localizedDescription; throw error }
     }
 
+    /// Read-only check for development previews. Unlike refresh(), this never
+    /// publishes a revision or triggers subscribers that can withdraw history.
+    var isCurrentOnDisk: Bool {
+        guard loadError == nil else { return false }
+        do { return try readJournal() == journal } catch { return false }
+    }
+
     func preflight(requestID: String, route: AssistantRoute) throws {
         let date = now()
         try transaction { state in

@@ -32,20 +32,31 @@ extension CompanionStore {
         readingDependenciesAreCurrent(origin?.readingSources) && knowledgeDependenciesAreCurrent(origin?.knowledgePages)
     }
 
-    func useKnowledgePageInChat(_ page: KnowledgePage) {
-        guard !isShuttingDown, !hasOpenKnowledgeDraft else { return }
-        guard readingSources.availability(of: page) == nil else {
-            knowledgePageMessage = readingSources.availability(of: page); return
+    /// Prepares exact local context without sending. The map can retain its view
+    /// and composer while other callers continue opening the assistant.
+    @discardableResult
+    func useKnowledgePageInChat(_ page: KnowledgePage, openAssistant: Bool = true) -> Bool {
+        guard !isShuttingDown else { return false }
+        guard !hasOpenKnowledgeDraft else {
+            knowledgePageMessage = "Save or discard the open page or connection draft first."
+            return false
+        }
+        // Availability checks the current disk library, exact latest page
+        // version, review state and source passages. Never substitute a revision.
+        if let issue = readingSources.availability(of: page) {
+            knowledgePageMessage = issue
+            return false
         }
         var next = selectedKnowledgePages.filter { $0.id != page.id }
-        guard next.count < 4 else { knowledgePageMessage = "Use up to four pages at once."; return }
+        guard next.count < 4 else { knowledgePageMessage = "Use up to four pages at once."; return false }
         next.append(page.binding)
         invalidateReadingContext(reason: "Selected knowledge pages for local chat. Nothing sent yet.")
         requestsRevision = false
         selectedKnowledgePages = next
         setAssistantRoute(.automatic)
         knowledgePageMessage = "Selected for local chat. Your shared document stays unchanged and is not sent with these pages."
-        open(.assistant)
+        if openAssistant { open(.assistant) }
+        return true
     }
 
     func detachKnowledgePages() {

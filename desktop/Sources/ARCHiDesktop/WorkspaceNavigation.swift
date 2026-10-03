@@ -3,8 +3,8 @@ import SwiftUI
 /// Presentation groups reuse the existing destinations. They never copy profile
 /// state or save a preference when a user moves between related screens.
 enum WorkspaceNavigation {
-    static let work: [WorkspaceSection] = [.home, .assistant, .context]
-    static let companion: [WorkspaceSection] = [.nodeLab, .memory, .appearance]
+    static let work: [WorkspaceSection] = [.nodeLab, .assistant, .context]
+    static let companion: [WorkspaceSection] = [.home, .memory, .appearance]
     static let explore: [WorkspaceSection] = [.unity, .marketplace]
     static let tools: [WorkspaceSection] = [.steward, .capabilities]
     static var allSidebarDestinations: [WorkspaceSection] { work + companion + explore + tools + [.connections] }

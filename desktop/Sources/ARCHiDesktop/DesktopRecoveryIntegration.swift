@@ -86,7 +86,7 @@ extension CompanionStore {
             return report
         } catch {
             do {
-                try DesktopProfileBackup.undoRestore(report)
+                _ = try DesktopProfileBackup.undoRestore(report)
                 try admitRestoredProfile()
             } catch {
                 blockProfileForRecovery("Profile recovery needs review before saving. The before-restore backup has been retained.")

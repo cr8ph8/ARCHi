@@ -7,16 +7,18 @@ extension CompanionStore {
     /// neither saving nor generating a candidate establishes its usefulness.
     @discardableResult
     func keepKnowledgeProcedure(page: KnowledgePage, title: String, instruction: String,
-                                requirements: DocumentWorkRequirements) -> Bool {
+                                requirements: DocumentWorkRequirements,
+                                onSaved: ((DocumentProcedureUse) -> Void)? = nil) -> Bool {
         guard canKeepDocumentProcedure, !hasOpenKnowledgeDraft,
               documentWork.isCurrentOnDisk, knowledgeDependenciesAreCurrent([page.binding]) else {
             knowledgePageMessage = "Review the current page and finish any open work before saving a method."
             return false
         }
         do {
-            _ = try documentProcedures.keepCandidate(from: page, title: title, instruction: instruction,
+            let saved = try documentProcedures.keepCandidate(from: page, title: title, instruction: instruction,
                 requirements: requirements, knowledgeIsCurrent: { knowledgeDependenciesAreCurrent([$0]) })
             knowledgePageMessage = "Candidate saved in Document methods. Choose it for a selected passage to try it locally; no work was sent or credited."
+            onSaved?(saved.binding)
             return true
         } catch {
             knowledgePageMessage = "Candidate was not saved: \(error.localizedDescription)"

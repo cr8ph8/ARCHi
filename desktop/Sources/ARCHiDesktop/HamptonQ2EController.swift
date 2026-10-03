@@ -113,8 +113,9 @@ struct HamptonQ2EDecision: Codable, Equatable, Sendable {
     let reason: String
     /// Nil only on legacy v1 records. No migration rewrites their evidence.
     var coordinateSchema: String? = nil
-    /// Nil means the explicitly defined initial zero reference, not an observed
-    /// previous state. An incompatible/invalid previous decision is not reused.
+    /// On v2+, nil means the explicitly defined initial zero reference, not an
+    /// observed previous state. Legacy v1 did not record predecessor lineage.
+    /// An incompatible/invalid previous decision is not reused.
     var predecessor: HamptonQ2EPredecessor? = nil
     /// Available for the document-revision adapter; other domain owners retain
     /// their existing evidence contracts rather than fabricating these records.

@@ -8,6 +8,8 @@ import argparse
 import json
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 from liminal_v008_validate import validate_package, read_json
 
 
@@ -38,7 +40,12 @@ def package(source, qualification, native_resources, unity_streaming_assets):
     for target in targets:
         if not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(source, target, symlinks=False)
+            if sys.platform == "darwin":
+                # The validated package has no symlinks. APFS clones are
+                # independent files; cp falls back to copies on other volumes.
+                subprocess.run(["/bin/cp", "-cR", str(source), str(target)], check=True)
+            else:
+                shutil.copytree(source, target, symlinks=False)
         copied = validate_package(target)
         if copied["manifestSHA256"] != result["manifestSHA256"] or copied["endpointImageStatus"] != "qualified":
             raise ValueError("copy changed qualified package bytes")

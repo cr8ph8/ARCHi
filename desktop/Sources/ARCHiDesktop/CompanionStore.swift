@@ -99,6 +99,7 @@ struct ContextTicket: Equatable, Sendable {
 
 @MainActor
 final class CompanionStore: ObservableObject {
+    let liminalStructureSessionID = UUID().uuidString
     let tokenSteward: TokenStewardStore
     let arcCapabilities: ARCCapabilitiesStore
     let arc3: ARC3SessionStore
@@ -137,6 +138,8 @@ final class CompanionStore: ObservableObject {
     @Published private(set) var selectedStewardTaskID: String?
     @Published private(set) var selectedGraphNodeID: String?
     @Published var inspectedDocumentMethod: DocumentMethodInspectionSelection?
+    /// Chosen method for the document-side preview; never persisted or sent.
+    @Published private(set) var documentMethodToTry: DocumentMethodInspectionSelection?
     @Published private(set) var workspaceRoutingNotice: String?
     private var pendingStewardReceipts: [String: AssistantLaneReceipt] = [:]
     private var pendingStewardEvaluations: [String: ARCCapabilitiesEvent] = [:]
@@ -220,6 +223,9 @@ final class CompanionStore: ObservableObject {
         return (workingCopyIsPasted || current != openedWorkingCopyDigest) && current != exportedWorkingCopyDigest
     }
     private var importedSourceURL: URL?
+    @Published private(set) var wikiOSTask: QiWorkRequestFile?
+    @Published var wikiOSExchangeReview: WikiOSExchangeReview?
+    @Published var wikiOSExchangeMessage: String?
     @Published var activity: [String] = []
     @Published var isWorking = false
     @Published private(set) var activeARCAnswer: ARCActiveAssistantAnswer?
@@ -816,6 +822,37 @@ final class CompanionStore: ObservableObject {
         open(.nodeLab)
     }
 
+    /// Navigation to the retained version, including a corrected or withdrawn
+    /// one. Opening its evidence never prepares work or picks a newer version.
+    @discardableResult
+    func openDocumentMethodMap(_ binding: DocumentProcedureUse) -> Bool {
+        guard !isShuttingDown, profileRecoveryBlock == nil,
+              documentProcedures.isCurrentOnDisk, documentWork.isCurrentOnDisk,
+              documentProcedures.procedure(matching: binding) != nil,
+              memoryMapSnapshot().nodes.contains(where: { $0.id == DocumentMethodGraph.nodeID(binding) }) else {
+            workspaceRoutingNotice = "That exact method or its history is unavailable. No replacement was selected."
+            return false
+        }
+        selectedGraphNodeID = DocumentMethodGraph.nodeID(binding)
+        open(.nodeLab)
+        workspaceRoutingNotice = nil
+        return true
+    }
+
+    @discardableResult
+    func beginDocumentMethodWork(_ selection: DocumentMethodInspectionSelection) -> Bool {
+        guard !isWorking, let method = methodForInspection(selection),
+              documentProcedures.latestProcedures.contains(method),
+              documentProcedureUnavailable(method.binding) == nil, !hasOpenKnowledgeDraft else { return false }
+        documentMethodToTry = selection
+        selectedGraphNodeID = DocumentMethodGraph.nodeID(method.binding)
+        inspectedDocumentMethod = nil
+        open(.context)
+        return true
+    }
+
+    func clearDocumentMethodToTry() { documentMethodToTry = nil }
+
     @discardableResult
     func openARCGraph(evidenceID: String) -> Bool {
         let node = companionGraphSnapshot().nodes.first {
@@ -924,6 +961,108 @@ final class CompanionStore: ObservableObject {
         status = qiMonMessage
         showCompanion()
         return true
+    }
+
+    var wikiOSExchangeBlockReason: String? {
+        if isShuttingDown { return "ARCHi is closing. Reopen the task after this session ends." }
+        if isWorking || isARCWorking { return "Finish or stop the current request before changing task context." }
+        if voiceInput.isActive || voiceInput.phase == .review { return "Use or discard the current voice draft first." }
+        if pendingDocumentReceipt != nil { return "Save the pending document receipt before changing task context." }
+        if documentWork.records.contains(where: { $0.state.isActive }) { return "Apply or dismiss the pending document proposal before changing task context." }
+        if profileRecoveryBlock != nil { return "Finish profile recovery before exchanging work." }
+        if hasOpenKnowledgeDraft { return "Save or cancel the open knowledge page or connection draft before reviewing this task." }
+        return nil
+    }
+
+    /// Opening a file stages one review. It never replaces the current copy.
+    @discardableResult
+    func stageWikiOSTask(from url: URL) -> Bool {
+        guard wikiOSExchangeReview == nil else {
+            wikiOSExchangeMessage = "Finish or cancel the open task review before opening another task."
+            return false
+        }
+        do {
+            let file = try QiWorkRequestFile.read(url)
+            wikiOSExchangeReview = .incoming(file)
+            wikiOSExchangeMessage = nil
+            return true
+        } catch {
+            wikiOSExchangeMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
+    func acceptWikiOSTask(_ file: QiWorkRequestFile, reviewWorkingCopy: (() -> Bool)? = nil) -> Bool {
+        guard case .incoming(let pending) = wikiOSExchangeReview, pending == file else {
+            wikiOSExchangeMessage = WikiOSTaskExchangeError.changed.localizedDescription; return false
+        }
+        if let reason = wikiOSExchangeBlockReason { wikiOSExchangeMessage = reason; return false }
+        let previousRevision = sourceRevision, previousName = sourceName
+        let previousBytes = Data(sharedText.utf8), previousPrompt = Data(prompt.utf8)
+        do {
+            try file.verifyUnchanged()
+            let review = reviewWorkingCopy ?? {
+                self.confirmDiscardWorkingCopy(before: "opening this WikiOS task", discardTitle: "Use WikiOS task instead")
+            }
+            guard review(), sourceRevision == previousRevision, sourceName == previousName,
+                  Data(sharedText.utf8) == previousBytes, Data(prompt.utf8) == previousPrompt,
+                  wikiOSExchangeBlockReason == nil, sourceRevision < UInt64.max,
+                  case .incoming(let latest) = wikiOSExchangeReview, latest == file else {
+                wikiOSExchangeMessage = "The task was not imported. Your current copy and question are still here."
+                return false
+            }
+            try file.verifyUnchanged()
+            share(text: file.request.brief, name: "WikiOS · " + file.request.taskTitle)
+            wikiOSTask = file
+            importedSourceURL = file.url.resolvingSymlinksInPath().standardizedFileURL
+            wikiOSExchangeReview = nil
+            workingCopyNotice = "WikiOS task opened locally · return your work before closing this session."
+            wikiOSExchangeMessage = "Task copy imported. Select a passage or prepare a question; Send starts a request."
+            open(.context)
+            return true
+        } catch { wikiOSExchangeMessage = error.localizedDescription; return false }
+    }
+
+    @discardableResult
+    func beginWikiOSReturnReview() -> Bool {
+        guard wikiOSExchangeReview == nil else { return false }
+        if let reason = wikiOSExchangeBlockReason { wikiOSExchangeMessage = reason; return false }
+        guard let request = wikiOSTask, let sourceName else {
+            wikiOSExchangeMessage = WikiOSTaskExchangeError.noTask.localizedDescription; return false
+        }
+        wikiOSExchangeReview = .outgoing(WikiOSReturnPreview(request: request, text: sharedText,
+            sourceName: sourceName, sourceRevision: sourceRevision))
+        return true
+    }
+
+    /// Saves reviewed bytes only. Delivery and WikiOS admission are later actions.
+    func exportWikiOSResult(_ preview: WikiOSReturnPreview, summary: String,
+                           directory: URL? = nil) throws -> QiWorkResultFile {
+        if let reason = wikiOSExchangeBlockReason { throw WikiOSTaskExchangeError.busy(reason) }
+        guard wikiOSTask == preview.request, sourceName == preview.sourceName,
+              sourceRevision == preview.sourceRevision, Data(sharedText.utf8) == Data(preview.text.utf8),
+              case .outgoing(let current) = wikiOSExchangeReview, current == preview else {
+            throw WikiOSTaskExchangeError.changed
+        }
+        try preview.request.verifyUnchanged()
+        let request = preview.request.request
+        let result = QiWorkResult(resultID: UUID().uuidString, requestID: request.requestID,
+            requestSHA256: preview.request.digest, taskID: request.taskID, projectID: request.projectID,
+            taskRevision: request.taskRevision, createdAtUnix: wallClock().timeIntervalSince1970,
+            summary: summary, text: preview.text, textSHA256: QiWorkExchange.digest(Data(preview.text.utf8)),
+            sourceRevision: preview.sourceRevision)
+        try result.validate(request: preview.request)
+        let outbox = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ARCHiTaskExchange/Outbox", isDirectory: true)
+        let url = outbox.appendingPathComponent(result.resultID + ".qiresult")
+        try QiWorkExchange.writeNew(QiWorkExchange.encode(result), to: url)
+        let saved = try QiWorkResultFile.read(url)
+        guard saved.result == result else { throw QiWorkExchangeError.writeFailed }
+        exportedWorkingCopyDigest = result.textSHA256
+        workingCopyNotice = "WikiOS result saved · working-copy bytes verified."
+        wikiOSExchangeMessage = "Result saved locally. Review it in WikiOS before attaching it to the task."
+        return saved
     }
 
     var canBeginPastedDocumentImport: Bool {
@@ -1077,6 +1216,8 @@ final class CompanionStore: ObservableObject {
         clearSessionContext()
         desktopInterest.cancel()
         desktopInterestSource = nil; desktopInterestExternalDigest = nil
+        wikiOSTask = nil
+        wikiOSExchangeMessage = nil
         sharedText = text
         openedWorkingCopyDigest = SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
         exportedWorkingCopyDigest = nil
@@ -1161,6 +1302,8 @@ final class CompanionStore: ObservableObject {
         invalidateTextSelection(reason: "Sharing stopped.")
         cancelWork(reason: "Sharing stopped.")
         clearSessionContext()
+        wikiOSTask = nil
+        wikiOSExchangeMessage = nil
         sharedText = ""; sourceName = nil; sourceRevision &+= 1
         openedWorkingCopyDigest = nil; exportedWorkingCopyDigest = nil
         workingCopyIsPasted = false
@@ -3649,6 +3792,45 @@ extension CompanionStore {
         }
     }
 
+    /// Rebuild the local structure study from current owners, never graph size
+    /// or particle count. Reading this projection cannot save or award a body.
+    var liveLiminalPointStructure: LiminalPointStructure? {
+        LiminalV008Runtime.asset.flatMap { liminalPointStructure(sessionID: liminalStructureSessionID, asset: $0) }
+    }
+
+    func liminalFormDevelopment(at now: Date = Date()) -> LiminalFormDevelopment.Snapshot? {
+        guard let individual = activeQiMon, individual.isValid, individual.character == .hampton,
+              profileRecoveryBlock == nil, !isShuttingDown,
+              let disk = try? NativePreferencePersistence.read(preferenceURL), disk.baseline == preferenceBaseline,
+              evolution.observedJourneyOriginDigest == nil || evolution.observedJourneyOriginDigest == individual.originDigest,
+              evolution.practiceJourneyOriginDigest == nil || evolution.practiceJourneyOriginDigest == individual.originDigest
+        else { return nil }
+        let available = Set(keptLessons.filter {
+            currentKeptLesson(matching: LessonSnapshot(lesson: $0)) != nil
+                && ($0.source == nil || $0.source == currentLessonSource)
+        }.map(\.id))
+        let feedbackCurrent = documentWork.isCurrentOnDisk && tokenSteward.isCurrentOnDisk
+            && evolution.historicalEvidenceUnavailableReason == nil && evolution.persistenceBlockedReason == nil
+        let withdrawn = HamptonMemoryDependencies.withdrawnDevelopmentReadings(tasks: tokenSteward.tasks)
+            .union(documentWork.records.compactMap { record in
+                guard let feedback = record.feedback, feedback.verdict != .helpful else { return nil }
+                return UUID(uuidString: record.requestID)
+            })
+        return LiminalFormDevelopment.build(originDigest: individual.originDigest, lessons: keptLessons,
+            currentLessonIDs: available, receipts: evolution.usefulReceipts.filter { !withdrawn.contains($0.requestID) },
+            evidenceOrigin: feedbackCurrent ? evolution.practiceJourneyOriginDigest : nil, now: now)
+    }
+
+    /// Explicit user action. The study can use the current profile's reviewed
+    /// references without inventing per-receipt individual attribution.
+    @discardableResult func connectLiminalLearningStudy() -> Bool {
+        guard !isWorking, let individual = activeQiMon, individual.character == .hampton,
+              liminalFormDevelopment(at: wallClock()) != nil,
+              evolution.persistenceBlockedReason == nil,
+              documentWork.isCurrentOnDisk, tokenSteward.isCurrentOnDisk else { return false }
+        return evolution.bindPracticeJourney(individual.originDigest)
+    }
+
     func lessonAvailability(_ lesson: KeptLesson) -> String {
         if !lessonDependenciesAreCurrent(lesson.origin) { return "Supporting reading copy changed or was forgotten · review this lesson before reuse" }
         if let expiry = lesson.expiresAt, expiry <= wallClock() { return "Expired · revise to use again" }
@@ -3871,6 +4053,7 @@ extension CompanionStore {
     }
 
     private func bindDocumentDataOwners() {
+        documentMethodToTry = nil
         documentDataSubscriptions.removeAll()
         // Token Steward installs its immutable journal before publishing revision.
         // Read that owner's fresh task projection, not a duplicate feedback store.

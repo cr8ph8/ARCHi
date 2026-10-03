@@ -155,6 +155,8 @@ struct LiminalPointAsset: Sendable {
     let manifestSHA256: String
     let manifest: Manifest
     let artIDs: [UInt32]
+    let finish: LiminalPointFinish?
+    let surfaceLight: LiminalSurfaceLight?
     var lowDetailIDs: [UInt32] { Array(artIDs.prefix(Detail.low.rawValue)) }
     var center: SIMD3<Float> {
         SIMD3(Float((manifest.bounds.min[0] + manifest.bounds.max[0]) / 2),
@@ -166,7 +168,7 @@ struct LiminalPointAsset: Sendable {
                + 2 * manifest.bounds.maximumRadius) * 1.12)
     }
 
-    static func load(packageURL: URL, expectedManifestSHA256: String) throws -> Self {
+    static func load(packageURL: URL, expectedManifestSHA256: String, finishURL: URL? = nil, lightURL: URL? = nil) throws -> Self {
         guard validDigest(expectedManifestSHA256) else { throw Failure.unqualifiedManifest }
         let bytes = try readSmall(root: packageURL, file: "manifest.json", maximum: maximumJSONBytes)
         let manifest = try decodeManifest(bytes, expectedSHA256: expectedManifestSHA256)
@@ -184,7 +186,11 @@ struct LiminalPointAsset: Sendable {
             try handle.close()
         }
         return .init(packageURL: packageURL, manifestSHA256: expectedManifestSHA256,
-                     manifest: manifest, artIDs: artIDs)
+                     manifest: manifest, artIDs: artIDs,
+                     finish: try? LiminalPointFinish.load(root: finishURL ?? packageURL.appendingPathComponent("finish-v11"),
+                         sourceManifestSHA256: expectedManifestSHA256, lodSHA256: manifest.lod.ids.sha256),
+                     surfaceLight: try? LiminalSurfaceLight.load(root: lightURL ?? packageURL.appendingPathComponent("light-v12"),
+                         manifestSHA256: expectedManifestSHA256, lodSHA256: manifest.lod.ids.sha256, lowIDs: Array(artIDs.prefix(50000))))
     }
 
     /// Call off the main thread. One chosen prefix is shared by both shader inputs. All bytes

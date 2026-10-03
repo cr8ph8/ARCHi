@@ -55,6 +55,10 @@ struct CompanionGraphWorkspace: View {
     @ObservedObject private var library: ReadingSourceLibrary
     let initialShowcase: Bool
     @State private var includesActivity = false
+    @State private var showsAssistant = false
+    @State private var attachmentMessage: String?
+    @State private var methodAuthoring: KnowledgeMapMethodSelection?
+    @State private var showsWork = false
 
     init(store: CompanionStore, initialShowcase: Bool = false) {
         self.store = store
@@ -75,22 +79,83 @@ struct CompanionGraphWorkspace: View {
                     Text("All activity").tag(true)
                 }.pickerStyle(.segmented).frame(width: 226)
                     .accessibilityIdentifier("memory-map.scope")
-                Text(includesActivity ? "Includes requests, outcomes, and usage." : "Sources, pages, lessons, and saved methods.")
-                    .font(.system(size: 11)).foregroundStyle(WorkspaceTheme.muted)
                 Spacer(minLength: 0)
+                Button("Work", systemImage: "arrow.triangle.branch") { showsWork.toggle() }
+                    .buttonStyle(.borderless).font(.system(size: 11))
+                    .accessibilityIdentifier("memory-map.work")
+                    .popover(isPresented: $showsWork) {
+                        MemoryMapWorkView(store: store) { showsWork = false }
+                    }
                 Button("Manage memories", systemImage: "bookmark") { store.open(.memory) }
                     .buttonStyle(.borderless).font(.system(size: 11))
                     .accessibilityIdentifier("memory-map.manage")
-            }.padding(.horizontal, 20).padding(.top, 14)
-            // Refresh expiry without running a model or writing any record.
-            TimelineView(.periodic(from: .now, by: 30)) { context in
-                let snapshot = includesActivity ? store.companionGraphSnapshot(at: context.date)
-                    : store.memoryMapSnapshot(at: context.date)
-                CompanionGraphView(snapshot: snapshot,
-                    onOpen: store.openGraphTarget, initialSelectionID: initialShowcase ? nil : store.selectedGraphNodeID,
-                    reduceMotion: store.preferences.reduceMotion || store.preferences.quiet,
-                    seedColor: store.preferences.seedColor, initialShowcase: initialShowcase)
-                    .id(store.selectedGraphNodeID)
+                Button(showsAssistant ? "Close Ask ARCHi" : "Ask ARCHi", systemImage: "bubble.left.and.bubble.right") {
+                    showsAssistant.toggle()
+                }
+                .buttonStyle(.bordered).controlSize(.small)
+                .accessibilityIdentifier("memory-map.ask-toggle")
+                .help("Use the same question draft, model route and replies alongside the map. Selecting a node does not attach it.")
+            }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
+            if let attachmentMessage {
+                HStack {
+                    Label(attachmentMessage, systemImage: "info.circle").font(.caption)
+                    Spacer()
+                    Button { self.attachmentMessage = nil } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.borderless).accessibilityLabel("Dismiss memory context notice")
+                }.padding(.horizontal, 16).padding(.vertical, 8)
+                    .accessibilityIdentifier("memory-map.context-notice")
+            }
+            HSplitView {
+                // Keep this host mounted while Ask opens or closes, preserving
+                // map selection, filters and focus. The store owns all requests.
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    let snapshot = includesActivity ? store.companionGraphSnapshot(at: context.date)
+                        : store.memoryMapSnapshot(at: context.date)
+                    CompanionGraphView(snapshot: snapshot,
+                        onOpen: store.openGraphTarget, initialLayout: .particles,
+                        initialSelectionID: initialShowcase ? nil : store.selectedGraphNodeID,
+                        reduceMotion: store.preferences.reduceMotion || store.preferences.quiet,
+                        seedColor: store.preferences.seedColor, initialShowcase: initialShowcase,
+                        onAsk: { node in
+                            guard let page = currentPage(for: node) else {
+                                attachmentMessage = "This page changed. Select its current reviewed version before attaching it."
+                                return
+                            }
+                            guard store.useKnowledgePageInChat(page, openAssistant: false) else {
+                                attachmentMessage = store.knowledgePageMessage ?? "This page could not be attached. Review its source and status."
+                                return
+                            }
+                            attachmentMessage = nil
+                            showsAssistant = true
+                        }, canAsk: { currentPage(for: $0) != nil },
+                        lightExpression: store.kinLightExpression,
+                        preparedNodeIDs: store.currentKnowledgeContext == nil ? []
+                            : Set(store.selectedKnowledgePages.map { KnowledgePageGraph.nodeID($0) }),
+                        onCreateMethod: { node in
+                            guard let selection = store.beginKnowledgeMapMethod(node: node) else {
+                                attachmentMessage = "This concept changed. Select its current reviewed version before creating a method."
+                                return
+                            }
+                            methodAuthoring = selection
+                        }, canCreateMethod: { store.beginKnowledgeMapMethod(node: $0) != nil })
+                        .id(store.selectedGraphNodeID)
+                        .id(ObjectIdentifier(store.readingSources))
+                }
+                .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
+                if showsAssistant {
+                    VStack(spacing: 0) {
+                        HStack {
+                            Text(AskARCHiBrand.title).font(.system(size: 15, weight: .medium))
+                            Spacer()
+                            Button { showsAssistant = false } label: { Image(systemName: "xmark") }
+                                .buttonStyle(.borderless).accessibilityLabel("Close Ask ARCHi pane")
+                        }.padding(14)
+                        Divider()
+                        AssistantWorkspace(store: store, compact: true)
+                    }
+                    .frame(minWidth: 330, idealWidth: 390, maxWidth: 460, maxHeight: .infinity)
+                    .accessibilityIdentifier("memory-map.assistant-pane")
+                }
             }
         }
         .accessibilityElement(children: .contain)
@@ -98,11 +163,39 @@ struct CompanionGraphWorkspace: View {
         .sheet(item: $store.inspectedDocumentMethod) { selection in
             DocumentMethodInspectionView(store: store, selection: selection)
         }
-        .onChange(of: ObjectIdentifier(store.documentProcedures)) { _, _ in store.inspectedDocumentMethod = nil }
-        .onChange(of: ObjectIdentifier(store.documentWork)) { _, _ in store.inspectedDocumentMethod = nil }
-        .onChange(of: ObjectIdentifier(store.readingSources)) { _, _ in store.inspectedDocumentMethod = nil }
+        .sheet(item: $methodAuthoring) { selection in
+            KnowledgeMapMethodSheet(store: store, selection: selection) { saved in
+                methodAuthoring = nil
+                if let saved {
+                    includesActivity = false
+                    if store.openDocumentMethodMap(saved) {
+                        attachmentMessage = "Candidate saved. Inspect this method version to choose a passage. No work has been sent or reviewed."
+                    }
+                }
+            }
+        }
+        .onChange(of: ObjectIdentifier(store.documentProcedures)) { _, _ in
+            store.inspectedDocumentMethod = nil; methodAuthoring = nil; showsWork = false
+        }
+        .onChange(of: ObjectIdentifier(store.documentWork)) { _, _ in
+            store.inspectedDocumentMethod = nil; methodAuthoring = nil; showsWork = false
+        }
+        .onChange(of: ObjectIdentifier(store.readingSources)) { _, _ in
+            store.inspectedDocumentMethod = nil; attachmentMessage = nil; methodAuthoring = nil; showsWork = false
+        }
         .onChange(of: store.section) { _, section in
-            if section != .nodeLab { store.inspectedDocumentMethod = nil }
+            if section != .nodeLab { store.inspectedDocumentMethod = nil; methodAuthoring = nil; showsWork = false }
         }
     }
+
+    /// Re-resolve the exact displayed version at interaction time. A newer page
+    /// with the same logical ID must not silently replace the selected node.
+    private func currentPage(for node: CompanionGraphNode) -> KnowledgePage? {
+        guard case .knowledgePage(let id) = node.target,
+              let page = store.readingSources.latestKnowledgePages.first(where: {
+                  $0.id == id && KnowledgePageGraph.nodeID($0.binding) == node.id
+              }), store.readingSources.availability(of: page) == nil else { return nil }
+        return page
+    }
+
 }

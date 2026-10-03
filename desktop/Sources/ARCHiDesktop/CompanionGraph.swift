@@ -54,12 +54,18 @@ struct CompanionGraphNode: Identifiable, Equatable, Sendable {
     let status: String
     let details: [CompanionGraphDetail]
     let target: CompanionGraphTarget?
+    /// Display metadata derived by the record owner. Never an admission decision.
+    var presentationState: CompanionGraphPresentationState = .recorded
+    var evidenceTrail: [CompanionGraphEvidence] = []
 }
 struct CompanionGraphEdge: Identifiable, Equatable, Sendable {
     let id: String
     let source: String
     let target: String
     let label: String
+    var relationship: CompanionGraphRelationship = .recorded
+    var rationale: String? = nil
+    var reference: String? = nil
 }
 struct CompanionGraphSnapshot: Equatable, Sendable {
     let nodes: [CompanionGraphNode]
@@ -201,7 +207,7 @@ enum CompanionGraph {
                         .init(label: "Bundle hash", value: record.bundleHash),
                         .init(label: "Checker", value: ARCCapabilitiesEvaluator.scorer)], target: target)
                 edge("companion-archi", id, "checked evidence")
-                edge(sourceID, id, "rescored from")
+                edge(sourceID, id, "independently rescored as")
 
                 // The usage journal is shared across profiles. Only the exact
                 // application-owned retention task may join this profile's graph.

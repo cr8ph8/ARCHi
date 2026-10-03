@@ -322,16 +322,19 @@ struct DocumentMethodInspectionView: View {
                         Text("Opening this version does not prepare a request or restore an earlier document.")
                             .foregroundStyle(.secondary)
                         if store.documentProcedures.latestProcedures.contains(method) {
-                            DocumentMethodPreviewButton(store: store, procedure: method,
-                                title: "Use for this passage…",
-                                accessibilityID: "document.inspect-method.use")
+                            Text("Next: open document work, select a passage with these checks, then preview this instruction there. Send, Apply and your outcome review remain separate steps.")
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("document.inspect-method.next-step")
                         }
                     }.font(.caption).frame(maxWidth: .infinity, alignment: .leading)
                 }.frame(maxHeight: 480)
-                Button("Open document work") {
-                    store.inspectedDocumentMethod = nil
-                    store.open(.context)
-                }.buttonStyle(.borderless)
+                Button("Try in document work", systemImage: "doc.text") {
+                    _ = store.beginDocumentMethodWork(selection)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(store.isWorking || !store.documentProcedures.latestProcedures.contains(method)
+                    || store.documentProcedureUnavailable(method.binding) != nil || store.hasOpenKnowledgeDraft)
+                .accessibilityIdentifier("document.inspect-method.try")
             } else {
                 Text("This exact version or its profile history changed. Close this inspector and reopen the current method record. No replacement version was selected.")
                     .font(.caption).foregroundStyle(.secondary)

@@ -6,6 +6,7 @@ struct WorkspaceView: View {
     let playHost: HostedPlayHost
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @State private var showsRetention = false
+    @State private var showsWikiOSExchangeReview = false
     @State private var showsSidebar = true
     @State private var showsMoreTools = false
 
@@ -33,6 +34,19 @@ struct WorkspaceView: View {
                 workspaceHeader
                 Divider().opacity(0.6)
                 ARCActiveWorkBar(store: store)
+                if case .incoming(let file) = store.wikiOSExchangeReview {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("WikiOS task waiting: " + file.request.taskTitle).lineLimit(1)
+                            if let reason = store.wikiOSExchangeBlockReason { Text(reason).foregroundStyle(.secondary) }
+                        }
+                        Spacer()
+                        Button("Dismiss") { store.wikiOSExchangeReview = nil }
+                        Button("Review task") { showsWikiOSExchangeReview = true }
+                            .disabled(store.wikiOSExchangeBlockReason != nil)
+                            .accessibilityIdentifier("wikios.incoming.open")
+                    }.font(.caption).padding(12).background(WorkspaceTheme.panel)
+                }
                 if let notice = store.workspaceRoutingNotice {
                     HStack(alignment: .top, spacing: 10) {
                         Label(notice, systemImage: "info.circle")
@@ -87,12 +101,25 @@ struct WorkspaceView: View {
         // their explicit Seed-orb override outside this workspace.
         .environment(\.liminalPointProgress, store.preferences.liminalPointProgress)
         .environment(\.liminalLightExpression, store.kinLightExpression)
+        .modifier(LiminalStructureScope(store: store))
         .preferredColorScheme(store.preferences.workspaceAppearance.colorScheme)
         .tint(WorkspaceTheme.accent)
         // The native window owns the 880 × 640 content minimum.
         .frame(minWidth: 880)
         .sheet(isPresented: $showsRetention) {
             DesktopRetentionSummary(store: store) { showsRetention = false }
+        }
+        .sheet(isPresented: $showsWikiOSExchangeReview, onDismiss: { store.wikiOSExchangeReview = nil }) {
+            if let review = store.wikiOSExchangeReview {
+                switch review {
+                case .incoming(let file): WikiOSTaskImportView(store: store, file: file)
+                case .outgoing(let preview): WikiOSTaskReturnView(store: store, preview: preview)
+                }
+            }
+        }
+        .onChange(of: store.wikiOSExchangeReview?.id) { _, id in
+            if id == nil { showsWikiOSExchangeReview = false }
+            else if store.wikiOSExchangeBlockReason == nil && !showsRetention { showsWikiOSExchangeReview = true }
         }
         .onChange(of: store.section, initial: true) { _, section in
             if WorkspaceNavigation.tools.contains(section) { showsMoreTools = true }
@@ -263,13 +290,15 @@ struct WorkspaceView: View {
 }
 
 @MainActor
-private struct AssistantWorkspace: View {
+struct AssistantWorkspace: View {
     @ObservedObject var store: CompanionStore
+    var compact = false
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    if !compact {
                     HStack(spacing: 14) {
                         CompanionPresenceArt(form: store.presentationForm, family: store.presentationFamily,
                             size: 52, reduceMotion: store.preferences.reduceMotion || store.preferences.quiet,
@@ -291,7 +320,8 @@ private struct AssistantWorkspace: View {
                         AssistantTaskCue(activity: store.assistantActivity, quiet: store.preferences.quiet,
                             reduceMotion: store.preferences.reduceMotion)
                     }
-                    if showsStartingPoints { startingPoints }
+                    }
+                    if !compact && showsStartingPoints { startingPoints }
                     if store.selectedKnowledgePages.isEmpty { attachmentSummary }
                     KnowledgeChatContextView(store: store)
                     PreparedDocumentProcedureView(store: store)
@@ -525,6 +555,10 @@ private struct AppearanceWorkspace: View {
                 ProtoAppearanceCard(store: store)
             }
             LiminalV008AppearanceCard(store: store)
+            if store.preferences.seedAppearance == .hamptonLiminal {
+                LiminalCubSheetPreview(store: store)
+            }
+            LiminalDevelopmentCard(store: store, evolution: store.evolution)
             CompanionWardrobeCard(store: store)
             if store.activeQiMon != nil {
                 DisclosureGroup("Light & sound") { personalLightAbilities.padding(.top, 14) }
