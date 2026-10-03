@@ -28,7 +28,7 @@ final class LiminalRetainedSeedTests: XCTestCase {
             .init(id: String(format: "%064x", i + 1), lessonIDs: ["synthetic-\(i)"], graphNodeIDs: ["lesson:synthetic-\(i)"],
                   title: "Synthetic", applications: i < 6 ? 3 : 0)
         }, unavailableLessons: 0, duplicateLessons: 0, evidenceAvailable: true)
-        let structure = try XCTUnwrap(LiminalPointStructure.make(state,
+        let structure = try XCTUnwrap(LiminalPointStructureTestFixtures.make(state,
             sessionID: "00000000-0000-4000-8000-000000000001", manifestSHA256: digest, lowDetailIDs: asset.lowDetailIDs))
         let structureDigest = structure.digest, ids = asset.artIDs
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)

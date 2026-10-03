@@ -36,31 +36,58 @@ struct LiminalPointStructure: Codable, Equatable, Sendable {
     var samplesPerNode: Int { isValid ? [0, 1, 6, 10, 14][detail] : 0 }
     var particleCount: Int { samplesPerNode * nodes.count }
 
-    @MainActor static func make(_ snapshot: LiminalFormDevelopment.Snapshot, sessionID: String,
-                               manifestSHA256: String, lowDetailIDs: [UInt32]) -> Self? {
-        guard UUID(uuidString: sessionID) != nil, LiminalKnowledgeBindings.isDigest(manifestSHA256),
+    @MainActor static func make(_ snapshot: LiminalFormDevelopment.Snapshot, graph: CompanionGraphSnapshot,
+                               bindings: LiminalKnowledgeBindings.Sidecar, lowDetailIDs: [UInt32]) -> Self? {
+        guard bindings.schemaVersion == 1, UUID(uuidString: bindings.sessionID) != nil,
+              bindings.originDigest == snapshot.originDigest,
+              LiminalKnowledgeBindings.isDigest(bindings.manifestSHA256),
+              (try? LiminalKnowledgeBindings.validate(graph)) != nil,
+              bindings.graphDigest == LiminalKnowledgeBindings.digest(graph),
+              bindings.bindings.count <= CompanionGraph.maximumNodes,
+              snapshot.nodes.count <= LiminalFormDevelopment.maximumNodes,
+              snapshot.nodes.allSatisfy({ $0.graphNodeIDs.count <= LiminalFormDevelopment.maximumNodes }),
               !lowDetailIDs.isEmpty, lowDetailIDs.count <= 50_000,
-              lowDetailIDs.allSatisfy({ $0 < 800_000 }), Set(lowDetailIDs).count == lowDetailIDs.count else { return nil }
-        var used = Set<UInt32>(), nodes: [Node] = []
-        for node in snapshot.visibleNodes {
-            let hash = LiminalKnowledgeBindings.sha256(Data((snapshot.originDigest + ":" + manifestSHA256 + ":" + node.id).utf8))
-            let start = Int(UInt32(hash.prefix(8), radix: 16) ?? 0) % lowDetailIDs.count
-            guard let anchor = (0..<lowDetailIDs.count).lazy.map({ lowDetailIDs[(start + $0) % lowDetailIDs.count] }).first(where: { !used.contains($0) }) else { return nil }
-            used.insert(anchor)
-            nodes.append(.init(contentID: node.id, anchorID: anchor, applications: node.applications))
+              lowDetailIDs.allSatisfy({ $0 < 800_000 }), Set(lowDetailIDs).count == lowDetailIDs.count,
+              let projection = CompanionParticleScene.developmentProjection(originDigest: snapshot.originDigest,
+                  graph: graph, development: snapshot),
+              let bindingBytes = try? bindings.data() else { return nil }
+        let available = Set(lowDetailIDs), graphIDs = Set(graph.nodes.map(\.id))
+        var recordBindings: [String: LiminalKnowledgeBindings.Binding] = [:]
+        var reserved = Set<UInt32>()
+        for binding in bindings.bindings {
+            guard graphIDs.contains(binding.nodeID), recordBindings[binding.nodeID] == nil,
+                  binding.particleIDs.count == 32, binding.particleIDs.contains(binding.anchorID),
+                  binding.particleIDs.allSatisfy({ available.contains($0) && reserved.insert($0).inserted })
+            else { return nil }
+            recordBindings[binding.nodeID] = binding
         }
-        // Include exact current references and support, including non-visible nodes.
-        // Only this digest crosses the boundary; lesson text and titles do not.
-        let evidence = [LiminalFormDevelopment.revision, snapshot.originDigest, String(snapshot.evidenceAvailable)]
-            + snapshot.nodes.flatMap {
-                [$0.id, String($0.applications), String($0.reviewedApplicationCount),
-                 $0.evidenceState.rawValue, $0.supportDigest ?? "unrecorded"]
-                    + $0.lessonIDs.sorted() + $0.graphNodeIDs.sorted()
+
+        // The projection has checked origin, evidence, duplicate content and
+        // ambiguous aliases. A content group gets one motif at an actual inspected
+        // record anchor, never a second independently hashed art location.
+        var eligible: [LiminalFormDevelopment.Node] = [], nodes: [Node] = []
+        for node in snapshot.nodes.sorted(by: { $0.id < $1.id }) {
+            let binding = Set(node.graphNodeIDs).sorted().compactMap { id -> LiminalKnowledgeBindings.Binding? in
+                guard projection.growth[id]?.contentID == node.id else { return nil }
+                return recordBindings[id]
+            }.first
+            guard let binding else { continue }
+            eligible.append(node)
+            if nodes.count < LiminalFormDevelopment.maximumVisibleNodes {
+                nodes.append(.init(contentID: node.id, anchorID: binding.anchorID, applications: node.applications))
             }
-        let value = Self(schemaVersion: 1, recipeVersion: version, sessionID: sessionID,
-                         originDigest: snapshot.originDigest, manifestSHA256: manifestSHA256,
+        }
+        let current = LiminalFormDevelopment.Snapshot(originDigest: snapshot.originDigest, nodes: eligible,
+            unavailableLessons: 0, duplicateLessons: 0, evidenceAvailable: snapshot.evidenceAvailable)
+        // Full graph, exact record-to-art assignment and all current support stay
+        // bound even when visual detail displays only the first content groups.
+        // Only digests cross the wire; no lesson text, titles or source bodies do.
+        let evidence = ["liminal-inspection-bound-support/v1", bindings.graphDigest, projection.digest,
+                        LiminalKnowledgeBindings.sha256(bindingBytes)]
+        let value = Self(schemaVersion: 1, recipeVersion: version, sessionID: bindings.sessionID,
+                         originDigest: snapshot.originDigest, manifestSHA256: bindings.manifestSHA256,
                          evidenceDigest: LiminalKnowledgeBindings.sha256(Data(evidence.map { "\($0.utf8.count):\($0)" }.joined().utf8)),
-                         detail: snapshot.availableDetail, nodes: nodes)
+                         detail: current.availableDetail, nodes: nodes)
         return value.isValid ? value : nil
     }
 
@@ -108,9 +135,39 @@ struct LiminalPointStructure: Codable, Equatable, Sendable {
 }
 
 @MainActor extension CompanionStore {
-    func liminalPointStructure(sessionID: String, asset: LiminalPointAsset, at date: Date = Date()) -> LiminalPointStructure? {
-        guard preferences.visualTreatment == .liminalV008, let snapshot = liminalFormDevelopment(at: date) else { return nil }
-        return LiminalPointStructure.make(snapshot, sessionID: sessionID, manifestSHA256: asset.manifestSHA256, lowDetailIDs: asset.lowDetailIDs)
+    /// All native surfaces and exports share this disposable reservation history.
+    /// An Arena session receives the same anchors with its own replay boundary.
+    func liminalKnowledgePresentation(asset: LiminalPointAsset, sessionID: String? = nil,
+                                     at date: Date = Date(), forMemoryMap: Bool = false)
+        -> (sidecar: LiminalKnowledgeBindings.Sidecar, structure: LiminalPointStructure?, inspectionUnavailableReason: String?)? {
+        // The memory map may preview the authenticated body without replacing
+        // the saved companion appearance or creating another allocation owner.
+        guard preferences.visualTreatment == .liminalV008 || forMemoryMap,
+              let development = liminalFormDevelopment(at: date) else { return nil }
+        let identity = development.originDigest + ":" + asset.manifestSHA256
+        let graph = companionGraphSnapshot(at: date)
+        do {
+            if liminalKnowledgeIdentity != identity {
+                liminalKnowledgeBindings = try LiminalKnowledgeBindings(manifestSHA256: asset.manifestSHA256,
+                                                                         lowDetailIDs: asset.lowDetailIDs)
+                liminalKnowledgeIdentity = identity
+                liminalStructureSessionID = UUID().uuidString
+            }
+            guard let projection = try liminalKnowledgeBindings?.projectForPresentation(graph,
+                sessionID: liminalStructureSessionID, originDigest: development.originDigest) else { return nil }
+            let sidecar = try projection.sidecar.forSession(sessionID ?? liminalStructureSessionID)
+            let structure = LiminalPointStructure.make(development, graph: graph, bindings: sidecar,
+                                                       lowDetailIDs: asset.lowDetailIDs)
+            return (sidecar, structure, projection.inspectionUnavailableReason)
+        } catch { return nil }
+    }
+
+    @discardableResult
+    func inspectLiminalKnowledgeParticle(_ artID: UInt32, sidecar: LiminalKnowledgeBindings.Sidecar,
+                                         asset: LiminalPointAsset) -> Bool {
+        guard let current = liminalKnowledgePresentation(asset: asset), current.sidecar == sidecar,
+              let binding = sidecar.bindings.first(where: { $0.anchorID == artID }) else { return false }
+        return inspectKnowledgeParticle(nodeID: binding.nodeID, graphDigest: sidecar.graphDigest)
     }
 }
 
@@ -125,14 +182,10 @@ extension EnvironmentValues {
 /// Rechecks file-backed support even when no in-process owner publishes a change.
 @MainActor struct LiminalStructureScope: ViewModifier {
     @ObservedObject var store: CompanionStore
-    @State private var sessionID = UUID().uuidString
     @State private var recheckedAt = Date()
     func body(content: Content) -> some View {
-        let snapshot = store.liminalFormDevelopment(at: recheckedAt)
-        let structure = LiminalV008Runtime.asset.flatMap { asset -> LiminalPointStructure? in
-            guard store.preferences.visualTreatment == .liminalV008, let snapshot else { return nil }
-            return LiminalPointStructure.make(snapshot, sessionID: sessionID,
-                manifestSHA256: asset.manifestSHA256, lowDetailIDs: asset.lowDetailIDs)
+        let structure = LiminalV008Runtime.asset.flatMap {
+            store.liminalKnowledgePresentation(asset: $0, at: recheckedAt)?.structure
         }
         // Keep the artwork in the ordinary view tree so explicit ImageRenderer
         // snapshots never capture a TimelineView placeholder. The task expires

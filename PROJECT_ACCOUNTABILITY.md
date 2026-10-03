@@ -152,3 +152,17 @@ Focused source checks: 38 tests pass in the authored workspace and 38 pass again
 The qualified dense Liminal body retains its prior authored-particle binding and growth-motif paths. Joining those motifs to the same authored anchors, an ID-aware Unity Proto/KIN consumer, the full cross-runtime walkthrough, iPhone delivery and sustained performance remain unfinished. No model calls, puzzle runs, battle round or broad benchmark were performed. Eighteen reviewed native code/test paths were promoted; three unrelated local QiMon-game differences remain outside publication. The existing PR remains draft and unmerged.
 
 Final installed build `5971B077-A226-36A1-B075-9DA7F2FF39B9` matches the compiled UUID and passes strict local signing. The final app reopened successfully and retained exact-record selection while folding. All 23 monitored profile JSON files remained byte-identical. The previous bundle is preserved by the guarded updater. This remains a locally signed development alpha.
+
+## 3 October 2026 — Shared record anchors and graph-to-Liminal morph
+
+`R03-PARTICLE-MECHANIC-REFINEMENT` and `R03-GRAPH-BEAST-MORPH` · **INSTALLED_GPU_CHECKED_LIVE_WINDOW_WALKTHROUGH_PENDING**
+
+The native Seed, dense Liminal projection and Unity transport now reuse the existing record/art allocator. Growth motifs attach to those same record anchors. Selection survives search, Reveal, focus, Gather, Unfold and Back; a profile-owner change retires presentation sessions. The initial installed refinement passed the focused native accessibility walkthrough with all 23 monitored profile files unchanged. Its [receipt](docs/accountability/evidence/r03-particle-mechanic-refinement-2026-10-03.json) remains distinct from the subsequent morph build.
+
+The later update adds Form Liminal / Return to map in native Memory map. Bound art IDs interpolate from the force-layout clusters into authenticated, finished Beast coordinates; decorative body points fade in without becoming memory. Completed GPU progress drives selection overlays. Personal colors, reviewed-use marks and prepared-context rings remain available. Frame bytes are cached across filtering; a missing binding or renderer retains the ordinary inspectable map. No new persistent owner or automatic learning event is created.
+
+Curated-source verification passed 75 focused contracts with one optional GPU case skipped. The separate production Metal morph check passed over the installed qualified package, including exact Beast endpoint equality, personal colors, filtered-map transparency and unchanged source/art IDs. These are synthetic geometry and software checks, not a Hampton theory validation or capability benchmark. No model calls, puzzle runs or game benchmarks were made.
+
+Installed build 0.7.0 (1), UUID `269F2296-2208-3FFE-9EA7-99A36FA4A486`, matches the compiled program; strict ad-hoc signing passed, rollback is retained and all 23 monitored profile files remained byte-identical. Native controls are present, but the current capture remains a Stage Manager thumbnail and live morph walkthrough is pending. Four unrelated QiMon differences remain deliberately outside this publication, alongside four reviewed resource-pin exceptions.
+
+The [integration contract](docs/knowledge-particle-body-and-ar.md) separates this native morph from remaining Unity, phone point-package, AR camera/placement/tracking, explicit cross-device transfer, sustained 30 fps and existing release gates. [Morph delivery receipt](docs/accountability/evidence/r03-graph-beast-morph-2026-10-03.json).

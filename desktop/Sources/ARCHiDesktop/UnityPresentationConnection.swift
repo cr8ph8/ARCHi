@@ -211,7 +211,6 @@ struct UnityPresentationAcknowledgment: Codable {
     @Published private(set) var arenaAdviceTracking: ArenaAdviceTracking?
     private var worldOutcomeHistory = WorldOutcomeHistory()
     private var lastWorldOutcomeSnapshot: WorldOutcomeSnapshot?
-    private var pointBindings: LiminalKnowledgeBindings?
     private var pointSidecar: LiminalKnowledgeBindings.Sidecar?
     private var pointSidecarDigest: String?
     private var lastPointSelectionSequence = 0
@@ -469,7 +468,7 @@ struct UnityPresentationAcknowledgment: Codable {
         destinationRevision = routes ? 1 : nil
         self.destination = destination
         lastSnapshot = nil; previousSnapshot = nil; hasRenderAcknowledgment = false; suspended = false
-        pointBindings = nil; pointSidecar = nil; pointSidecarDigest = nil; lastPointSelectionSequence = 0
+        pointSidecar = nil; pointSidecarDigest = nil; lastPointSelectionSequence = 0
         worldOutcomeHistory.reset(); lastWorldOutcomeSnapshot = nil; worldOutcomes = []; missingWorldOutcomes = 0
         arenaAdviceTracking = nil
         worldOutcomeStatus = "Waiting for Arena outcome support."
@@ -543,18 +542,15 @@ struct UnityPresentationAcknowledgment: Codable {
            store.preferences.seedAppearance == .hamptonLiminal,
            let selectedPlayer, Self.supportsPointAssets(selectedPlayer),
            let asset = LiminalV008Runtime.asset {
-            if pointBindings == nil {
-                pointBindings = try LiminalKnowledgeBindings(manifestSHA256: asset.manifestSHA256, lowDetailIDs: asset.lowDetailIDs)
-            }
-            let projection = try pointBindings!.projectForPresentation(store.companionGraphSnapshot(at: now),
-                sessionID: snapshot.sessionID, originDigest: snapshot.originDigest)
+            guard let projection = store.liminalKnowledgePresentation(asset: asset, sessionID: snapshot.sessionID, at: now),
+                  projection.sidecar.originDigest == snapshot.originDigest else { throw PresentationError.noCompanion }
             let sidecar = projection.sidecar
             inspectionUnavailableReason = projection.inspectionUnavailableReason
             let descriptor = LiminalPointPresentation(schemaVersion: 1, assetID: "liminal-v008",
                 manifestSHA256: asset.manifestSHA256, progress: store.preferences.liminalPointProgress,
                 motion: snapshot.reduceMotion || snapshot.quiet ? "reduced" : "sampled",
                 color: store.preferences.seedColor.rawValue, visible: snapshot.visible && snapshot.active)
-            let structure = store.liminalPointStructure(sessionID: snapshot.sessionID, asset: asset, at: now)
+            let structure = projection.structure
             let pointVersion = (Bundle(url: selectedPlayer)?.object(forInfoDictionaryKey: "ARCHiLiminalPointAssetVersion") as? NSNumber)?.intValue ?? 0
             if [5, 6, 7].contains(pointVersion) {
                 snapshot.pointStructure = structure
@@ -699,7 +695,7 @@ struct UnityPresentationAcknowledgment: Codable {
             try? Self.write(retired, to: snapshotURL)
         }
         isSharing = false; hasRenderAcknowledgment = false; isOpening = false
-        pointBindings = nil; pointSidecar = nil; pointSidecarDigest = nil; lastPointSelectionSequence = 0
+        pointSidecar = nil; pointSidecarDigest = nil; lastPointSelectionSequence = 0
         worldOutcomeHistory.reset(); lastWorldOutcomeSnapshot = nil; worldOutcomes = []; missingWorldOutcomes = 0
         arenaAdviceTracking = nil
         worldOutcomeStatus = "Session ended. Practice observations were cleared."

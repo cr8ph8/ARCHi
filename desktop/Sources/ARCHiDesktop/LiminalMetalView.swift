@@ -27,7 +27,7 @@ enum LiminalSeedStyle {
 /// A transparent view of authenticated baked samples. It owns no companion,
 /// graph, progression or simulation state. Progress is supplied by the owner.
 @MainActor
-struct LiminalMetalView: NSViewRepresentable {
+struct LiminalMetalView: NSViewRepresentable, @MainActor Animatable {
     let asset: LiminalPointAsset
     let progress: Double
     let reduceMotion: Bool
@@ -38,8 +38,16 @@ struct LiminalMetalView: NSViewRepresentable {
     var inspection = false
     var structure: LiminalPointStructure? = nil
     var structureElapsed: Double? = nil
+    var graphMorph: LiminalGraphMorph? = nil
+    var graphMorphProgress: Double = 1
     var selectableIDs: [UInt32] = []
     var onSelectArtID: ((UInt32) -> Void)? = nil
+    var onGraphMorphAvailability: ((Bool) -> Void)? = nil
+    var onGraphMorphDisplayedProgress: ((Double) -> Void)? = nil
+    var animatableData: Double {
+        get { graphMorphProgress }
+        set { graphMorphProgress = newValue }
+    }
 
     func makeNSView(context: Context) -> LiminalMetalSurface {
         let surface = LiminalMetalSurface(frame: .zero)
@@ -55,12 +63,18 @@ struct LiminalMetalView: NSViewRepresentable {
                                 seedColor: CompanionSeedColor = .original,
                                 lightIntensity: Float = 1, lightMode: KinLightMode = .rest,
                                 unixTime: Double = 0, reduceMotion: Bool = true, inspection: Bool = false,
-                                structure: LiminalPointStructure? = nil, structureElapsed: Double? = nil) throws -> Data {
+                                structure: LiminalPointStructure? = nil, structureElapsed: Double? = nil,
+                                graphMorph: LiminalGraphMorph? = nil, graphMorphProgress: Double = 1,
+                                detail: LiminalPointAsset.Detail = .medium) throws -> Data {
         guard let device = MTLCreateSystemDefaultDevice() else { throw LiminalMetalFailure.unavailable }
         let renderer = try LiminalMetalPipeline(device: device)
-        let seedTexture = renderer.seedTexture(color: seedColor)
-        let pair = try asset.framePair(progress: progress, detail: .medium)
-        let buffers = try renderer.buffers(pair, structure: structure, asset: asset, elapsed: reduceMotion || inspection ? nil : structureElapsed)
+        guard graphMorph == nil || graphMorph?.manifestSHA256 == asset.manifestSHA256 else { throw LiminalMetalFailure.snapshotFailed }
+        let seedTexture = graphMorph == nil ? renderer.seedTexture(color: seedColor) : nil
+        let pair = try asset.framePair(progress: graphMorph == nil ? progress : LiminalGraphMorph.targetProgress,
+                                       detail: graphMorph == nil ? detail : .low)
+        let buffers = try renderer.buffers(pair, structure: graphMorph == nil ? structure : nil, asset: asset,
+                                           elapsed: reduceMotion || inspection ? nil : structureElapsed)
+        let mapBuffer = try graphMorph.map { try renderer.mapBuffer($0.mapTargets(count: pair.lower.pointCount)) }
         let description = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm,
             width: 512, height: 512, mipmapped: false)
         description.usage = [.renderTarget]
@@ -79,7 +93,8 @@ struct LiminalMetalView: NSViewRepresentable {
                             seedAvailable: seedTexture != nil, inspection: inspection,
                             light: .sample(mode: lightMode, unixTime: unixTime, reduced: reduceMotion || inspection),
                             phase: LiminalSurfaceLight.phase(unixTime: unixTime, moving: !reduceMotion && !inspection && lightMode != .rest),
-                            count: pair.lower.pointCount), seedTexture: seedTexture)
+                            count: pair.lower.pointCount, graphMorphProgress: graphMorph == nil ? nil : graphMorphProgress),
+            seedTexture: seedTexture, mapBuffer: mapBuffer)
         let completed = DispatchSemaphore(value: 0)
         command.addCompletedHandler { _ in completed.signal() }
         command.commit()
@@ -119,10 +134,12 @@ private struct LiminalMetalPipeline {
         var finishWeights: SIMD4<Float>
         var finishSeed: SIMD4<Float>
         var displayStyle: SIMD4<Float>
+        var graphMorph: SIMD4<Float>
         init(asset: LiminalPointAsset, size: CGSize, fraction: Float,
              seedColor: CompanionSeedColor, lightIntensity: Float, frame: Int,
              seedAvailable: Bool, inspection: Bool = false,
-             light: LiminalLightFrame = .sample(mode: .rest, unixTime: 0), phase: Float = 0, count: Int = 100000) {
+             light: LiminalLightFrame = .sample(mode: .rest, unixTime: 0), phase: Float = 0, count: Int = 100000,
+             graphMorphProgress: Double? = nil) {
             let framing = LiminalSeedStyle.framing(center: asset.center, span: asset.span, frame: frame, refined: asset.finish != nil)
             centerAndScale = SIMD4(framing.center, 2 / framing.span)
             viewportAndFraction = SIMD4(Float(max(1, size.width)), Float(max(1, size.height)), fraction, 0)
@@ -148,6 +165,15 @@ private struct LiminalMetalPipeline {
             if flowing { centerAndScale.w *= LiminalSurfaceLight.breath(phase: phase) }
             intensityAndPadding = SIMD4((lightIntensity.isFinite ? min(2, max(0, lightIntensity)) : 1) * light.intensity,
                                         inspection ? 1 : 0, 1 - 0.85 * seed, seed)
+            graphMorph = .zero
+            if let progress = graphMorphProgress {
+                // Morph only the authenticated finish-treated points. Independent
+                // light, breathing, artwork and motif passes have no map endpoint.
+                centerAndScale = SIMD4(framing.center, 2 / framing.span)
+                lightCue = .zero; displayStyle = .zero
+                intensityAndPadding = SIMD4(1, 0, 1, 0)
+                graphMorph = SIMD4(1, LiminalGraphMorph.smoothstep(progress), 0, 0)
+            }
         }
     }
     let device: MTLDevice
@@ -215,14 +241,26 @@ private struct LiminalMetalPipeline {
                      curves: curves.isEmpty ? nil : try make(LiminalSurfaceLight.packed(curves)), curveCount: curves.count,
                      structure: motif.isEmpty ? nil : try make(LiminalPointStructure.packed(motif)), structureCount: motif.count)
     }
+    func mapBuffer(_ targets: [SIMD4<Float>]) throws -> MTLBuffer {
+        guard !targets.isEmpty, let buffer = targets.withUnsafeBytes({ raw in
+            device.makeBuffer(bytes: raw.baseAddress!, length: raw.count, options: .storageModeShared)
+        }) else { throw LiminalMetalFailure.unavailable }
+        return buffer
+    }
     func encode(command: MTLCommandBuffer, pass: MTLRenderPassDescriptor, buffers: Buffers,
-                count: Int, uniforms: Uniforms, seedTexture: MTLTexture?) throws {
+                count: Int, uniforms: Uniforms, seedTexture: MTLTexture?, mapBuffer: MTLBuffer? = nil) throws {
+        guard uniforms.graphMorph.x == 0 || (mapBuffer?.length ?? 0) >= count * MemoryLayout<SIMD4<Float>>.stride else {
+            throw LiminalMetalFailure.unavailable
+        }
         guard let encoder = command.makeRenderCommandEncoder(descriptor: pass) else { throw LiminalMetalFailure.unavailable }
         encoder.setRenderPipelineState(state)
         encoder.setVertexBuffer(buffers.lower, offset: 0, index: 0)
         encoder.setVertexBuffer(buffers.upper, offset: 0, index: 1)
         encoder.setVertexBuffer(buffers.anchors, offset: 0, index: 3)
         encoder.setVertexBuffer(buffers.finish, offset: 0, index: 4)
+        // A valid buffer is bound even on the unchanged path; the shader reads
+        // it only when the explicit morph uniform is enabled.
+        encoder.setVertexBuffer(mapBuffer ?? buffers.lower, offset: 0, index: 6)
         var copy = uniforms
         if copy.displayStyle.x > 0.5 {
             copy.displayStyle.y = 1
@@ -249,7 +287,7 @@ private struct LiminalMetalPipeline {
         }
         // Same independent decoration pass as Unity: after the authored Seed,
         // with steady gold, full opacity, and no inherited activity amplification.
-        if uniforms.intensityAndPadding.y == 0, let motif = buffers.structure, buffers.structureCount > 0 {
+        if uniforms.graphMorph.x == 0, uniforms.intensityAndPadding.y == 0, let motif = buffers.structure, buffers.structureCount > 0 {
             var motifUniforms = uniforms
             motifUniforms.intensityAndPadding = SIMD4(1, 0, 1, 0)
             motifUniforms.lightCue = .zero
@@ -268,7 +306,7 @@ private struct LiminalMetalPipeline {
     #include <metal_stdlib>
     using namespace metal;
     struct Point { packed_float3 p; packed_float3 cd; float radius; float emission; };
-    struct Uniforms { float4 centerScale; float4 viewportFraction; float4 tintAmount; float4 intensity; float4 lightCue; float4 finishWeights; float4 finishSeed; float4 displayStyle; };
+    struct Uniforms { float4 centerScale; float4 viewportFraction; float4 tintAmount; float4 intensity; float4 lightCue; float4 finishWeights; float4 finishSeed; float4 displayStyle; float4 graphMorph; };
     struct Finish { packed_float3 direction; uint flags; };
     struct Raster { float4 position [[position]]; float2 local; float3 color; float opacity; float style; float glow; };
     float3 palette(float3 c, float choice) {
@@ -281,7 +319,8 @@ private struct LiminalMetalPipeline {
     }
     vertex Raster liminal_vertex(uint vertexID [[vertex_id]], uint pointID [[instance_id]],
         const device Point *a [[buffer(0)]], const device Point *b [[buffer(1)]], constant Uniforms &u [[buffer(2)]],
-        const device uint *selected [[buffer(3)]], const device Finish *finish [[buffer(4)]]) {
+        const device uint *selected [[buffer(3)]], const device Finish *finish [[buffer(4)]],
+        const device float4 *mapTargets [[buffer(6)]]) {
         const float2 corners[6] = {float2(-1,-1),float2(1,-1),float2(-1,1),float2(-1,1),float2(1,-1),float2(1,1)};
         float t = u.viewportFraction.z;
         float3 p = mix(float3(a[pointID].p),float3(b[pointID].p),t);
@@ -311,6 +350,15 @@ private struct LiminalMetalPipeline {
         float side = min(viewport.x,viewport.y);
         float2 aspect = side/viewport;
         float2 center = (p.xy-u.centerScale.xy)*u.centerScale.w*aspect;
+        float morphOpacity = 1.0f;
+        if (u.graphMorph.x > 0.5f) {
+            float4 target = mapTargets[pointID];
+            if (target.z > 0.5f) {
+                if (u.graphMorph.y <= 0.0f) center = target.xy;
+                else if (u.graphMorph.y < 1.0f) center = mix(target.xy,center,u.graphMorph.y);
+            }
+            else morphOpacity = target.z < -0.5f ? 0.0f : u.graphMorph.y;
+        }
         float floorRadius = u.displayStyle.x > 0.5f ? 1.25f*u.displayStyle.z : (u.finishWeights.w > 0.5f ? 0.8f : 0.5f);
         float radiusPixels = max(floorRadius,radius*u.centerScale.w*side*0.5f);
         radiusPixels = mix(radiusPixels,max(radiusPixels*2.5f,3.0f),anchor);
@@ -322,7 +370,7 @@ private struct LiminalMetalPipeline {
         float3 radiance = min(cd*emission*u.intensity.x,float3(8));
         Raster out;
         out.position = float4(center+corners[vertexID]*(2.0f*radiusPixels/viewport),0.5f,1);
-        out.local = corners[vertexID]; out.color = radiance; out.opacity = u.intensity.z;
+        out.local = corners[vertexID]; out.color = radiance; out.opacity = u.intensity.z*morphOpacity;
         out.style = u.displayStyle.x; out.glow = u.displayStyle.y;
         return out;
     }
@@ -401,11 +449,24 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
     private var seedTexture: MTLTexture?
     private var seedTextureColor: CompanionSeedColor?
     private var buffers: LiminalMetalPipeline.Buffers?
-    private struct Anchor { let id: UInt32; let lower: LiminalPointAsset.Sample; let upper: LiminalPointAsset.Sample }
+    private struct Anchor { let id: UInt32; let rank: Int; let lower: LiminalPointAsset.Sample; let upper: LiminalPointAsset.Sample }
     private var anchors: [Anchor] = []
+    private var mapBuffer: MTLBuffer?
+    private var mapTargets: [SIMD4<Float>] = []
+    private var mapBufferKey: String?
+    private struct DisplayedSelection {
+        let anchors: [Anchor]
+        let fraction: Float
+        let centerAndScale: SIMD4<Float>
+        let morphDigest: String?
+        let morphAmount: Float?
+        let targets: [SIMD4<Float>]
+    }
+    private var displayedSelection: DisplayedSelection?
+    private var reportedMorphAvailability: (key: String, ready: Bool)?
+    private var reportedMorphProgress: (key: String, progress: Double)?
     private var frameNumbers: (lower: Int, upper: Int)?
     private var pointCount = 0
-    private var displayedFraction: Float = 0
     private var loadedKey: String?
     private var loadingKey: String?
     private var failedKey: String?
@@ -460,22 +521,42 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
             fallbackLoading?.cancel(); fallbackLoading = nil; fallbackKey = nil
             fallbackImage.image = nil; fallbackImage.isHidden = true
             frameNumbers = nil; anchors = []; buffers = nil; detail = .medium; slowFrames = 0
+            mapBuffer = nil; mapTargets = []; mapBufferKey = nil; displayedSelection = nil
         }
-        if configuration?.selectableIDs != next.selectableIDs || configuration?.structure != next.structure {
+        if configuration?.selectableIDs != next.selectableIDs || configuration?.structure != next.structure
+            || configuration?.graphMorph?.digest != next.graphMorph?.digest {
             loading?.cancel(); loading = nil; loadingKey = nil; loadedKey = nil; anchors = []
+            displayedSelection = nil
+            if configuration?.graphMorph?.digest != next.graphMorph?.digest {
+                reportedMorphProgress = nil
+                mapBuffer = nil; mapTargets = []; mapBufferKey = nil
+                buffers = nil; frameNumbers = nil
+                clearSurface()
+            }
             // Retire obsolete geometry immediately, even while the next frame loads.
             if let old = buffers { buffers = .init(lower: old.lower, upper: old.upper, anchors: old.anchors, finish: old.finish, curves: old.curves, curveCount: old.curveCount, structure: nil, structureCount: 0) }
         }
+        // Morphs are externally animated rather than a continuous display loop.
+        // Use the bounded 50k prefix explicitly; every mapped anchor and cluster
+        // belongs to this prefix, so density cannot remove record correspondence.
+        if next.graphMorph != nil { detail = .low }
+        else if configuration?.graphMorph != nil { detail = .medium }
         if seedTextureColor != next.seedColor {
             seedTexture = pipeline?.seedTexture(color: next.seedColor)
             seedTextureColor = next.seedColor
         }
         configuration = next
+        if next.graphMorph != nil, reportedMorphAvailability?.key != morphAvailabilityKey {
+            reportGraphMorphAvailability(false)
+        }
         updateVisibility()
         if isPaused, next.isVisible { setNeedsDisplay(bounds) }
     }
     func stop() {
         isPaused = true; loading?.cancel(); loading = nil; frameNumbers = nil; anchors = []; buffers = nil
+        mapBuffer = nil; mapTargets = []; mapBufferKey = nil; displayedSelection = nil
+        reportedMorphAvailability = nil
+        reportedMorphProgress = nil
         fallbackLoading?.cancel(); fallbackLoading = nil; fallbackKey = nil; fallbackImage.image = nil
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers = []; delegate = nil; configuration = nil; seedTexture = nil
@@ -484,12 +565,40 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
         configuration?.isVisible == true && !isHiddenOrHasHiddenAncestor
             && window?.isVisible == true && window?.occlusionState.contains(.visible) == true
     }
+    private var morphAvailabilityKey: String? {
+        guard let c = configuration, let morph = c.graphMorph else { return nil }
+        return "\(c.asset.manifestSHA256):\(morph.digest)"
+    }
+    private func reportGraphMorphAvailability(_ ready: Bool) {
+        guard let key = morphAvailabilityKey else { reportedMorphAvailability = nil; return }
+        guard reportedMorphAvailability?.key != key || reportedMorphAvailability?.ready != ready else { return }
+        reportedMorphAvailability = (key, ready)
+        // SwiftUI state must not be published synchronously from updateNSView.
+        Task { @MainActor [weak self] in
+            guard let self, self.morphAvailabilityKey == key,
+                  self.reportedMorphAvailability?.key == key,
+                  self.reportedMorphAvailability?.ready == ready else { return }
+            self.configuration?.onGraphMorphAvailability?(ready)
+        }
+    }
+    private func reportGraphMorphDisplayedProgress(_ progress: Double) {
+        guard let key = morphAvailabilityKey else { reportedMorphProgress = nil; return }
+        guard reportedMorphProgress?.key != key || reportedMorphProgress?.progress != progress else { return }
+        reportedMorphProgress = (key, progress)
+        Task { @MainActor [weak self] in
+            guard let self, self.morphAvailabilityKey == key,
+                  self.reportedMorphProgress?.key == key,
+                  self.reportedMorphProgress?.progress == progress else { return }
+            self.configuration?.onGraphMorphDisplayedProgress?(progress)
+        }
+    }
     private func updateVisibility() {
         isPaused = !canPresentPoints || configuration?.reduceMotion == true || configuration?.inspection == true
-            || configuration?.lightExpression.mode == .rest || usesFallback
+            || configuration?.lightExpression.mode == .rest || configuration?.graphMorph != nil || usesFallback
         if isPaused { lastFrameAt = nil; slowFrames = 0; fastGPUFrames = 0 }
         fallbackImage.isHidden = !canPresentPoints || !usesFallback || fallbackImage.image == nil
         if !canPresentPoints {
+            displayedSelection = nil
             lastFrameAt = nil; loading?.cancel(); loading = nil; loadingKey = nil
             if fallbackLoading != nil { fallbackLoading?.cancel(); fallbackLoading = nil; fallbackKey = nil }
         }
@@ -498,6 +607,15 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
     }
     private func requestFallback() {
         guard canPresentPoints, usesFallback, let c = configuration else { return }
+        if c.graphMorph != nil {
+            reportGraphMorphAvailability(false)
+            // A Beast endpoint image cannot truthfully stand in for a filtered
+            // memory map or an intermediate graph morph.
+            fallbackLoading?.cancel(); fallbackLoading = nil; fallbackKey = nil
+            fallbackImage.image = nil; fallbackImage.isHidden = true
+            setAccessibilityLabel("Memory-to-body particles unavailable. Return to the memory map to inspect records.")
+            return
+        }
         let progress = effectiveProgress
         let endpoint = [23.0 / 119, 65.0 / 119, 107.0 / 119].min { abs($0 - progress) < abs($1 - progress) }!
         let key = "\(c.asset.manifestSHA256):\(endpoint):\(c.seedColor.rawValue)"
@@ -536,6 +654,7 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
         }
     }
     private var effectiveProgress: Double {
+        if configuration?.graphMorph != nil { return LiminalGraphMorph.targetProgress }
         guard let c = configuration, c.progress.isFinite else { return 0 }
         let value = min(1, max(0, c.progress))
         guard c.reduceMotion else { return value }
@@ -544,7 +663,7 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
     }
     private func requestFrames(_ c: LiminalMetalView, progress: Double) -> String {
         let index = (try? LiminalPointAsset.sourceFrameIndex(progress: progress)) ?? 0
-        let key = "\(c.asset.manifestSHA256):\(c.asset.finish?.digest ?? "source"):\(c.asset.surfaceLight?.digest ?? "none"):\(c.asset.manifest.frames[index].file):\(detail.rawValue):\(c.structure?.digest ?? "none")"
+        let key = "\(c.asset.manifestSHA256):\(c.asset.finish?.digest ?? "source"):\(c.asset.surfaceLight?.digest ?? "none"):\(c.asset.manifest.frames[index].file):\(detail.rawValue):\(c.structure?.digest ?? "none"):\(c.graphMorph?.digest ?? "none")"
         guard key != loadedKey, key != loadingKey, failedKey == nil, loading == nil else { return key }
         loadingKey = key
         // Only GPU buffers and bounded anchor samples survive a load. At most
@@ -560,11 +679,22 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
                 let indices = (self.configuration?.selectableIDs ?? []).prefix(512).compactMap { id in
                     asset.artIDs.firstIndex(of: id).flatMap { $0 < frames.lower.pointCount ? $0 : nil }
                 }
-                guard self.configuration?.structure?.digest == c.structure?.digest else { return }
-                let uploaded = try pipeline.buffers(frames, anchorIndices: indices, structure: c.structure, asset: asset)
+                guard self.configuration?.structure?.digest == c.structure?.digest,
+                      self.configuration?.graphMorph?.digest == c.graphMorph?.digest,
+                      c.graphMorph == nil || c.graphMorph?.manifestSHA256 == asset.manifestSHA256 else { return }
+                if let morph = c.graphMorph {
+                    let mapKey = "\(morph.digest):\(frames.lower.pointCount)"
+                    if self.mapBufferKey != mapKey {
+                        let targets = morph.mapTargets(count: frames.lower.pointCount)
+                        self.mapBuffer = try pipeline.mapBuffer(targets)
+                        self.mapTargets = targets; self.mapBufferKey = mapKey
+                    }
+                }
+                let uploaded = try pipeline.buffers(frames, anchorIndices: indices,
+                    structure: c.graphMorph == nil ? c.structure : nil, asset: asset)
                 self.anchors = indices.compactMap { index in
                     guard let a = frames.lower.sample(at: index), let b = frames.upper.sample(at: index) else { return nil }
-                    return Anchor(id: asset.artIDs[index],
+                    return Anchor(id: asset.artIDs[index], rank: index,
                         lower: asset.finish?.display(a, rank: index, frame: frames.lower.frame) ?? a,
                         upper: asset.finish?.display(b, rank: index, frame: frames.upper.frame) ?? b)
                 }
@@ -577,6 +707,7 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
                 guard !Task.isCancelled, let self, self.loadingKey == key else { return }
                 self.loading = nil; self.loadingKey = nil; self.loadedKey = nil
                 self.frameNumbers = nil; self.anchors = []; self.buffers = nil; self.failedKey = key
+                self.reportGraphMorphAvailability(false)
                 self.clearSurface()
                 self.updateVisibility()
             }
@@ -596,24 +727,42 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
         // authenticated source sample while the next one loads. Both buffers
         // contain the same rounded v008 frame; never invent fractional motion.
         let fraction: Float = 0
-        displayedFraction = fraction
+        let uniforms = LiminalMetalPipeline.Uniforms(asset: c.asset, size: drawableSize, fraction: fraction,
+            seedColor: c.seedColor, lightIntensity: c.lightIntensity, frame: frameNumbers!.lower,
+            seedAvailable: seedTexture != nil, inspection: c.inspection,
+            light: .sample(mode: c.lightExpression.mode, unixTime: Date().timeIntervalSince1970,
+                           reduced: c.reduceMotion || c.inspection),
+            phase: LiminalSurfaceLight.phase(unixTime: Date().timeIntervalSince1970,
+                moving: !c.reduceMotion && !c.inspection && c.lightExpression.mode != .rest), count: pointCount,
+            graphMorphProgress: c.graphMorph == nil ? nil : c.graphMorphProgress)
         do {
             try pipeline.encode(command: command, pass: pass, buffers: buffers, count: pointCount,
-                uniforms: .init(asset: c.asset, size: drawableSize, fraction: fraction,
-                                seedColor: c.seedColor, lightIntensity: c.lightIntensity,
-                                frame: frameNumbers!.lower, seedAvailable: seedTexture != nil,
-                                inspection: c.inspection, light: .sample(mode: c.lightExpression.mode,
-                                    unixTime: Date().timeIntervalSince1970, reduced: c.reduceMotion || c.inspection),
-                                phase: LiminalSurfaceLight.phase(unixTime: Date().timeIntervalSince1970,
-                                    moving: !c.reduceMotion && !c.inspection && c.lightExpression.mode != .rest), count: pointCount), seedTexture: seedTexture)
+                uniforms: uniforms, seedTexture: seedTexture, mapBuffer: c.graphMorph == nil ? nil : mapBuffer)
         } catch {
             failedKey = key; anchors = []; self.buffers = nil
             clearSurface(); updateVisibility(); return
         }
+        let selection = DisplayedSelection(anchors: anchors, fraction: fraction, centerAndScale: uniforms.centerAndScale,
+            morphDigest: c.graphMorph?.digest, morphAmount: c.graphMorph == nil ? nil : uniforms.graphMorph.y,
+            targets: c.graphMorph == nil ? [] : mapTargets)
+        let renderedMorphProgress = c.graphMorphProgress.isFinite ? min(1, max(0, c.graphMorphProgress)) : 0
         command.present(drawable)
         command.addCompletedHandler { [weak self] buffer in
             let duration = buffer.gpuEndTime - buffer.gpuStartTime
-            Task { @MainActor [weak self] in self?.observeGPUTime(duration) }
+            let completed = buffer.status == .completed
+            Task { @MainActor [weak self] in
+                guard let self, self.loadedKey == key,
+                      self.configuration?.graphMorph?.digest == selection.morphDigest else { return }
+                if completed {
+                    self.displayedSelection = selection
+                    self.reportGraphMorphDisplayedProgress(renderedMorphProgress)
+                    self.reportGraphMorphAvailability(true)
+                } else {
+                    self.displayedSelection = nil
+                    self.reportGraphMorphAvailability(false)
+                }
+                self.observeGPUTime(duration)
+            }
         }
         command.commit()
         let now = ProcessInfo.processInfo.systemUptime
@@ -639,30 +788,42 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
         }
     }
     private func clearSurface() {
+        displayedSelection = nil
+        reportGraphMorphAvailability(false)
         guard let pass = currentRenderPassDescriptor, let drawable = currentDrawable,
               let command = pipeline?.queue.makeCommandBuffer(), let encoder = command.makeRenderCommandEncoder(descriptor: pass) else { return }
         encoder.endEncoding(); command.present(drawable); command.commit()
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard !usesFallback, let c = configuration, c.inspection, c.onSelectArtID != nil, !anchors.isEmpty, !c.selectableIDs.isEmpty else { return nil }
+        guard !usesFallback, let c = configuration, c.inspection, c.onSelectArtID != nil,
+              displayedSelection?.anchors.isEmpty == false, !c.selectableIDs.isEmpty else { return nil }
         return super.hitTest(point)
     }
     override func mouseDown(with event: NSEvent) {
-        guard canPresentPoints, !usesFallback, let c = configuration, c.inspection, let callback = c.onSelectArtID, !c.selectableIDs.isEmpty else { return }
+        guard canPresentPoints, !usesFallback, let c = configuration, c.inspection, let callback = c.onSelectArtID,
+              !c.selectableIDs.isEmpty, let displayed = displayedSelection,
+              displayed.morphDigest == c.graphMorph?.digest else { return }
         let location = convert(event.locationInWindow, from: nil)
-        let framing = LiminalSeedStyle.framing(center: c.asset.center, span: c.asset.span, frame: frameNumbers?.lower ?? 1, refined: c.asset.finish != nil)
-        let side = min(bounds.width, bounds.height), span = CGFloat(framing.span)
+        let side = min(bounds.width, bounds.height), scale = CGFloat(displayed.centerAndScale.w)
         var closest: (id: UInt32, distance: CGFloat)?
         // Only the owner's explicit anchors are selectable; arbitrary art points
         // cannot masquerade as graph records. Bound selection work separately.
-        for anchor in anchors where c.selectableIDs.contains(anchor.id) {
-            let position = anchor.lower.position + (anchor.upper.position - anchor.lower.position) * displayedFraction
-            let radius = anchor.lower.radius + (anchor.upper.radius - anchor.lower.radius) * displayedFraction
-            let x = bounds.midX + CGFloat(position.x - framing.center.x) * side / span
-            let y = bounds.midY + CGFloat(position.y - framing.center.y) * side / span
+        for anchor in displayed.anchors where c.selectableIDs.contains(anchor.id) {
+            let position = anchor.lower.position + (anchor.upper.position - anchor.lower.position) * displayed.fraction
+            let radius = anchor.lower.radius + (anchor.upper.radius - anchor.lower.radius) * displayed.fraction
+            var clip = SIMD2<Float>((position.x - displayed.centerAndScale.x) * Float(scale * side / bounds.width),
+                                    (position.y - displayed.centerAndScale.y) * Float(scale * side / bounds.height))
+            if let amount = displayed.morphAmount {
+                guard displayed.targets.indices.contains(anchor.rank) else { continue }
+                let target = displayed.targets[anchor.rank]
+                guard target.z > 0.5 else { continue }
+                clip = SIMD2(target.x, target.y) + (clip - SIMD2(target.x, target.y)) * amount
+            }
+            let x = bounds.midX + CGFloat(clip.x) * bounds.width / 2
+            let y = bounds.midY + CGFloat(clip.y) * bounds.height / 2
             let distance = hypot(location.x - x, location.y - y)
-            let hitRadius = max(8, CGFloat(radius) * 2.5 * side / span)
+            let hitRadius = max(8, CGFloat(radius) * 1.25 * side * scale)
             if distance <= hitRadius, closest == nil || distance < closest!.distance { closest = (anchor.id, distance) }
         }
         if let closest { callback(closest.id) }

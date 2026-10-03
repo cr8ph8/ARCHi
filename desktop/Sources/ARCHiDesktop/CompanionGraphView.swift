@@ -49,6 +49,25 @@ enum CompanionGraphNavigation {
     static func retainedSelection(_ selectedID: String?, in nodes: [CompanionGraphNode]) -> String? {
         selectedID.flatMap { id in nodes.contains { $0.id == id } ? id : nil }
     }
+
+    enum SelectionVisibility: Equatable { case none, visible, hidden, unavailable }
+    static func selectionVisibility(_ selectedID: String?, in snapshot: CompanionGraphSnapshot,
+                                    visibleNodes: [CompanionGraphNode]) -> SelectionVisibility {
+        guard let selectedID else { return .none }
+        guard snapshot.nodes.contains(where: { $0.id == selectedID }) else { return .unavailable }
+        return visibleNodes.contains(where: { $0.id == selectedID }) ? .visible : .hidden
+    }
+
+    /// Back restores the inspected record as well as its focus, without retaining
+    /// a copy of the record or silently following a replacement version.
+    struct Location: Equatable {
+        let focusID: String?
+        let selectedID: String?
+    }
+    static func retainedLocation(_ location: Location, in snapshot: CompanionGraphSnapshot) -> Location? {
+        if let focus = location.focusID, !snapshot.nodes.contains(where: { $0.id == focus }) { return nil }
+        return .init(focusID: location.focusID, selectedID: retainedSelection(location.selectedID, in: snapshot.nodes))
+    }
 }
 
 /// Deterministic presentation geometry. Positions never become companion state.
@@ -190,21 +209,25 @@ struct CompanionGraphView: View {
     var preparedNodeIDs: Set<String> = []
     var particleScene: CompanionParticleScene?
     var seedAppearance: CompanionParticleAppearance?
-    var onSelectParticle: ((String) -> Void)?
+    var liminalGraphSource: LiminalGraphMorphSource?
+    var selectionID: String?
+    var onSelectionChange: ((String?) -> Bool)?
     var onCreateMethod: ((CompanionGraphNode) -> Void)?
     var canCreateMethod: (CompanionGraphNode) -> Bool = { _ in false }
 
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
-    @State private var selectedID: String?
+    @State private var localSelectionID: String?
+    @State private var selectionNotice: String?
     @State private var query = ""
     @State private var kindFilter: CompanionGraphKind?
     @State private var layout = CompanionGraphLayout.constellation
     @State private var showsList = false
     @State private var focusID: String?
-    @State private var focusHistory: [String?] = []
+    @State private var focusHistory: [CompanionGraphNavigation.Location] = []
     @State private var zoom: CGFloat = 1
     @State private var fitRevision = 0
     @State private var particleSpread = 1.0
+    @State private var bodyProgress = 0.0
     @State private var particlePulses = true
     @State private var particleExportMessage: String?
     @State private var isShowcase = false
@@ -222,7 +245,9 @@ struct CompanionGraphView: View {
          canCreateMethod: @escaping (CompanionGraphNode) -> Bool = { _ in false },
          particleScene: CompanionParticleScene? = nil,
          seedAppearance: CompanionParticleAppearance? = nil,
-         onSelectParticle: ((String) -> Void)? = nil) {
+         liminalGraphSource: LiminalGraphMorphSource? = nil,
+         selectionID: String? = nil,
+         onSelectionChange: ((String?) -> Bool)? = nil) {
         self.snapshot = snapshot
         self.onOpen = onOpen
         self.reduceMotion = reduceMotion; self.seedColor = seedColor
@@ -230,11 +255,16 @@ struct CompanionGraphView: View {
         self.lightExpression = lightExpression; self.preparedNodeIDs = preparedNodeIDs
         self.onCreateMethod = onCreateMethod; self.canCreateMethod = canCreateMethod
         self.particleScene = particleScene; self.seedAppearance = seedAppearance
-        self.onSelectParticle = onSelectParticle
+        self.liminalGraphSource = liminalGraphSource
+        self.selectionID = selectionID; self.onSelectionChange = onSelectionChange
         _layout = State(initialValue: initialLayout)
-        _selectedID = State(initialValue: initialSelectionID)
+        _localSelectionID = State(initialValue: initialSelectionID)
         _isShowcase = State(initialValue: initialShowcase)
     }
+
+    // The installed workspace uses the native owner. Standalone previews and
+    // existing diagnostic callers can still opt into view-local selection.
+    private var selectedID: String? { onSelectionChange == nil ? localSelectionID : selectionID }
 
     private var visibleNodes: [CompanionGraphNode] {
         CompanionGraphNavigation.visibleNodes(in: snapshot, query: query, kindFilter: kindFilter, focusID: focusID)
@@ -246,7 +276,10 @@ struct CompanionGraphView: View {
     }
 
     // Keep only an ID in view state: replacement/removal immediately changes the inspector.
-    private var selectedNode: CompanionGraphNode? { visibleNodes.first { $0.id == selectedID } }
+    private var selectedNode: CompanionGraphNode? { snapshot.nodes.first { $0.id == selectedID } }
+    private var selectionVisibility: CompanionGraphNavigation.SelectionVisibility {
+        CompanionGraphNavigation.selectionVisibility(selectedID, in: snapshot, visibleNodes: visibleNodes)
+    }
     private var focusNode: CompanionGraphNode? { snapshot.nodes.first { $0.id == focusID } }
     private var hasFilters: Bool { !query.isEmpty || kindFilter != nil || focusID != nil }
     private var showsInspector: Bool { !isShowcase || selectedNode != nil }
@@ -259,6 +292,7 @@ struct CompanionGraphView: View {
                     heading
                     if !isShowcase { filters }
                     else if hasFilters { showcaseFilterSummary }
+                    selectionStatus
                     if viewport.size.width >= 700 {
                         let graphHeight = max(280, viewport.size.height - (isShowcase ? 160 : 250))
                         HStack(alignment: .top, spacing: 12) {
@@ -287,16 +321,41 @@ struct CompanionGraphView: View {
             // Titles, typing, activity and filters do not rerun force relaxation.
             particleField = KnowledgeParticleField(topology: value)
         }
-        .onChange(of: visibleNodes.map(\.id)) { _, ids in
-            if let selectedID, !ids.contains(selectedID) { self.selectedID = nil }
-        }
-        .onChange(of: snapshot.nodes.map(\.id), initial: true) { _, ids in
-            selectedID = CompanionGraphNavigation.retainedSelection(selectedID, in: visibleNodes)
+        .onChange(of: snapshot, initial: true) { _, value in
+            revalidateSelection()
+            let ids = Set(value.nodes.map(\.id))
             if let focusID, !ids.contains(focusID) { self.focusID = nil; fitRevision += 1 }
-            focusHistory.removeAll { $0.map { !ids.contains($0) } ?? false }
+            focusHistory = focusHistory.compactMap { CompanionGraphNavigation.retainedLocation($0, in: value) }
+        }
+        .onChange(of: selectedID) { _, id in
+            // An external receipt can request All activity while this child still
+            // holds the previous Memory snapshot. Let its owner update the scope
+            // before retiring a pick against a newly delivered snapshot.
+            if let id, !snapshot.nodes.contains(where: { $0.id == id }) {
+                selectionNotice = "The selected record is outside the current map scope."
+            } else {
+                selectionNotice = nil
+                revalidateSelection()
+            }
         }
         .transaction { $0.animation = nil }
         .accessibilityIdentifier("companion-graph.workspace")
+    }
+
+    @ViewBuilder private var selectionStatus: some View {
+        if selectionVisibility == .hidden {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Label("The selected record is outside this filter or focus. Its inspector remains open.", systemImage: "line.3.horizontal.decrease.circle")
+                Spacer(minLength: 0)
+                Button("Reveal selected record") { showAllRecords() }
+                    .buttonStyle(.borderless)
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .accessibilityIdentifier("companion-graph.hidden-selection")
+        } else if let selectionNotice {
+            Text(selectionNotice).font(.caption).foregroundStyle(.secondary)
+                .accessibilityIdentifier("companion-graph.selection-notice")
+        }
     }
 
     private var heading: some View {
@@ -415,10 +474,20 @@ struct CompanionGraphView: View {
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(WorkspaceTheme.accent)
                 Spacer(minLength: 8)
                 if layout == .particles && !showsList && seedAppearance != nil {
+                    if liminalGraphSource != nil {
+                        Button(bodyProgress > 0.5 ? "Return to map" : "Form Liminal",
+                               systemImage: "sparkles") {
+                            particleSpread = 1
+                            bodyProgress = bodyProgress > 0.5 ? 0 : 1
+                        }
+                        .accessibilityIdentifier("companion-graph.liminal-form")
+                        .help("Move the same memory particles into Liminal’s authored Beast form. Select a particle to inspect its record.")
+                    }
                     Button(particleSpread < 0.5 ? "Unfold memory" : "Gather into Seed",
                            systemImage: particleSpread < 0.5 ? "arrow.up.left.and.arrow.down.right" : "circle.dotted") {
-                        focusID = nil; focusHistory = []; zoom = 1
                         particleSpread = particleSpread < 0.5 ? 1 : 0
+                        bodyProgress = 0
+                        fitRevision += 1
                     }
                     .accessibilityIdentifier("companion-graph.seed-map")
                     .help("The same records in your Seed or as a connected map. Selection and saved memory stay intact.")
@@ -573,6 +642,16 @@ struct CompanionGraphView: View {
                 ScrollView([.horizontal, .vertical]) {
                     if let field = particleScene?.field ?? particleField {
                         ZStack {
+                        if let source = liminalGraphSource, particleSpread == 1 {
+                            LiminalGraphMorphView(source: source, graph: snapshot, field: field,
+                                nodes: visibleNodes, selectedID: selectedID, progress: bodyProgress,
+                                reduceMotion: reduceMotion || systemReduceMotion, seedColor: seedColor,
+                                focusIDs: focusID == nil ? nil : Set(CompanionGraphNavigation.visibleNodes(in: snapshot,
+                                    query: "", kindFilter: nil, focusID: focusID).map(\.id)),
+                                growthByRecordID: particleScene?.growthByRecordID ?? [:], preparedIDs: preparedNodeIDs,
+                                expression: lightExpression,
+                                onSelect: { selectNode($0) })
+                        } else {
                         if let seedAppearance {
                             seedAppearance.art(size: min(viewport.size.width, viewport.size.height),
                                 reduceMotion: reduceMotion || systemReduceMotion)
@@ -588,6 +667,7 @@ struct CompanionGraphView: View {
                             growthByRecordID: particleScene?.growthByRecordID ?? [:],
                             onSelect: { selectNode($0) })
                             .animation(reduceMotion || systemReduceMotion ? nil : .easeInOut(duration: 0.65), value: particleSpread)
+                        }
                         }
                             .frame(width: max(viewport.size.width, viewport.size.width * zoom),
                                    height: max(viewport.size.height, viewport.size.height * zoom))
@@ -710,8 +790,7 @@ struct CompanionGraphView: View {
                         Text(node.title).font(.system(size: 17, weight: .medium, design: .rounded))
                     }.frame(maxWidth: .infinity, alignment: .leading)
                     Button {
-                        selectedID = nil
-                        if focusID != nil { showAllRecords() }
+                        if updateSelection(nil), focusID != nil { showAllRecords() }
                     } label: { Image(systemName: "xmark") }
                         .buttonStyle(.borderless).foregroundStyle(.secondary).accessibilityLabel("Clear selected record")
                 }
@@ -836,28 +915,57 @@ struct CompanionGraphView: View {
         }
     }
 
-    private func selectNode(_ id: String, clearFilters: Bool = false) {
-        guard snapshot.nodes.contains(where: { $0.id == id }) else { return }
-        if clearFilters { query = ""; kindFilter = nil }
-        selectedID = id
-        onSelectParticle?(id)
-        if focusID != nil && focusID != id { focus(on: id) }
+    @discardableResult private func updateSelection(_ id: String?) -> Bool {
+        if let onSelectionChange {
+            guard onSelectionChange(id) else {
+                selectionNotice = "That record changed before it could be selected. Select its current version again."
+                return false
+            }
+        } else {
+            localSelectionID = id
+        }
+        selectionNotice = nil
+        return true
     }
 
-    private func focus(on id: String) {
-        guard id != focusID, snapshot.nodes.contains(where: { $0.id == id }) else { return }
-        focusHistory.append(focusID)
+    private func revalidateSelection() {
+        guard let selectedID else { return }
+        guard snapshot.nodes.contains(where: { $0.id == selectedID }) else {
+            if updateSelection(nil) {
+                selectionNotice = "The selected record is no longer available in this map. No replacement was selected."
+            }
+            return
+        }
+        // Refresh the shared pick against this exact displayed snapshot. The
+        // owner rejects stale scope/profile bindings; record IDs are never guessed.
+        if onSelectionChange != nil { _ = updateSelection(selectedID) }
+    }
+
+    private func selectNode(_ id: String, clearFilters: Bool = false) {
+        guard snapshot.nodes.contains(where: { $0.id == id }) else { return }
+        let accepted = focusID != nil && focusID != id ? focus(on: id) : updateSelection(id)
+        guard accepted else { return }
+        if clearFilters { query = ""; kindFilter = nil }
+    }
+
+    @discardableResult private func focus(on id: String) -> Bool {
+        guard id != focusID, snapshot.nodes.contains(where: { $0.id == id }) else { return false }
+        let previous = CompanionGraphNavigation.Location(focusID: focusID, selectedID: selectedID)
+        guard updateSelection(id) else { return false }
+        focusHistory.append(previous)
         if focusHistory.count > 32 { focusHistory.removeFirst() }
         focusID = id
-        selectedID = id
         fitRevision += 1
+        return true
     }
 
     private func goBack() {
-        guard !focusHistory.isEmpty else { return }
-        focusID = focusHistory.removeLast()
+        guard let previous = focusHistory.last,
+              let retained = CompanionGraphNavigation.retainedLocation(previous, in: snapshot),
+              updateSelection(retained.selectedID) else { return }
+        focusHistory.removeLast()
+        focusID = retained.focusID
         query = ""; kindFilter = nil
-        if let focusID { selectedID = focusID }
         fitRevision += 1
     }
 

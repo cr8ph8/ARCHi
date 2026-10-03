@@ -20,6 +20,38 @@ final class LiminalKnowledgeBindingsTests: XCTestCase {
         XCTAssertEqual(Set(first.bindings.flatMap(\.particleIDs)).count, 96)
     }
 
+    func testFreshSessionsReproducePositionsButCannotReplaySelections() throws {
+        var first = try LiminalKnowledgeBindings(manifestSHA256: digest, lowDetailIDs: Array(0..<5000))
+        var restarted = try LiminalKnowledgeBindings(manifestSHA256: digest, lowDetailIDs: Array(0..<5000))
+        let records = graph(["a", "b"])
+        let original = try first.project(records, sessionID: session, originDigest: origin)
+        let next = try restarted.project(records, sessionID: UUID().uuidString, originDigest: origin)
+        XCTAssertEqual(original.bindings, next.bindings)
+        XCTAssertNotEqual(original.sessionID, next.sessionID)
+        let pick = LiminalKnowledgeSelection(schemaVersion: 1, sessionID: session, originDigest: origin,
+            revision: 1, manifestSHA256: digest, graphDigest: original.graphDigest, nodeID: "a",
+            artParticleID: original.bindings[0].anchorID, sequence: 1, updatedAtUnix: 1000)
+        XCTAssertNil(pick.resolves(in: next, graph: records, revisions: [1], after: 0,
+                                  now: Date(timeIntervalSince1970: 1000)))
+    }
+
+    func testTransportWrapperPreservesSharedReservationHistory() throws {
+        var map = try LiminalKnowledgeBindings(manifestSHA256: digest, lowDetailIDs: Array(0..<5000))
+        let original = try map.project(graph(["a", "b"]), sessionID: session, originDigest: origin)
+        let current = try map.project(graph(["b", "c"]), sessionID: session, originDigest: origin)
+        let unity = try current.forSession(UUID().uuidString)
+        XCTAssertEqual(current.bindings, unity.bindings)
+        XCTAssertEqual(current.graphDigest, unity.graphDigest)
+        XCTAssertEqual(current.originDigest, unity.originDigest)
+        XCTAssertEqual(current.manifestSHA256, unity.manifestSHA256)
+        XCTAssertNotEqual(try current.data(), try unity.data())
+        XCTAssertThrowsError(try current.forSession("not-a-session"))
+        XCTAssertTrue(Set(original.bindings.first { $0.nodeID == "a" }!.particleIDs)
+            .isDisjoint(with: unity.bindings.flatMap(\.particleIDs)))
+        let returned = try map.project(graph(["a", "b", "c"]), sessionID: session, originDigest: origin)
+        XCTAssertEqual(original.bindings.first { $0.nodeID == "a" }, returned.bindings.first { $0.nodeID == "a" })
+    }
+
     func testRetiredParticleDoesNotBecomeAnotherRecord() throws {
         var map = try LiminalKnowledgeBindings(manifestSHA256: digest, lowDetailIDs: Array(0..<5000))
         let first = try map.project(graph(["a", "b"]), sessionID: session, originDigest: origin)

@@ -41,6 +41,15 @@ struct CompanionParticleScene: Equatable {
         inputs(originDigest: originDigest, graph: graph, development: development)?.digest
     }
 
+    /// Dense authored particles need the same evidence projection, not another
+    /// force-layout pass. Keep the validation and growth meanings in one place.
+    @MainActor static func developmentProjection(originDigest: String, graph: CompanionGraphSnapshot,
+                                                 development: LiminalFormDevelopment.Snapshot?)
+        -> (growth: [String: Growth], digest: String)? {
+        guard let value = inputs(originDigest: originDigest, graph: graph, development: development) else { return nil }
+        return (value.growth, value.digest)
+    }
+
     /// Recheck the current owner before resolving a pick. To revalidate growth
     /// as well, compare fingerprint with the owner's fresh development snapshot.
     func isCurrent(graph: CompanionGraphSnapshot, originDigest: String) -> Bool {

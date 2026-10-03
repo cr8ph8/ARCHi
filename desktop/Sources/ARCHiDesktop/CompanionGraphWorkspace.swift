@@ -108,7 +108,7 @@ struct CompanionGraphWorkspace: View {
             HSplitView {
                 // Keep this host mounted while Ask opens or closes, preserving
                 // map selection, filters and focus. The store owns all requests.
-                TimelineView(.periodic(from: .now, by: 30)) { context in
+                TimelineView(.periodic(from: .now, by: 2)) { context in
                     let particleScene = includesActivity ? nil : store.companionParticleScene(at: context.date)
                     let snapshot = particleScene?.graph ?? (includesActivity ? store.companionGraphSnapshot(at: context.date)
                         : store.memoryMapSnapshot(at: context.date))
@@ -141,10 +141,17 @@ struct CompanionGraphWorkspace: View {
                         }, canCreateMethod: { store.beginKnowledgeMapMethod(node: $0) != nil },
                         particleScene: particleScene,
                         seedAppearance: particleScene == nil ? nil : CompanionParticleAppearance(store: store),
-                        onSelectParticle: { id in
-                            if let particleScene { _ = store.selectMemoryParticle(id, in: particleScene) }
+                        liminalGraphSource: particleScene.flatMap { scene in
+                            guard let asset = LiminalV008Runtime.asset,
+                                  let presentation = store.liminalKnowledgePresentation(asset: asset, at: context.date, forMemoryMap: true),
+                                  presentation.sidecar.originDigest == scene.originDigest else { return nil }
+                            return LiminalGraphMorphSource(asset: asset, bindings: presentation.sidecar,
+                                fullGraph: store.companionGraphSnapshot(at: context.date), originDigest: scene.originDigest)
+                        },
+                        selectionID: store.selectedGraphNodeID,
+                        onSelectionChange: { id in
+                            store.selectGraphRecord(id, in: snapshot, particleScene: particleScene)
                         })
-                        .id(store.selectedGraphNodeID)
                         .id(ObjectIdentifier(store.readingSources))
                 }
                 .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
@@ -178,6 +185,14 @@ struct CompanionGraphWorkspace: View {
                         attachmentMessage = "Candidate saved. Inspect this method version to choose a passage. No work has been sent or reviewed."
                     }
                 }
+            }
+        }
+        .onChange(of: store.selectedGraphNodeID) { _, id in
+            guard let id, !includesActivity else { return }
+            let memory = store.memoryMapSnapshot()
+            if !memory.nodes.contains(where: { $0.id == id }),
+               store.companionGraphSnapshot().nodes.contains(where: { $0.id == id }) {
+                includesActivity = true
             }
         }
         .onChange(of: ObjectIdentifier(store.documentProcedures)) { _, _ in

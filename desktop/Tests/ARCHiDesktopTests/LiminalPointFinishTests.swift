@@ -139,7 +139,7 @@ final class LiminalPointFinishTests: XCTestCase {
         let state = LiminalFormDevelopment.Snapshot(originDigest: String(repeating: "a", count: 64), nodes: (0..<12).map { i in
             .init(id: String(format: "%064x", i + 1), lessonIDs: ["synthetic-\(i)"], graphNodeIDs: ["lesson:synthetic-\(i)"], title: "Synthetic", applications: i < 6 ? 3 : 0)
         }, unavailableLessons: 0, duplicateLessons: 0, evidenceAvailable: true)
-        let recipe = try XCTUnwrap(LiminalPointStructure.make(state, sessionID: "00000000-0000-4000-8000-000000000001",
+        let recipe = try XCTUnwrap(LiminalPointStructureTestFixtures.make(state, sessionID: "00000000-0000-4000-8000-000000000001",
             manifestSHA256: manifest, lowDetailIDs: asset.lowDetailIDs))
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(recipe).write(to: target.appendingPathComponent("structure.json"))

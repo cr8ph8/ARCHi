@@ -128,9 +128,9 @@ final class LiminalFormDevelopmentTests: XCTestCase {
         XCTAssertEqual(after.nodes[0].reviewedApplicationCount, 9, "Evidence is not truncated by a graphics cap")
         XCTAssertEqual(after.nodes[0].id, before.nodes[0].id)
         let session = UUID().uuidString
-        let first = try XCTUnwrap(LiminalPointStructure.make(before, sessionID: session,
+        let first = try XCTUnwrap(LiminalPointStructureTestFixtures.make(before, sessionID: session,
             manifestSHA256: origin, lowDetailIDs: Array(0..<64)))
-        let next = try XCTUnwrap(LiminalPointStructure.make(after, sessionID: session,
+        let next = try XCTUnwrap(LiminalPointStructureTestFixtures.make(after, sessionID: session,
             manifestSHA256: origin, lowDetailIDs: Array(0..<64)))
         XCTAssertEqual(first.nodes, next.nodes, "Reinforcement does not reshuffle art anchors")
         XCTAssertNotEqual(first.evidenceDigest, next.evidenceDigest)
@@ -149,9 +149,9 @@ final class LiminalFormDevelopmentTests: XCTestCase {
         XCTAssertEqual(build([one], [firstUse, receipt(one)]).reviewedApplicationCount, 1,
                        "Retrying the same input does not create another experience")
         let session = UUID().uuidString
-        let first = try XCTUnwrap(LiminalPointStructure.make(before, sessionID: session,
+        let first = try XCTUnwrap(LiminalPointStructureTestFixtures.make(before, sessionID: session,
             manifestSHA256: origin, lowDetailIDs: Array(0..<64)))
-        let next = try XCTUnwrap(LiminalPointStructure.make(after, sessionID: session,
+        let next = try XCTUnwrap(LiminalPointStructureTestFixtures.make(after, sessionID: session,
             manifestSHA256: origin, lowDetailIDs: Array(0..<64)))
         XCTAssertEqual(first.nodes, next.nodes)
         XCTAssertNotEqual(first.evidenceDigest, next.evidenceDigest)

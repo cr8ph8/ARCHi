@@ -102,7 +102,11 @@ struct ContextTicket: Equatable, Sendable {
 
 @MainActor
 final class CompanionStore: ObservableObject {
-    let liminalStructureSessionID = UUID().uuidString
+    var liminalStructureSessionID = UUID().uuidString
+    /// One disposable allocation history for every presentation of this individual.
+    /// Session wrappers may change; retired art IDs cannot become another record.
+    var liminalKnowledgeBindings: LiminalKnowledgeBindings?
+    var liminalKnowledgeIdentity: String?
     let tokenSteward: TokenStewardStore
     let arcCapabilities: ARCCapabilitiesStore
     let arc3: ARC3SessionStore
@@ -826,6 +830,7 @@ final class CompanionStore: ObservableObject {
     /// General navigation starts at memory; exact receipt routes retain their selection.
     func openMemoryMap() {
         selectedGraphNodeID = nil
+        memoryParticleSelection = nil
         open(.nodeLab)
     }
 
@@ -878,6 +883,9 @@ final class CompanionStore: ObservableObject {
         let graph = companionGraphSnapshot()
         guard LiminalKnowledgeBindings.digest(graph) == graphDigest,
               graph.nodes.contains(where: { $0.id == nodeID }) else { return false }
+        if let scene = companionParticleScene(), scene.graph.nodes.contains(where: { $0.id == nodeID }) {
+            memoryParticleSelection = .init(originDigest: scene.originDigest, graphDigest: scene.graphDigest, nodeID: nodeID)
+        } else { memoryParticleSelection = nil }
         selectedGraphNodeID = nodeID
         open(.nodeLab)
         return true
@@ -890,8 +898,43 @@ final class CompanionStore: ObservableObject {
               scene.isCurrent(graph: current.graph, originDigest: current.originDigest),
               current.graph.nodes.contains(where: { $0.id == id }) else { return false }
         memoryParticleSelection = .init(originDigest: current.originDigest, graphDigest: current.graphDigest, nodeID: id)
-        if openInspector { selectedGraphNodeID = id; open(.nodeLab) }
+        selectedGraphNodeID = id
+        if openInspector { open(.nodeLab) }
         return true
+    }
+
+    /// One transient selection owner for map, Seed, filters and navigation.
+    /// A callback from an old projection cannot clear or replace a newer pick.
+    @discardableResult
+    func selectGraphRecord(_ id: String?, in snapshot: CompanionGraphSnapshot,
+                           particleScene: CompanionParticleScene?) -> Bool {
+        guard profileRecoveryBlock == nil, !isShuttingDown else { return false }
+        let current: CompanionGraphSnapshot
+        let scene: CompanionParticleScene?
+        if let particleScene {
+            guard let fresh = companionParticleScene(),
+                  particleScene.isCurrent(graph: fresh.graph, originDigest: fresh.originDigest) else { return false }
+            current = fresh.graph; scene = fresh
+        } else { current = companionGraphSnapshot(); scene = companionParticleScene() }
+        guard LiminalKnowledgeBindings.digest(snapshot) == LiminalKnowledgeBindings.digest(current),
+              id == nil || current.nodes.contains(where: { $0.id == id }) else { return false }
+        selectedGraphNodeID = id
+        if let id, let scene, scene.graph.nodes.contains(where: { $0.id == id }) {
+            memoryParticleSelection = .init(originDigest: scene.originDigest, graphDigest: scene.graphDigest, nodeID: id)
+        } else { memoryParticleSelection = nil }
+        return true
+    }
+
+    private func clearParticleNavigationForProfileChange() {
+        // A restored graph may have identical IDs and bytes. Retire the active
+        // transport session too, so its earlier acknowledgments cannot survive.
+        unityPresentation.stop()
+        selectedGraphNodeID = nil
+        memoryParticleSelection = nil
+        particleSceneCache = nil
+        liminalKnowledgeBindings = nil
+        liminalKnowledgeIdentity = nil
+        liminalStructureSessionID = UUID().uuidString
     }
 
     func canOpenARCEvidenceForUsage(taskID: String) -> Bool {
@@ -3813,7 +3856,7 @@ extension CompanionStore {
     /// Rebuild the local structure study from current owners, never graph size
     /// or particle count. Reading this projection cannot save or award a body.
     var liveLiminalPointStructure: LiminalPointStructure? {
-        LiminalV008Runtime.asset.flatMap { liminalPointStructure(sessionID: liminalStructureSessionID, asset: $0) }
+        LiminalV008Runtime.asset.flatMap { liminalKnowledgePresentation(asset: $0)?.structure }
     }
 
     func liminalFormDevelopment(at now: Date = Date()) -> LiminalFormDevelopment.Snapshot? {
@@ -4146,6 +4189,7 @@ extension CompanionStore {
             throw DesktopRecoveryError.blocked("The restored document work could not be loaded.")
         }
         cancelWork(reason: "Saved profile restored. Earlier replies and references cleared.")
+        clearParticleNavigationForProfileChange()
         selectedReadingSourceIDs = []
         selectedKnowledgePageID = nil
         selectedKnowledgePages = []
@@ -4194,6 +4238,7 @@ extension CompanionStore {
 
     func blockProfileForRecovery(_ reason: String) {
         cancelWork(reason: "Profile recovery needs review.")
+        clearParticleNavigationForProfileChange()
         clearSessionContext()
         compareResults = [:]
         profileRecoveryBlock = reason

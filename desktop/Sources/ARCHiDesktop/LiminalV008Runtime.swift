@@ -127,16 +127,12 @@ private struct LiminalKnowledgePreview: View {
     @ObservedObject var store: CompanionStore
     let asset: LiminalPointAsset
     @State private var inspection = false
-    @State private var map: LiminalKnowledgeBindings?
-    @State private var sidecar: LiminalKnowledgeBindings.Sidecar?
-    @State private var inspectionUnavailableReason: String?
-    @State private var sessionID = UUID().uuidString
-    @State private var origin: String?
+    @State private var inspectionNotice: String?
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
-    @Environment(\.liminalPointStructure) private var pointStructure
     var body: some View {
         TimelineView(.periodic(from: .now, by: 2)) { context in
-            let graph = store.companionGraphSnapshot(at: context.date)
+            let presentation = store.liminalKnowledgePresentation(asset: asset, at: context.date)
+            let sidecar = presentation?.sidecar
             VStack {
                 HStack {
                     Label(store.kinLightExpression.label, systemImage: "sparkle")
@@ -148,12 +144,12 @@ private struct LiminalKnowledgePreview: View {
                 LiminalAnimatedPresence(asset: asset, progress: store.preferences.liminalPointProgress,
                     reduceMotion: store.preferences.reduceMotion || store.preferences.quiet || systemReduceMotion,
                     seedColor: store.preferences.seedColor,
-                    lightExpression: store.kinLightExpression, structure: pointStructure, inspection: inspection,
+                    lightExpression: store.kinLightExpression, structure: presentation?.structure, inspection: inspection,
                     selectableIDs: inspection ? sidecar?.bindings.map(\.anchorID) ?? [] : [],
                     onSelectArtID: { id in
-                        guard inspection, let sidecar,
-                              let binding = sidecar.bindings.first(where: { $0.particleIDs.contains(id) }) else { return }
-                        _ = store.inspectKnowledgeParticle(nodeID: binding.nodeID, graphDigest: sidecar.graphDigest)
+                        guard inspection, let sidecar else { return }
+                        inspectionNotice = store.inspectLiminalKnowledgeParticle(id, sidecar: sidecar, asset: asset)
+                            ? nil : "That record changed. Select its current anchor to inspect it."
                     })
                     .overlay {
                         GeometryReader { geometry in
@@ -163,27 +159,11 @@ private struct LiminalKnowledgePreview: View {
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }.allowsHitTesting(false).accessibilityHidden(true)
                     }
-                Text(inspectionUnavailableReason ?? (inspection ? (sidecar?.bindings.isEmpty != false ? "No knowledge records are available to inspect yet." : "Select an anchor to inspect its current source, version and connections.")
+                Text(inspectionNotice ?? presentation?.inspectionUnavailableReason ?? (inspection ? (sidecar?.bindings.isEmpty != false ? "No knowledge records are available to inspect yet." : "Select an anchor to inspect its current source, version and connections.")
                      : "Your color. Your constellation."))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            .onChange(of: graph, initial: true) { _, graph in refresh(graph) }
-            .onChange(of: store.activeQiMon?.originDigest) { _, _ in refresh(graph) }
-        }
-    }
-    private func refresh(_ graph: CompanionGraphSnapshot) {
-        guard let digest = store.activeQiMon?.originDigest else {
-            sidecar = nil; inspectionUnavailableReason = nil; return
-        }
-        if origin != digest { map = nil; sidecar = nil; sessionID = UUID().uuidString; origin = digest }
-        do {
-            if map == nil { map = try LiminalKnowledgeBindings(manifestSHA256: asset.manifestSHA256, lowDetailIDs: asset.lowDetailIDs) }
-            let projection = try map?.projectForPresentation(graph, sessionID: sessionID, originDigest: digest)
-            sidecar = projection?.sidecar
-            inspectionUnavailableReason = projection?.inspectionUnavailableReason
-        } catch {
-            sidecar = nil
-            inspectionUnavailableReason = "Knowledge inspection is unavailable because its current record bindings could not be checked. Liminal’s appearance remains available."
+            .onChange(of: sidecar) { _, _ in inspectionNotice = nil }
         }
     }
 }

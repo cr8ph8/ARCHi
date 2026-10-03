@@ -29,6 +29,15 @@ struct LiminalKnowledgeBindings {
                   manifestSHA256: manifestSHA256, graphDigest: graphDigest,
                   bindings: bindings.filter { nodeIDs.contains($0.nodeID) })
         }
+        /// The native allocator owns art identities. Transport ownership remains
+        /// bound to the receiving presentation's independently checked session.
+        func forSession(_ sessionID: String) throws -> Self {
+            guard UUID(uuidString: sessionID) != nil else { throw BindingError.invalidIdentity }
+            let value = Self(schemaVersion: schemaVersion, sessionID: sessionID, originDigest: originDigest,
+                             manifestSHA256: manifestSHA256, graphDigest: graphDigest, bindings: bindings)
+            _ = try value.data()
+            return value
+        }
     }
     struct PresentationProjection {
         let sidecar: Sidecar
@@ -70,7 +79,9 @@ struct LiminalKnowledgeBindings {
         var bindings: [Binding] = []
         for node in graph.nodes.sorted(by: { $0.id < $1.id }) {
             if let existing = nextReservations[node.id] { bindings.append(existing); continue }
-            let hash = Array(SHA256.hash(data: Data((manifestSHA256 + ":" + session.uuidString + ":" + originDigest + ":" + node.id).utf8)))
+            // Initial positions are reproducible after restart. A session is an
+            // authorization boundary, not part of a record's visual identity.
+            let hash = Array(SHA256.hash(data: Data((manifestSHA256 + ":" + originDigest + ":" + node.id).utf8)))
             let start = Int(hash.prefix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }) % availableIDs.count
             var cluster: [UInt32] = []
             for offset in 0..<availableIDs.count {
@@ -134,7 +145,7 @@ struct LiminalKnowledgeBindings {
         return 32
     }
 
-    fileprivate static func validate(_ graph: CompanionGraphSnapshot) throws {
+    static func validate(_ graph: CompanionGraphSnapshot) throws {
         guard graph.nodes.count <= CompanionGraph.maximumNodes,
               graph.edges.count <= CompanionGraph.maximumEdges, graph.truncatedCount >= 0,
               graph.nodes.allSatisfy({ validIdentifier($0.id) }),

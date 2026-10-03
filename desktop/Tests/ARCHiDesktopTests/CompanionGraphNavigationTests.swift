@@ -42,6 +42,31 @@ final class CompanionGraphNavigationTests: XCTestCase {
         XCTAssertTrue(CompanionGraphNavigation.links(for: "source", in: replaced, direction: .outgoing).isEmpty)
     }
 
+    func testFilteringHidesSelectionWithoutReplacingOrRetiringItsRecord() {
+        let graph = fixture()
+        let visible = CompanionGraphNavigation.visibleNodes(in: graph, query: "Meeting", kindFilter: .source, focusID: nil)
+        XCTAssertEqual(CompanionGraphNavigation.selectionVisibility("lesson", in: graph, visibleNodes: visible), .hidden)
+        XCTAssertEqual(CompanionGraphNavigation.retainedSelection("lesson", in: graph.nodes), "lesson")
+        XCTAssertEqual(CompanionGraphNavigation.selectionVisibility("source", in: graph, visibleNodes: visible), .visible)
+        XCTAssertEqual(CompanionGraphNavigation.selectionVisibility(nil, in: graph, visibleNodes: visible), .none)
+        let removed = CompanionGraphSnapshot(nodes: graph.nodes.filter { $0.id != "lesson" }, edges: [], truncatedCount: 0)
+        XCTAssertEqual(CompanionGraphNavigation.selectionVisibility("lesson", in: removed, visibleNodes: visible), .unavailable)
+    }
+
+    func testFocusHistoryRestoresExactSelectionAlongsideFocus() throws {
+        let graph = fixture()
+        let overview = CompanionGraphNavigation.Location(focusID: nil, selectedID: "source")
+        let focused = CompanionGraphNavigation.Location(focusID: "lesson", selectedID: "request")
+        XCTAssertEqual(CompanionGraphNavigation.retainedLocation(overview, in: graph), overview)
+        XCTAssertEqual(CompanionGraphNavigation.retainedLocation(focused, in: graph), focused)
+        let removedSelection = CompanionGraphSnapshot(nodes: graph.nodes.filter { $0.id != "request" }, edges: [], truncatedCount: 0)
+        let retained = try XCTUnwrap(CompanionGraphNavigation.retainedLocation(focused, in: removedSelection))
+        XCTAssertEqual(retained.focusID, "lesson")
+        XCTAssertNil(retained.selectedID, "Back cannot substitute another record for a removed selection.")
+        let removedFocus = CompanionGraphSnapshot(nodes: graph.nodes.filter { $0.id != "lesson" }, edges: [], truncatedCount: 0)
+        XCTAssertNil(CompanionGraphNavigation.retainedLocation(focused, in: removedFocus))
+    }
+
     private func fixture() -> CompanionGraphSnapshot {
         func node(_ id: String, _ title: String, _ kind: CompanionGraphKind) -> CompanionGraphNode {
             .init(id: id, title: title, subtitle: "", kind: kind, status: "", details: [], target: nil)

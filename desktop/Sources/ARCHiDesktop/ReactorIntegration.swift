@@ -35,12 +35,7 @@ extension CompanionStore {
         let usesPoints = LiminalV008Runtime.applies(form: presentationForm, family: family, treatment: preferences.visualTreatment)
         let memoryApplies = !usesPoints && CompanionMemoryParticles.applies(form: presentationForm, family: family,
             treatment: preferences.visualTreatment)
-        let snapshot = usesPoints ? liminalFormDevelopment() : nil
-        let structure = usesPoints ? LiminalV008Runtime.asset.flatMap { asset -> LiminalPointStructure? in
-            guard let snapshot else { return nil }
-            return LiminalPointStructure.make(snapshot, sessionID: liminalStructureSessionID,
-                manifestSHA256: asset.manifestSHA256, lowDetailIDs: asset.lowDetailIDs)
-        } : nil
+        let structure = usesPoints ? liveLiminalPointStructure : nil
         let scene = memoryApplies ? companionParticleScene() : nil
         let id = CompanionVisualAsset.appearanceID(form: presentationForm, family: family,
             treatment: preferences.visualTreatment, recipe: presentationRecipe,

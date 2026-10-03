@@ -1,0 +1,48 @@
+{
+  "schema": "archi-graph-beast-morph/v1",
+  "date": "2026-10-03",
+  "status": "INSTALLED_GPU_CHECKED_LIVE_WINDOW_WALKTHROUGH_PENDING",
+  "scope": "Native Memory map to authored Liminal Beast and back; read-only presentation",
+  "newPersistentOwners": 0,
+  "sourceAssetUnchanged": true,
+  "checks": {
+    "regularContractPassed": 75,
+    "regularContractSkipped": 1,
+    "regularContractFailed": 0,
+    "productionMetalMorphPassed": 1,
+    "modelCalls": 0,
+    "puzzleRuns": 0,
+    "syntheticGPURecords": 3,
+    "morphPointCount": 50000,
+    "exactBeastEndpoint": true,
+    "personalPalette": true,
+    "filteredMapTransparent": true,
+    "sourceArtIDsUnchanged": true,
+    "GPUReceipt": "output/graph-beast-morph-2026-10-03/gpu/receipt.json",
+    "contractLog": "output/graph-beast-morph-2026-10-03/publication-focused-tests.log"
+  },
+  "remaining": [
+    "Full-size installed live morph walkthrough: native controls present, current capture remains a Stage Manager thumbnail",
+    "Full-size visual and sustained 30 fps acceptance",
+    "Unity graph-to-body morph",
+    "Phone point package and renderer",
+    "ARKit camera, placement, tracking interruption and object attachment",
+    "Explicit cross-device record transfer",
+    "Existing supervised-alpha release blockers"
+  ],
+  "researchScope": "MSIB, SAS and DCE/SRCL references routed to their distinct mechanisms; no model optimization or theory validation claimed.",
+  "delivery": {
+    "monitoredProfileFiles": 23,
+    "changedProfileFiles": [],
+    "installedUUID": "269F2296-2208-3FFE-9EA7-99A36FA4A486",
+    "compiledUUID": "269F2296-2208-3FFE-9EA7-99A36FA4A486",
+    "installedBinarySHA256": "2506a9b5280f30f48385c70f9d84a4cdeb38a078e75f87a032b74012f02e39d2",
+    "strictSigningPassed": true,
+    "UUIDsMatch": true,
+    "version": "0.7.0",
+    "build": "1",
+    "signing": "ad-hoc",
+    "notarized": false,
+    "rollbackRetained": true
+  }
+}
