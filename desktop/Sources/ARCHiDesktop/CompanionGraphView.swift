@@ -214,6 +214,8 @@ struct CompanionGraphView: View {
     var selectionID: String?
     var onSelectionChange: ((String?) -> Bool)?
     var onCreateMethod: ((CompanionGraphNode) -> Void)?
+    var onPlayNote: ((CompanionGraphNode) -> Void)?
+    var canPlayNote: (CompanionGraphNode) -> Bool = { _ in false }
     var canCreateMethod: (CompanionGraphNode) -> Bool = { _ in false }
 
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
@@ -227,8 +229,8 @@ struct CompanionGraphView: View {
     @State private var focusHistory: [CompanionGraphNavigation.Location] = []
     @State private var zoom: CGFloat = 1
     @State private var fitRevision = 0
-    @State private var particleSpread = 1.0
-    @State private var bodyProgress = 0.0
+    // One presentation coordinate: Seed (-1), memory map (0), QiMon body (1).
+    @State private var formProgress = 0.0
     @State private var particlePulses = true
     @State private var particleExportMessage: String?
     @State private var isShowcase = false
@@ -249,7 +251,9 @@ struct CompanionGraphView: View {
          liminalGraphSource: LiminalGraphMorphSource? = nil,
          selectionID: String? = nil,
          onSelectionChange: ((String?) -> Bool)? = nil,
-         allowsTargetNavigation: Bool = true) {
+         allowsTargetNavigation: Bool = true,
+         onPlayNote: ((CompanionGraphNode) -> Void)? = nil,
+         canPlayNote: @escaping (CompanionGraphNode) -> Bool = { _ in false }) {
         self.snapshot = snapshot
         self.onOpen = onOpen
         self.reduceMotion = reduceMotion; self.seedColor = seedColor
@@ -260,6 +264,7 @@ struct CompanionGraphView: View {
         self.liminalGraphSource = liminalGraphSource
         self.selectionID = selectionID; self.onSelectionChange = onSelectionChange
         self.allowsTargetNavigation = allowsTargetNavigation
+        self.onPlayNote = onPlayNote; self.canPlayNote = canPlayNote
         _layout = State(initialValue: initialLayout)
         _localSelectionID = State(initialValue: initialSelectionID)
         _isShowcase = State(initialValue: initialShowcase)
@@ -285,7 +290,8 @@ struct CompanionGraphView: View {
     }
     private var focusNode: CompanionGraphNode? { snapshot.nodes.first { $0.id == focusID } }
     private var hasFilters: Bool { !query.isEmpty || kindFilter != nil || focusID != nil }
-    private var showsInspector: Bool { !isShowcase || selectedNode != nil }
+    private var showsInspector: Bool { selectedNode != nil }
+    private var particleSpread: Double { min(1, max(0, formProgress + 1)) }
 
     var body: some View {
         let topology = KnowledgeParticleField.topology(of: snapshot)
@@ -330,6 +336,9 @@ struct CompanionGraphView: View {
             if let focusID, !ids.contains(focusID) { self.focusID = nil; fitRevision += 1 }
             focusHistory = focusHistory.compactMap { CompanionGraphNavigation.retainedLocation($0, in: value) }
         }
+        .onChange(of: liminalGraphSource == nil) { _, unavailable in
+            if unavailable && formProgress > 0 { formProgress = 0 }
+        }
         .onChange(of: selectedID) { _, id in
             // An external receipt can request All activity while this child still
             // holds the previous Memory snapshot. Let its owner update the scope
@@ -364,7 +373,7 @@ struct CompanionGraphView: View {
     private var heading: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 5) {
-                Text(focusNode?.title ?? "Your connected memory")
+                Text(focusNode?.title ?? "Your living memory")
                     .font(.system(size: 20, weight: .medium, design: .rounded)).lineLimit(1)
                 Text("\(visibleNodes.count) of \(snapshot.nodes.count) records · \(visibleEdges.count) connections")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
@@ -476,25 +485,6 @@ struct CompanionGraphView: View {
                     systemImage: showsList ? "list.bullet" : "point.3.connected.trianglepath.dotted")
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(WorkspaceTheme.accent)
                 Spacer(minLength: 8)
-                if layout == .particles && !showsList && seedAppearance != nil {
-                    if liminalGraphSource != nil {
-                        Button(bodyProgress > 0.5 ? "Return to map" : "Form Liminal",
-                               systemImage: "sparkles") {
-                            particleSpread = 1
-                            bodyProgress = bodyProgress > 0.5 ? 0 : 1
-                        }
-                        .accessibilityIdentifier("companion-graph.liminal-form")
-                        .help("Move the same memory particles into Liminal’s authored Beast form. Select a particle to inspect its record.")
-                    }
-                    Button(particleSpread < 0.5 ? "Unfold memory" : "Gather into Seed",
-                           systemImage: particleSpread < 0.5 ? "arrow.up.left.and.arrow.down.right" : "circle.dotted") {
-                        particleSpread = particleSpread < 0.5 ? 1 : 0
-                        bodyProgress = 0
-                        fitRevision += 1
-                    }
-                    .accessibilityIdentifier("companion-graph.seed-map")
-                    .help("The same records in your Seed or as a connected map. Selection and saved memory stay intact.")
-                }
                 if !showsList {
                     Button("Fit map") { fitRevision += 1 }
                         .accessibilityLabel("Fit and center graph")
@@ -530,6 +520,9 @@ struct CompanionGraphView: View {
                 .padding(.horizontal, 13).padding(.top, 8)
                 .accessibilityIdentifier("companion-graph.particle-state")
             }
+            if layout == .particles && !showsList && seedAppearance != nil {
+                formControls
+            }
             Group {
                 if visibleNodes.isEmpty {
                     emptyGraph
@@ -558,6 +551,43 @@ struct CompanionGraphView: View {
         }
         .modifier(WorkspaceSurface(emphasis: isShowcase))
         .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private var formControls: some View {
+        VStack(spacing: 7) {
+            HStack(spacing: 8) {
+                formButton("Seed", symbol: "circle.dotted", value: -1)
+                formButton("Memory map", symbol: "point.3.connected.trianglepath.dotted", value: 0)
+                if liminalGraphSource != nil {
+                    formButton("Liminal · QiMon", symbol: "pawprint", value: 1)
+                }
+            }
+            Slider(value: $formProgress, in: -1...(liminalGraphSource == nil ? 0 : 1))
+                .accessibilityLabel(liminalGraphSource == nil ? "Companion form: Seed to memory map"
+                    : "Companion form: Seed through memory map to Liminal")
+                .accessibilityValue(formProgress < -0.9 ? "Seed" : formProgress > 0.9 ? "Liminal"
+                    : abs(formProgress) < 0.05 ? "Memory map" : "Memory unfolding")
+                .accessibilityIdentifier("companion-graph.form-flow")
+                .frame(maxWidth: 400)
+        }
+        .padding(.horizontal, 14).padding(.top, 9)
+    }
+
+    private func formButton(_ title: String, symbol: String, value: Double) -> some View {
+        Button {
+            withAnimation(reduceMotion || systemReduceMotion ? nil : .easeInOut(duration: 1.15)) {
+                formProgress = value
+            }
+        } label: {
+            Label(title, systemImage: symbol).font(.system(size: 11, weight: .medium))
+                .padding(.horizontal, 10).padding(.vertical, 7)
+                .background(abs(formProgress - value) < 0.05 ? seedColor.accent.opacity(0.17) : .clear,
+                    in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(abs(formProgress - value) < 0.05 ? [.isSelected] : [])
+        .accessibilityIdentifier(value < 0 ? "companion-graph.seed-map" : value > 0
+            ? "companion-graph.liminal-form" : "companion-graph.memory-form")
     }
 
     private var viewOptions: some View {
@@ -594,19 +624,10 @@ struct CompanionGraphView: View {
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             } else if layout == .particles {
                 Divider()
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("Unfold memory").fontWeight(.medium)
-                    Slider(value: $particleSpread, in: 0...1)
-                        .accessibilityLabel("Spread knowledge particles from orb to constellation")
-                        .accessibilityIdentifier("companion-graph.particle-spread")
-                    HStack {
-                        Text(seedAppearance == nil ? "Orb" : "Your Seed")
-                        Spacer()
-                        Text("Connections")
-                    }.font(.system(size: 11)).foregroundStyle(.secondary)
+                if liminalGraphSource == nil {
+                    Toggle("Pulse particles", isOn: $particlePulses).toggleStyle(.checkbox)
+                        .accessibilityIdentifier("companion-graph.particle-pulse")
                 }
-                Toggle("Pulse particles", isOn: $particlePulses).toggleStyle(.checkbox)
-                    .accessibilityIdentifier("companion-graph.particle-pulse")
                 if reduceMotion || systemReduceMotion {
                     Text("Reduce Motion keeps the map still.")
                         .font(.system(size: 11)).foregroundStyle(.secondary)
@@ -632,7 +653,7 @@ struct CompanionGraphView: View {
 
     private var layoutHint: String {
         switch layout {
-        case .particles: "Each light keeps its record as the Seed unfolds. Lines are saved relationships; gold satellites show reviewed helpful use."
+        case .particles: "One companion, the same memories in every form. Select a light to inspect its source; gold satellites mark reviewed helpful use."
         case .constellation: "Grouped by type. Select a record; scroll or zoom to explore."
         case .radial: "Rings follow recorded links from the companion; unlinked records sit outside."
         case .flow: "Columns group record types. Arrows show recorded direction."
@@ -645,14 +666,14 @@ struct CompanionGraphView: View {
                 ScrollView([.horizontal, .vertical]) {
                     if let field = particleScene?.field ?? particleField {
                         ZStack {
-                        if let source = liminalGraphSource, particleSpread == 1 {
+                        if let source = liminalGraphSource {
                             LiminalGraphMorphView(source: source, graph: snapshot, field: field,
-                                nodes: visibleNodes, selectedID: selectedID, progress: bodyProgress,
+                                nodes: visibleNodes, selectedID: selectedID, progress: formProgress,
                                 reduceMotion: reduceMotion || systemReduceMotion, seedColor: seedColor,
                                 focusIDs: focusID == nil ? nil : Set(CompanionGraphNavigation.visibleNodes(in: snapshot,
                                     query: "", kindFilter: nil, focusID: focusID).map(\.id)),
                                 growthByRecordID: particleScene?.growthByRecordID ?? [:], preparedIDs: preparedNodeIDs,
-                                expression: lightExpression,
+                                expression: lightExpression, seedAppearance: seedAppearance,
                                 onSelect: { selectNode($0) })
                         } else {
                         if let seedAppearance {
@@ -804,6 +825,7 @@ struct CompanionGraphView: View {
                     Label(node.status, systemImage: node.presentationState.symbol)
                         .font(.system(size: 10, weight: .medium)).foregroundStyle(graphColor(node.kind)).padding(.vertical, 4)
                 }
+                resonanceInspector(node)
                 if allowsTargetNavigation, let target = node.target {
                     Button(openTitle(target), systemImage: "arrow.up.right") { onOpen(target) }
                         .buttonStyle(.bordered).controlSize(.small).padding(.vertical, 5)
@@ -851,6 +873,24 @@ struct CompanionGraphView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companion-graph.inspector")
+    }
+
+    private func resonanceInspector(_ node: CompanionGraphNode) -> some View {
+        let voice = CompanionResonance.forKind(node.kind)
+        return DisclosureGroup("Sound & signal · \(voice.noteName)") {
+            VStack(alignment: .leading, spacing: 7) {
+                Text("\(voice.brainwaveBand.title) · \(voice.noteName) · \(voice.frequencyHz, specifier: "%.1f") Hz audio")
+                    .font(.system(size: 11, weight: .medium))
+                Text(CompanionResonance.associationExplanation)
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                if let onPlayNote {
+                    Button("Hear this note", systemImage: "speaker.wave.2") { onPlayNote(node) }
+                        .controlSize(.small).disabled(!canPlayNote(node))
+                        .help("Uses your existing Musical light cues and volume settings. Quiet mode silences it.")
+                        .accessibilityIdentifier("companion-graph.hear-note")
+                }
+            }.padding(.top, 7)
+        }.font(.system(size: 11)).padding(.vertical, 5)
     }
 
     private func inspectorDetails(_ details: [CompanionGraphDetail]) -> some View {

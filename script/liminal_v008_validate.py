@@ -223,16 +223,38 @@ def validate_comparison(receipt):
     require(all(number(interp[k]) and 0 <= interp[k] <= limit for k, limit in LIMITS.items()), "interpolation exceeds limits")
 
 
-def validate_package(directory):
+def _validated_display_files(root, *, allow_finish=False, allow_light=False):
+    """Opt in only to existing, independently pinned display extensions."""
+    require(not allow_light or allow_finish, "light validation requires explicit finish validation")
+    expected = set()
+    finish, light = root / "finish-v11", root / "light-v12"
+    # Import lazily: these validators reuse the base format's JSON/hash helpers.
+    if allow_finish and (finish.exists() or finish.is_symlink()):
+        from package_liminal_finish import validate_finish
+        validate_finish(finish, root)
+        expected.update({"finish-v11/manifest.json", "finish-v11/annotations.bin"})
+    if allow_light and (light.exists() or light.is_symlink()):
+        from package_liminal_light import validate_light
+        validate_light(light, root, finish)
+        expected.update({"light-v12/manifest.json", "light-v12/curves.json"})
+    return expected
+
+
+def validate_package(directory, *, allow_finish=False, allow_light=False):
+    """Validate the unchanged base; assembled children require explicit opt-in."""
     root = Path(directory).absolute()
     require(root.is_dir() and not root.is_symlink(), "package must be a regular directory")
-    actual_files, total = set(), 0
+    actual_files, actual_dirs, total = set(), set(), 0
     for path in root.rglob("*"):
         require(not path.is_symlink(), "package links rejected")
         if path.is_file():
             actual_files.add(path.relative_to(root).as_posix())
             total += path.stat().st_size
             require(total <= MAX_PACKAGE, "package exceeds 1 GiB")
+        else:
+            require(path.is_dir(), "package special files rejected")
+            actual_dirs.add(path.relative_to(root).as_posix())
+    display_files = _validated_display_files(root, allow_finish=allow_finish, allow_light=allow_light)
     manifest = read_json(safe_file(root, "manifest.json"))
     keys(manifest, ("schema", "assetID", "source", "pointCount", "runtimePointCount", "encoding", "coordinates",
                     "appearance", "timeline", "bounds", "master", "cohorts", "lod", "frames", "motionControls",
@@ -255,7 +277,7 @@ def validate_package(directory):
             and all(number(v) for v in coords["objectToWorldRowMajor"]), "invalid object transform")
     require(manifest["timeline"] == {"fps": 24, "firstFrame": 1, "lastFrame": 120, "interpolation": "nearest-half-up", "poseFrames": POSES}, "timeline mismatch")
     require(manifest["motionControls"] == CONTROL_VALUES, "motion controls mismatch")
-    expected_files, checked = {"manifest.json"}, {}
+    expected_files, checked = {"manifest.json"} | display_files, {}
     def check_ref(ref, size=None, name=None):
         keys(ref, ("file", "sha256", "bytes"), "file reference")
         require(type(ref["bytes"]) is int and 0 < ref["bytes"] <= MAX_PACKAGE, "invalid file length")
@@ -339,6 +361,9 @@ def validate_package(directory):
                             "masterSHA256": manifest["master"]["sha256"], "renderer": endpoints["renderer"],
                             "camera": camera, "resolution": [512, 512], "transparent": True, "images": bindings}, "endpoint receipt mismatch")
     require(actual_files == expected_files, "unexpected files in runtime package")
+    expected_dirs = {parent.as_posix() for name in expected_files for parent in PurePosixPath(name).parents
+                     if parent != PurePosixPath(".")}
+    require(actual_dirs == expected_dirs, "unexpected directories in runtime package")
     return {"status": "passed", "schema": SCHEMA, "manifestSHA256": sha256(root/"manifest.json"),
             "packageBytes": total, "pointCount": COUNT, "runtimePointCount": RUNTIME_COUNT,
             "uniqueSampleFiles": len(unique_samples), "endpointImageStatus": endpoints["status"],

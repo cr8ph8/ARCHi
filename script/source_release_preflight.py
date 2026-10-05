@@ -28,7 +28,13 @@ RELEASE_FILES = {"LICENSE", "ASSET_ATTRIBUTION.md", "THIRD_PARTY_NOTICES.md", "R
 RELEASE_FILES.add("docs/native-qwen.md")
 EXACT = RELEASE_FILES | ARC_REPLAY_FILES | {
     ".gitignore", ".postcssrc.json", "index.html", "tsconfig.json", "package.json", "package-lock.json",
-    "desktop/Package.swift", "desktop/README.md", "arc/README.md", "arc/tsconfig.json",
+    "desktop/Package.swift", "shared/ARCHiSpatial/Package.swift", "desktop/README.md", "arc/README.md", "arc/tsconfig.json",
+    "script/native_build_identity.py", "scripts/tests/test_native_build_identity.py",
+    "script/app_rollback_destination.py", "script/test_app_rollback_destination.py",
+    "script/package_liminal_finish.py", "script/package_liminal_light.py",
+    "script/verify_preserved_liminal_seed.py", "scripts/tests/test_preserved_liminal_seed.py",
+    "scripts/tests/test_package_liminal_finish.py", "scripts/tests/test_package_liminal_light.py",
+    "scripts/tests/test_build_and_run_staging.py",
     "desktop/Sources/ARCHiDesktop/Resources/RecordReader/reader.qualified.json",
     "script/package_record_reader.py", "script/package_representation_runtime.py",
     "script/package_companion_supplement.py", "script/test_package_companion_supplement.py",
@@ -72,6 +78,8 @@ EXACT = RELEASE_FILES | ARC_REPLAY_FILES | {
 SCOPES = {
     "desktop/Sources/ARCHiDesktop": {".swift"},
     "desktop/Tests/ARCHiDesktopTests": {".swift"},
+    "shared/ARCHiSpatial/Sources/ARCHiSpatial": {".swift"},
+    "shared/ARCHiSpatial/Tests/ARCHiSpatialTests": {".swift"},
     "desktop/Sources/ARCHiDesktop/Resources/CompanionArt": {".png"},
     "desktop/Sources/ARCHiDesktop/Resources/Branding": {".png", ".icns"},
     "desktop/Sources/ARCHiDesktop/Resources/ARC3Bridge": {".py", ".txt"},
@@ -181,6 +189,14 @@ def collect(root: Path, exact=None, scopes=None):
                                 re.findall(rb'"(arc/fixtures/[^"\r\n]+\.json)"', (root / name).read_bytes()))
         for dependency in sorted(dependencies - allowed):
             blockers.append(issue("SOURCE_FIXTURE_DEPENDENCY_MISSING", name, dependency=dependency))
+    # A new literal build helper must be reviewed into the allowlist before an
+    # export can qualify. Report missing dependencies; never auto-expand scope.
+    recipe = "script/build_and_run.sh"
+    if recipe in allowed:
+        dependencies = {path.decode("ascii") for path in re.findall(
+            rb"\$REPO_ROOT/(script/[A-Za-z0-9_.-]+\.py)", (root / recipe).read_bytes())}
+        for dependency in sorted(dependencies - allowed):
+            blockers.append(issue("SOURCE_BUILD_DEPENDENCY_MISSING", recipe, dependency=dependency))
     blockers.extend(replay_dependency_checks(root, allowed))
     return sorted(allowed), sorted({json.dumps(x, sort_keys=True): x for x in blockers}.values(), key=lambda x: (x["code"], x.get("path", "")))
 

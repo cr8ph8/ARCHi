@@ -1,5 +1,9 @@
 # One ARCHi system
 
+> Publication note: references marked “local reference” are intentionally omitted from this curated snapshot. Their authored documents and receipts remain preserved in the main workspace; this page does not reproduce their evidence.
+
+**5 October 2026:** use the consolidation and desktop 1.0 plan (local reference) for current priorities and unfinished work. The dated receipts below retain their original scope. Unity/mobile are preserved while active work focuses on the desktop.
+
 Open `/Applications/ARCHi.app`. Home, Ask ARCHi, Memory map, Work together, Marketplace and Arena are destinations inside that app. The companion name identifies the individual; it does not identify a second installation.
 
 ## Runtime ownership
@@ -14,7 +18,7 @@ Open `/Applications/ARCHi.app`. Home, Ask ARCHi, Memory map, Work together, Mark
 | Item creation and collection | Existing Marketplace services and native installed-item/equipment owners |
 | iPhone | Separate platform client in the same product; transfer and feature parity require explicit qualification |
 
-Local Qwen, the representation runtime, Unity and creative authoring tools serve these owners. Keeping a helper does not create a second companion. Do not import donor applications' profile stores, model brokers or shells wholesale. See [current status](system-status-2026-09-29.md) for which research consumers are operational and which remain unfinished.
+Local Qwen, the representation runtime, Unity and creative authoring tools serve these owners. Keeping a helper does not create a second companion. Do not import donor applications' profile stores, model brokers or shells wholesale. See current completion plan (local reference) for which research consumers are operational and which remain unfinished.
 
 ARCHi's local records are the canonical authority; WikiOS is a linked interface. See the [native authority and lineage map](native-authority-and-lineage.md) for exact owners, immutable task references, acquisition declarations and future plugin boundaries.
 
@@ -30,11 +34,17 @@ Normal updates reserve an inactive rollback at `~/Library/Application Support/AR
 
 A one-time cleanup moved 107 dated ARCHi rollback bundles out of Applications without deleting them. Their root directory identities, executable hashes and Info.plist hashes were verified after the same-filesystem moves. Only `ARCHi.app` remains at the top level of Applications. The dated `applications-relocation-2026-09-29.json` beside the backups maps every original path to its recovery path. Historical delivery receipts remain unchanged.
 
+**5 October initial archive audit (historical):** 130 rollback bundles remained (107 earlier moves plus 23 newer containers), occupying 71.23 GiB. They have distinct executable/Info.plist pairs; that is not evidence of 130 meaningful feature releases. Labels are reused: 99 report `0.1.0 (1)`, 31 report `0.7.0 (1)`. At that audit no rollback bundle had been deleted. The builder then hardcoded build `1`, with unbounded retention. The update below supersedes those two implementation/storage details; the current plan (local reference) retains the remaining delivery gates. The September relocation index remains historical and unchanged.
+
+**5 October verified archive update:** all 130 versions remain recoverable as **128 loose copies and two archives**. `Rollbacks/archive-index-2026-10-05.json` maps the two retired loose paths into `ARCHiRecovery/Archives/2026-10-05-reviewed`. Its `README.md` and `restore.py` describe isolated restoration into a new `/private/tmp` directory. Both shipped archives passed complete byte/metadata comparison and strict/deep signature checks before retirement. The September relocation index is unchanged; consult the October mapping when its old path is now archived. Restore does not install, launch or migrate profiles. The source builder now emits candidate/source/payload identity; focused fixture checks passed, but no new native candidate or installed update was produced by this cleanup. Automatic retention remains unimplemented.
+
+**Later 5 October stage qualification:** the source-reconciliation pass completed real Swift compilation, qualified v008 finish/light packaging and strict/deep signing for build `356.65.66`. The temporary candidate was removed after retaining its signed inventory. This later check supersedes the first-real-stage gate, while installation, populated recovery and visual acceptance remain open. See [build and launch](../desktop/README.md#build-and-launch).
+
 Recovery is deliberate: quit ARCHi normally, identify the exact compatible bundle and preserve the current app before replacing it. Verify the chosen bundle's signature and source identity. A binary downgrade may also require a compatible profile backup; newer reading-library data must not be opened casually with an older binary. App rollback copies do not contain or replace the live profile library. This local archive is not an off-device backup and moving files does not reclaim their disk space.
 
 ## Start here
 
-- [Current system status and remaining work](system-status-2026-09-29.md)
+- Current completion plan and unfinished work (local reference)
 - [Desktop operation](../desktop/README.md)
 - [Ask ARCHi and private context](native-ask-archi.md)
 - [Memory map and Showcase](native-memory-dashboard.md)

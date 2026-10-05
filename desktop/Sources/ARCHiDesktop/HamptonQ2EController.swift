@@ -66,6 +66,50 @@ enum HamptonQ2ELane: String, Codable, Sendable {
     }
 }
 
+/// Shared, frozen v1 approach policy. Domain adapters retain their own evidence
+/// admission, chronology, coordinate names and receipts; only the pure numerical
+/// step is shared. These authored coefficients are not learned intelligence.
+enum HamptonApproachNumericalPolicy {
+    static let lanes: [HamptonQ2ELane] = [.retain, .expand, .repair]
+    static let initial = [0.5, 0.5, 0.5]
+    static let identity: [[Double]] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    static let couplingMatrix: [[Double]] = [[0.5, -0.125, 0], [-0.125, 0.5, 0], [0, 0, 0.5]]
+
+    struct Update {
+        let force: [Double]
+        let candidate: HamptonNumericalDynamics.QuotientCandidate
+        let coupling: HamptonNumericalDynamics.CouplingProposal
+    }
+
+    static func update(coordinates: [String], previous: [Double],
+                       lane: HamptonQ2ELane, useful: Bool) throws -> Update {
+        guard coordinates.count == lanes.count, previous.count == lanes.count,
+              let index = lanes.firstIndex(of: lane) else {
+            throw HamptonNumericalDynamics.Failure.invalidInput("approach coordinates or lane")
+        }
+        let observed = useful ? 1.0 : 0.0
+        var target = previous
+        target[index] = observed
+        var innovation = [0.0, 0.0, 0.0]
+        var error = innovation
+        innovation[index] = observed
+        error[index] = previous[index]
+        let force = try HamptonNumericalDynamics.intelligenceForce(previous: previous,
+            target: target, potentialMatrix: identity, metricMatrix: identity, gain: 0.25)
+        // Domain policy: d = eta * (L I - E + F), with L/P/G = identity.
+        // Preserve the operation order used by existing v1 replay receipts.
+        let candidate = try HamptonNumericalDynamics.boundedQuotientCandidate(
+            coordinates: coordinates, previous: previous, innovation: zip(innovation, force).map(+),
+            learningMatrix: identity, error: error,
+            configuration: .init(learningRate: 0.25, deltaMax: 0.125,
+                target: target, potentialMatrix: identity, allowedIncrease: 0, maxBacktracks: 12))
+        let coupling = try HamptonNumericalDynamics.couple(candidate: candidate,
+            configuration: .init(sourceCoordinates: coordinates, destinationCoordinates: lanes.map(\.rawValue),
+                matrix: couplingMatrix, spectralNormBound: 0.625))
+        return Update(force: force, candidate: candidate, coupling: coupling)
+    }
+}
+
 struct HamptonQ2EStrategyEvidence: Codable, Equatable, Sendable {
     let helpful: Int
     let corrections: Int

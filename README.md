@@ -1,8 +1,12 @@
 # ARCHi
 
+> Publication note: references marked “local reference” are intentionally omitted from this curated snapshot. Their authored documents and receipts remain preserved in the main workspace; this page does not reproduce their evidence.
+
 ARCHi is a native companion for working with local models, source-linked memory and reviewed outcomes. Its memory map connects real records to their sources, versions, relationships and methods. Ask ARCHi and Work together use the same native owners; Liminal, Companion room and Arena express or inspect that state.
 
 **Status: supervised local alpha development.** The public repository is a code-review candidate, not a notarized app or beta release. Some artwork is withheld pending redistribution review. A compiled source snapshot is separate from the installed desktop and iPhone versions. [Current source ownership](docs/source-ownership.md) · [Delivery evidence and limits](docs/method-memory-integration-2026-10-02.md).
+
+**Active work:** Consolidation and desktop 1.0 plan (local reference). Preserve every feature and unique source; main desktop completion comes first. Unity and mobile development are paused, with their work retained.
 
 ## What is here
 
@@ -19,10 +23,10 @@ The desktop entry point is the existing `/Applications/ARCHi.app`. [Use the app,
 For the native target, use macOS 14+ and a Swift 6 toolchain:
 
 ```sh
-swift build --package-path desktop
+swift build --package-path desktop --scratch-path "/private/tmp/archi-desktop-build-$(id -u)"
 ```
 
-This compiles source without installing or launching. The guarded installer requires a qualified Unity helper and retains rollback; follow the [developer protocol](docs/developer-access-protocol.md#build-or-update-the-one-app). Missing artwork can still block artwork-dependent checks and full presentation reproduction.
+This compiles source without installing or launching, reusing the guarded builder's existing scratch location instead of recreating a second cache under Documents. The guarded installer requires a qualified Unity helper and retains rollback; follow the [developer protocol](docs/developer-access-protocol.md#build-or-update-the-one-app). Missing artwork can still block artwork-dependent checks and full presentation reproduction.
 
 For retained TypeScript source, use the pinned npm lock and Node 24:
 

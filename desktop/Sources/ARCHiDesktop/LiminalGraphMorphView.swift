@@ -23,6 +23,7 @@ struct LiminalGraphMorphSource {
     let growthByRecordID: [String: CompanionParticleScene.Growth]
     let preparedIDs: Set<String>
     let expression: KinLightExpression
+    var seedAppearance: CompanionParticleAppearance? = nil
     let onSelect: (String) -> Void
 
     private struct Key: Equatable {
@@ -46,7 +47,6 @@ struct LiminalGraphMorphSource {
     @State private var readyKey: Key?
     @State private var displayedProgress = 0.0
     @State private var presented = false
-    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         GeometryReader { proxy in
@@ -55,23 +55,42 @@ struct LiminalGraphMorphSource {
                 manifest: source.asset.manifestSHA256, finish: source.asset.finish?.digest,
                 viewport: proxy.size, visible: Set(nodes.map(\.id)), focus: focusIDs)
             ZStack(alignment: .bottomLeading) {
+                if let seedAppearance {
+                    // Preserve the chosen authored Seed beneath its record motes.
+                    // While Metal is ready, its completed frame owns the opacity.
+                    let shown = readyKey == key && prepared?.key == key ? displayedProgress
+                        : LiminalGraphMorph.boundedProgress(progress)
+                    seedAppearance.art(size: min(proxy.size.width, proxy.size.height), reduceMotion: reduceMotion)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .opacity(max(0, -shown))
+                }
                 if let prepared {
                     LiminalGraphMorphSurface(asset: source.asset, morph: prepared.morph, frame: prepared.frame,
                         nodes: nodes, edges: graph.edges, selectedID: selectedID, progress: progress,
                         seedColor: seedColor, reduceMotion: reduceMotion,
-                        isVisible: presented && scenePhase == .active && prepared.key == key,
+                        // ARCHi hosts this view in an AppKit NSHostingView, which
+                        // has no SwiftUI Scene to publish an active scenePhase.
+                        // Metal already checks its real window and occlusion.
+                        isVisible: presented && prepared.key == key,
                         ready: readyKey == key && prepared.key == key,
                         growthByRecordID: growthByRecordID, preparedIDs: preparedIDs,
                         expression: expression,
                         displayedProgress: displayedProgress,
-                        onDisplayedProgress: { displayedProgress = $0 },
-                        onAvailability: { ready in readyKey = ready ? prepared.key : nil }, onSelect: onSelect)
+                        onDisplayedProgress: {
+                            guard self.prepared?.key == key, prepared.key == key else { return }
+                            displayedProgress = LiminalGraphMorph.boundedProgress($0)
+                        },
+                        onAvailability: { ready in
+                            guard self.prepared?.key == key, prepared.key == key else { return }
+                            readyKey = ready ? key : nil
+                        }, onSelect: onSelect)
                         .opacity(prepared.key == key ? 1 : 0)
                         .animation(reduceMotion ? nil : .easeInOut(duration: 1.15), value: progress)
                 }
                 if prepared?.key != key || readyKey != key {
                     KnowledgeParticleView(field: field, nodes: nodes, selectedID: selectedID,
-                        spread: 1, pulses: false, reduceMotion: true, tint: seedColor.accent, expression: expression,
+                        spread: 1 + min(0, LiminalGraphMorph.boundedProgress(progress)),
+                        pulses: false, reduceMotion: true, tint: seedColor.accent, expression: expression,
                         preparedIDs: preparedIDs, focusIDs: focusIDs, growthByRecordID: growthByRecordID, onSelect: onSelect)
                     if failed || prepared?.key == key {
                         Text("Point form is not available yet. Your records remain in the map.")
@@ -138,7 +157,7 @@ struct LiminalGraphMorphSource {
 
     var body: some View {
         let points = morph.anchorPositions(asset: asset, frame: frame, progress: displayedProgress)
-        let weight = Double(LiminalGraphMorph.smoothstep(displayedProgress))
+        let weight = Double(abs(LiminalGraphMorph.signedSmoothstep(displayedProgress)))
         ZStack {
             LiminalMetalView(asset: asset, progress: LiminalGraphMorph.targetProgress,
                 reduceMotion: reduceMotion, isVisible: isVisible, seedColor: seedColor,

@@ -6,7 +6,7 @@ import XCTest
 /// Opt-in production Metal readback over the independently qualified package.
 /// The three records are synthetic; no profile, model or game is opened.
 final class LiminalGraphMorphGPUTests: XCTestCase {
-    @MainActor func testQualifiedParticlesMorphFromMapToExactBeastAndHideFilteredRecords() throws {
+    @MainActor func testQualifiedParticlesMorphFromSeedThroughMapToExactBeastAndHideFilteredRecords() throws {
         let environment = ProcessInfo.processInfo.environment
         guard let packagePath = environment["ARCHI_LIMINAL_MORPH_PACKAGE"],
               let outputPath = environment["ARCHI_LIMINAL_MORPH_OUTPUT"] else {
@@ -48,10 +48,13 @@ final class LiminalGraphMorphGPUTests: XCTestCase {
             captures.append(["name": name, "progress": progress, "pngSHA256": LiminalPointAsset.digest(data)])
             return data
         }
+        let seed = try capture("seed-record-motes", progress: -1, recipe: morph)
+        let seedMiddle = try capture("seed-map-midpoint", progress: -0.5, recipe: morph)
         let map = try capture("map", progress: 0, recipe: morph)
         let middle = try capture("midpoint", progress: 0.5, recipe: morph)
         let beast = try capture("beast", progress: 1, recipe: morph)
         XCTAssertNotEqual(map, middle); XCTAssertNotEqual(middle, beast); XCTAssertNotEqual(map, beast)
+        XCTAssertNotEqual(seed, seedMiddle); XCTAssertNotEqual(seedMiddle, map); XCTAssertNotEqual(seed, map)
         let ordinaryBeast = try LiminalMetalView.snapshotPNGData(asset: asset, progress: LiminalGraphMorph.targetProgress,
             seedColor: .original, inspection: true, detail: .low)
         XCTAssertEqual(beast, ordinaryBeast, "The endpoint must be the same finish-treated authored Beast, with no extra geometry")
@@ -63,27 +66,43 @@ final class LiminalGraphMorphGPUTests: XCTestCase {
             graphMorph: morph, graphMorphProgress: 0.5)
         XCTAssertNotEqual(middle, personalColor, "The existing personal color policy must still apply during morphing")
 
-        let rgba = try XCTUnwrap(SeedColorRendering.rgba(try XCTUnwrap(NSImage(data: map))))
-        XCTAssertEqual(rgba.width, 512); XCTAssertEqual(rgba.height, 512)
-        let positions = morph.anchorPositions(asset: asset, frame: source, progress: 0)
-        XCTAssertEqual(positions.count, graph.nodes.count)
-        for point in positions.values {
-            let x = Int(point.x.rounded()), y = Int(point.y.rounded())
-            let nearby = (-3...3).flatMap { dy in (-3...3).compactMap { dx -> UInt8? in
-                guard (0..<512).contains(x + dx), (0..<512).contains(y + dy) else { return nil }
-                return rgba.bytes[((y + dy) * 512 + x + dx) * 4 + 3]
-            } }
-            XCTAssertTrue(nearby.contains { $0 > 0 }, "Each selectable CPU anchor must coincide with rendered map particles")
+        for (progress, capture) in [(-1.0, seed), (-0.5, seedMiddle), (0.0, map), (0.5, middle), (1.0, beast)] {
+            let rgba = try XCTUnwrap(SeedColorRendering.rgba(try XCTUnwrap(NSImage(data: capture))))
+            XCTAssertEqual(rgba.width, 512); XCTAssertEqual(rgba.height, 512)
+            let positions = morph.anchorPositions(asset: asset, frame: source, progress: progress)
+            XCTAssertEqual(positions.count, graph.nodes.count)
+            for point in positions.values {
+                let x = Int(point.x.rounded()), y = Int(point.y.rounded())
+                let nearby = (-3...3).flatMap { dy in (-3...3).compactMap { dx -> UInt8? in
+                    guard (0..<512).contains(x + dx), (0..<512).contains(y + dy) else { return nil }
+                    return rgba.bytes[((y + dy) * 512 + x + dx) * 4 + 3]
+                } }
+                XCTAssertTrue(nearby.contains { $0 > 0 }, "Each CPU anchor must coincide with rendered particles at signed progress \(progress)")
+            }
         }
         let hidden = try capture("filtered-map", progress: 0, recipe: descriptor(visible: []))
         let hiddenRGBA = try XCTUnwrap(SeedColorRendering.rgba(try XCTUnwrap(NSImage(data: hidden))))
         XCTAssertTrue(stride(from: 3, to: hiddenRGBA.bytes.count, by: 4).allSatisfy { hiddenRGBA.bytes[$0] == 0 },
                       "Hidden mapped points and unbound artwork must not leak into the map endpoint")
-        XCTAssertEqual(asset.artIDs, artIDs)
-        XCTAssertEqual(LiminalPointAsset.digest(try asset.framePair(progress: LiminalGraphMorph.targetProgress, detail: .low).lower.data), sourceHash)
-        try JSONSerialization.data(withJSONObject: ["schema": "archi-graph-beast-morph-gpu/v1",
+        let hiddenSeed = try capture("filtered-seed-record-motes", progress: -1, recipe: descriptor(visible: []))
+        let hiddenSeedRGBA = try XCTUnwrap(SeedColorRendering.rgba(try XCTUnwrap(NSImage(data: hiddenSeed))))
+        XCTAssertTrue(stride(from: 3, to: hiddenSeedRGBA.bytes.count, by: 4).allSatisfy { hiddenSeedRGBA.bytes[$0] == 0 },
+                      "Unbound authored body points and hidden records must stay invisible at the Seed endpoint")
+        let artIDsPreserved = asset.artIDs == artIDs
+        let sourceUnchanged = LiminalPointAsset.digest(try asset.framePair(progress: LiminalGraphMorph.targetProgress, detail: .low).lower.data) == sourceHash
+        XCTAssertTrue(artIDsPreserved)
+        XCTAssertTrue(sourceUnchanged)
+        // XCTest assertions record failures without throwing. Preserve captures for
+        // diagnosis, but never emit a success receipt after any failed assertion.
+        let run = try XCTUnwrap(testRun, "A receipt requires the active XCTest run")
+        guard run.totalFailureCount == 0, artIDsPreserved, sourceUnchanged else {
+            throw NSError(domain: "ARCHi.LiminalGraphMorphGPU", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "GPU checks failed; captures retained without a success receipt."])
+        }
+        try JSONSerialization.data(withJSONObject: ["schema": "archi-seed-graph-beast-morph-gpu/v2",
             "manifestSHA256": manifest, "morphDigest": morph.digest, "sourceSampleSHA256": sourceHash,
-            "syntheticRecords": graph.nodes.count, "pointCount": source.pointCount, "artIDsPreserved": true, "sourceUnchanged": true,
+            "syntheticRecords": graph.nodes.count, "pointCount": source.pointCount,
+            "artIDsPreserved": artIDsPreserved, "sourceUnchanged": sourceUnchanged,
             "profileOpened": false, "modelCalls": 0, "captures": captures], options: [.prettyPrinted, .sortedKeys])
             .write(to: output.appendingPathComponent("receipt.json"), options: .withoutOverwriting)
     }

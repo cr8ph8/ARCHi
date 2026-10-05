@@ -8,10 +8,8 @@ enum HamptonARC3NumericalControl {
     static let version = "hampton-arc3-numerical-control/v1"
     static let coordinateSchema = "hampton-arc3-approach-usefulness/v1"
     static let coordinates = ["retainARC3Usefulness", "expandARC3Usefulness", "repairARC3Usefulness"]
-    static let lanes: [HamptonQ2ELane] = [.retain, .expand, .repair]
-    static let initial = [0.5, 0.5, 0.5]
-    static let identity: [[Double]] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-    static let couplingMatrix: [[Double]] = [[0.5, -0.125, 0], [-0.125, 0.5, 0], [0, 0, 0.5]]
+    static let lanes = HamptonApproachNumericalPolicy.lanes
+    static let initial = HamptonApproachNumericalPolicy.initial
 
     struct Step: Codable, Equatable, Sendable {
         let attemptID: String
@@ -41,23 +39,10 @@ enum HamptonARC3NumericalControl {
         let bindings = evidence.bindings.sorted { $0.baseDispatches < $1.baseDispatches }
         do {
             for binding in bindings {
-                guard let useful = binding.useful, let index = lanes.firstIndex(of: binding.attributedLane) else { continue }
-                let observed = useful ? 1.0 : 0.0
-                var target = state
-                target[index] = observed
-                var innovation = [0.0, 0.0, 0.0]
-                var error = innovation
-                innovation[index] = observed; error[index] = state[index]
-                let force = try HamptonNumericalDynamics.intelligenceForce(previous: state,
-                    target: target, potentialMatrix: identity, metricMatrix: identity, gain: 0.25)
-                let candidate = try HamptonNumericalDynamics.boundedQuotientCandidate(
-                    coordinates: coordinates, previous: state, innovation: zip(innovation, force).map(+),
-                    learningMatrix: identity, error: error,
-                    configuration: .init(learningRate: 0.25, deltaMax: 0.125,
-                        target: target, potentialMatrix: identity, allowedIncrease: 0, maxBacktracks: 12))
-                let coupling = try HamptonNumericalDynamics.couple(candidate: candidate,
-                    configuration: .init(sourceCoordinates: coordinates, destinationCoordinates: lanes.map(\.rawValue),
-                        matrix: couplingMatrix, spectralNormBound: 0.625))
+                guard let useful = binding.useful, lanes.contains(binding.attributedLane) else { continue }
+                let update = try HamptonApproachNumericalPolicy.update(coordinates: coordinates,
+                    previous: state, lane: binding.attributedLane, useful: useful)
+                let force = update.force, candidate = update.candidate, coupling = update.coupling
                 for (offset, lane) in lanes.enumerated() {
                     adjustments[lane.rawValue, default: 0] += coupling.destinationDelta[offset]
                 }

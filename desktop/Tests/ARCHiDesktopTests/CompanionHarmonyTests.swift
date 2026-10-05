@@ -170,6 +170,40 @@ final class CompanionHarmonyTests: XCTestCase {
         }
     }
 
+    func testRecordNotesMatchCataloguePitchWithBoundedWAVAndSoftSilentEnds() throws {
+        let candidates = Set(CompanionGraphKind.allCases.map { CompanionResonance.forKind($0).midiNote })
+        for kind in CompanionGraphKind.allCases {
+            let data = try XCTUnwrap(HarmonySynth.resonanceWAV(for: kind))
+            XCTAssertEqual(data, HarmonySynth.resonanceWAV(for: kind))
+            let audio = try decode(data)
+            XCTAssertEqual(audio.sampleRate, HarmonySynth.sampleRate)
+            XCTAssertEqual(audio.channels, 1)
+            XCTAssertEqual(audio.bitsPerSample, 16)
+            XCTAssertLessThan(data.count, 27_000)
+            let duration = Double(audio.samples.count) / Double(audio.sampleRate)
+            XCTAssertGreaterThan(duration, 0.4)
+            XCTAssertLessThan(duration, 0.6)
+            let peak = audio.samples.map { abs(Double($0)) / 32767 }.max() ?? 0
+            XCTAssertGreaterThan(peak, 0.1)
+            XCTAssertLessThanOrEqual(peak, HarmonySynth.maximumAmplitude + 1 / 32767.0)
+            let lead = frames(HarmonySynth.leadSilenceDuration)
+            let count = frames(HarmonySynth.resonanceNoteDuration)
+            XCTAssertTrue(audio.samples.prefix(lead + 1).allSatisfy { $0 == 0 })
+            XCTAssertTrue(audio.samples[(lead + count - 1)...].allSatisfy { $0 == 0 })
+            let body = Array(audio.samples[(lead + frames(0.08))..<(lead + frames(0.24))])
+            XCTAssertLessThan(rms(Array(audio.samples[lead..<(lead + frames(0.004))])), rms(body) * 0.15)
+            XCTAssertLessThan(rms(Array(audio.samples[(lead + count - frames(0.004))..<(lead + count)])), rms(body) * 0.03)
+            let powers = try candidates.map { note in
+                (note, spectralPower(body, frequency: try XCTUnwrap(HarmonySynth.frequency(forMIDINote: note)),
+                                     sampleRate: audio.sampleRate))
+            }
+            let expected = CompanionResonance.forKind(kind).midiNote
+            XCTAssertEqual(powers.max(by: { $0.1 < $1.1 })?.0, expected)
+            let expectedPower = try XCTUnwrap(powers.first { $0.0 == expected }?.1)
+            XCTAssertGreaterThan(expectedPower, (powers.filter { $0.0 != expected }.map(\.1).max() ?? 0) * 2)
+        }
+    }
+
     func testExportRequestedHarmonySamples() throws {
         guard let path = ProcessInfo.processInfo.environment["ARCHI_HARMONY_EXPORT_DIR"], !path.isEmpty else {
             throw XCTSkip("Set ARCHI_HARMONY_EXPORT_DIR to retain local listening samples")

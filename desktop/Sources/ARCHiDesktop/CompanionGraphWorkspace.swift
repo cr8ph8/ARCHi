@@ -115,7 +115,8 @@ struct CompanionGraphWorkspace: View {
                 // Keep this host mounted while Ask opens or closes, preserving
                 // map selection, filters and focus. The store owns all requests.
                 TimelineView(.periodic(from: .now, by: 2)) { context in
-                    let particleScene = includesActivity ? nil : store.companionParticleScene(at: context.date)
+                    let companionScene = store.companionParticleScene(at: context.date)
+                    let particleScene = includesActivity ? nil : companionScene
                     let snapshot = particleScene?.graph ?? (includesActivity ? store.companionGraphSnapshot(at: context.date)
                         : store.memoryMapSnapshot(at: context.date))
                     CompanionGraphView(snapshot: snapshot,
@@ -157,6 +158,10 @@ struct CompanionGraphWorkspace: View {
                         selectionID: store.selectedGraphNodeID,
                         onSelectionChange: { id in
                             store.selectGraphRecord(id, in: snapshot, particleScene: particleScene)
+                        }, onPlayNote: { node in
+                            _ = store.previewResonance(nodeID: node.id, in: snapshot, particleScene: particleScene, capturedOriginDigest: companionScene?.originDigest)
+                        }, canPlayNote: { node in
+                            store.canPreviewResonance(nodeID: node.id, in: snapshot, particleScene: particleScene, capturedOriginDigest: companionScene?.originDigest)
                         })
                         .id(ObjectIdentifier(store.readingSources))
                 }

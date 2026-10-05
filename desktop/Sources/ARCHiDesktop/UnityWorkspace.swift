@@ -59,6 +59,7 @@ struct UnityWorkspace: View {
                                     detail: "Return to your task to review progress or stop it.",
                                     icon: "square.grid.3x3", identifier: "arena.return-to-arc") { store.openArena(.arc) }
                             }
+                            QiMonLocalGameCard()
                             arenaCard
                             if connection.isSharing { sessionStatus }
                             if connection.isSharing { WorldOutcomeCard(connection: connection) }

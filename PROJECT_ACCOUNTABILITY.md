@@ -1,3 +1,13 @@
+## 5 October 2026 — Consolidated source, bounded policy and traceable builds
+
+The desktop remains the active product target. The reviewed source cohort aligns memory/Seed/QiMon presentation and resonance, retains local play entry points, and shares one pure numerical approach policy across document, reading and ARC3 adapters. Domain records still own evidence, admission and replay. Lean remains optional developer assurance; Jev remains a proposed typed-choice provider behind existing request and admission owners. Neither is an installed dependency.
+
+The guarded builder records candidate, source and payload identities. Qualification of the existing v008 base plus finish/light children is explicit; unknown files, links and invalid child packages still fail. Fresh source export now requires the shared Apple package and the recipe's declared helper dependencies. A fresh whole-workspace export still has 79 unreviewed asset-kind findings; this change updates only reviewed code and documentation in the existing curated source draft.
+
+On 5 October, the source-reconciliation pass ran 44 packaging fixture checks and 28 export/candidate checks successfully. These include simulated compiler/signer fixtures and are not installed-app tests. Real native Swift compilation, stage packaging and strict/deep signing also passed for candidate `e230294b-e5ad-4932-bdf7-65ef32c7efc6`, build `356.65.66`. The temporary candidate was removed after retaining the external signed inventory. No installation, launch, profile mutation or model/puzzle run is claimed by this pass. This local build does not qualify artwork omitted from the public snapshot.
+
+The scoped source comparison records 1,024 exact matches, four approved resource-pin transformations and zero unexplained differences. Historical tests and receipts retain their own scope. Populated desktop acceptance, sustained visible performance, independent backup, complete donor migration coverage, notarization and another-Mac delivery remain open. This source consolidation is not desktop 1.0 or a complete security proof.
+
 ## 2 October 2026 — Method-memory upgrade installed and reopened
 
 `R02-METHOD-MEMORY-DELIVERY` · **INSTALLED_FOCUSED_NATIVE_READBACK** · [Guide](docs/method-memory-integration-2026-10-02.md) · [Delivery evidence](docs/accountability/evidence/r02-method-memory-installed-2026-10-02.json)

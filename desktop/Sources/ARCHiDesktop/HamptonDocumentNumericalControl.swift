@@ -8,12 +8,8 @@ enum HamptonDocumentNumericalControl {
     static let version = "hampton-document-numerical-control/v1"
     static let coordinateSchema = "hampton-approach-usefulness/v1"
     static let coordinates = ["retainUsefulness", "expandUsefulness", "repairUsefulness"]
-    static let lanes: [HamptonQ2ELane] = [.retain, .expand, .repair]
-    static let initial = [0.5, 0.5, 0.5]
-    static let identity: [[Double]] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-    // Authored v1 domain configuration. Positive evidence for retain/expand
-    // modestly lowers the competing preference. This is not a learned causal M.
-    static let couplingMatrix: [[Double]] = [[0.5, -0.125, 0], [-0.125, 0.5, 0], [0, 0, 0.5]]
+    static let lanes = HamptonApproachNumericalPolicy.lanes
+    static let initial = HamptonApproachNumericalPolicy.initial
 
     struct Step: Codable, Equatable, Sendable {
         let recordID: String
@@ -49,30 +45,11 @@ enum HamptonDocumentNumericalControl {
                 // An external reply cannot establish that this local approach
                 // helped merely because a historical row carries a lane label.
                 guard binding.provider == AssistantProvider.qwen.rawValue,
-                      let lane = binding.attributedLane, let index = lanes.firstIndex(of: lane),
+                      let lane = binding.attributedLane, lanes.contains(lane),
                       binding.disposition != .unknown else { continue }
-                let observed = binding.disposition == .support ? 1.0 : 0.0
-                var target = state
-                target[index] = observed
-                var innovation = [0.0, 0.0, 0.0]
-                var error = innovation
-                innovation[index] = observed
-                error[index] = state[index]
-                // The manuscript keeps the innovation and force terms distinct.
-                // This declared domain adapter combines them before the bounded
-                // finite step: d = eta * (L I - E + F). G=P=identity here.
-                let force = try HamptonNumericalDynamics.intelligenceForce(previous: state,
-                    target: target, potentialMatrix: identity, metricMatrix: identity, gain: 0.25)
-                let drivenInnovation = zip(innovation, force).map(+)
-                let candidate = try HamptonNumericalDynamics.boundedQuotientCandidate(
-                    coordinates: coordinates, previous: state, innovation: drivenInnovation,
-                    learningMatrix: identity, error: error,
-                    configuration: .init(learningRate: 0.25, deltaMax: 0.125,
-                        target: target, potentialMatrix: identity, allowedIncrease: 0, maxBacktracks: 12))
-                let coupling = try HamptonNumericalDynamics.couple(candidate: candidate,
-                    configuration: .init(sourceCoordinates: coordinates,
-                        destinationCoordinates: lanes.map(\.rawValue), matrix: couplingMatrix,
-                        spectralNormBound: 0.625))
+                let update = try HamptonApproachNumericalPolicy.update(coordinates: coordinates,
+                    previous: state, lane: lane, useful: binding.disposition == .support)
+                let force = update.force, candidate = update.candidate, coupling = update.coupling
                 for (offset, destination) in lanes.enumerated() {
                     adjustments[destination.rawValue, default: 0] += coupling.destinationDelta[offset]
                 }

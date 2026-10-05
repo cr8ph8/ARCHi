@@ -50,7 +50,9 @@ struct LiminalMetalView: NSViewRepresentable, @MainActor Animatable {
     }
 
     func makeNSView(context: Context) -> LiminalMetalSurface {
-        let surface = LiminalMetalSurface(frame: .zero)
+        // Select our designated MTKView initializer explicitly. The inherited
+        // init(frame:) bypasses the pipeline and delegate setup below.
+        let surface = LiminalMetalSurface(frame: .zero, device: MTLCreateSystemDefaultDevice())
         surface.configure(self)
         return surface
     }
@@ -75,6 +77,7 @@ struct LiminalMetalView: NSViewRepresentable, @MainActor Animatable {
         let buffers = try renderer.buffers(pair, structure: graphMorph == nil ? structure : nil, asset: asset,
                                            elapsed: reduceMotion || inspection ? nil : structureElapsed)
         let mapBuffer = try graphMorph.map { try renderer.mapBuffer($0.mapTargets(count: pair.lower.pointCount)) }
+        let seedMapBuffer = try graphMorph.map { try renderer.mapBuffer($0.seedTargets(count: pair.lower.pointCount)) }
         let description = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm,
             width: 512, height: 512, mipmapped: false)
         description.usage = [.renderTarget]
@@ -94,7 +97,7 @@ struct LiminalMetalView: NSViewRepresentable, @MainActor Animatable {
                             light: .sample(mode: lightMode, unixTime: unixTime, reduced: reduceMotion || inspection),
                             phase: LiminalSurfaceLight.phase(unixTime: unixTime, moving: !reduceMotion && !inspection && lightMode != .rest),
                             count: pair.lower.pointCount, graphMorphProgress: graphMorph == nil ? nil : graphMorphProgress),
-            seedTexture: seedTexture, mapBuffer: mapBuffer)
+            seedTexture: seedTexture, mapBuffer: mapBuffer, seedMapBuffer: seedMapBuffer)
         let completed = DispatchSemaphore(value: 0)
         command.addCompletedHandler { _ in completed.signal() }
         command.commit()
@@ -172,7 +175,7 @@ private struct LiminalMetalPipeline {
                 centerAndScale = SIMD4(framing.center, 2 / framing.span)
                 lightCue = .zero; displayStyle = .zero
                 intensityAndPadding = SIMD4(1, 0, 1, 0)
-                graphMorph = SIMD4(1, LiminalGraphMorph.smoothstep(progress), 0, 0)
+                graphMorph = SIMD4(1, LiminalGraphMorph.signedSmoothstep(progress), 0, 0)
             }
         }
     }
@@ -248,8 +251,10 @@ private struct LiminalMetalPipeline {
         return buffer
     }
     func encode(command: MTLCommandBuffer, pass: MTLRenderPassDescriptor, buffers: Buffers,
-                count: Int, uniforms: Uniforms, seedTexture: MTLTexture?, mapBuffer: MTLBuffer? = nil) throws {
-        guard uniforms.graphMorph.x == 0 || (mapBuffer?.length ?? 0) >= count * MemoryLayout<SIMD4<Float>>.stride else {
+                count: Int, uniforms: Uniforms, seedTexture: MTLTexture?, mapBuffer: MTLBuffer? = nil,
+                seedMapBuffer: MTLBuffer? = nil) throws {
+        guard uniforms.graphMorph.x == 0 || ((mapBuffer?.length ?? 0) >= count * MemoryLayout<SIMD4<Float>>.stride
+            && (seedMapBuffer?.length ?? 0) >= count * MemoryLayout<SIMD4<Float>>.stride) else {
             throw LiminalMetalFailure.unavailable
         }
         guard let encoder = command.makeRenderCommandEncoder(descriptor: pass) else { throw LiminalMetalFailure.unavailable }
@@ -261,6 +266,7 @@ private struct LiminalMetalPipeline {
         // A valid buffer is bound even on the unchanged path; the shader reads
         // it only when the explicit morph uniform is enabled.
         encoder.setVertexBuffer(mapBuffer ?? buffers.lower, offset: 0, index: 6)
+        encoder.setVertexBuffer(seedMapBuffer ?? buffers.lower, offset: 0, index: 7)
         var copy = uniforms
         if copy.displayStyle.x > 0.5 {
             copy.displayStyle.y = 1
@@ -320,7 +326,7 @@ private struct LiminalMetalPipeline {
     vertex Raster liminal_vertex(uint vertexID [[vertex_id]], uint pointID [[instance_id]],
         const device Point *a [[buffer(0)]], const device Point *b [[buffer(1)]], constant Uniforms &u [[buffer(2)]],
         const device uint *selected [[buffer(3)]], const device Finish *finish [[buffer(4)]],
-        const device float4 *mapTargets [[buffer(6)]]) {
+        const device float4 *mapTargets [[buffer(6)]], const device float4 *seedTargets [[buffer(7)]]) {
         const float2 corners[6] = {float2(-1,-1),float2(1,-1),float2(-1,1),float2(-1,1),float2(1,-1),float2(1,1)};
         float t = u.viewportFraction.z;
         float3 p = mix(float3(a[pointID].p),float3(b[pointID].p),t);
@@ -354,10 +360,11 @@ private struct LiminalMetalPipeline {
         if (u.graphMorph.x > 0.5f) {
             float4 target = mapTargets[pointID];
             if (target.z > 0.5f) {
-                if (u.graphMorph.y <= 0.0f) center = target.xy;
+                if (u.graphMorph.y < 0.0f) center = mix(target.xy,seedTargets[pointID].xy,-u.graphMorph.y);
+                else if (u.graphMorph.y == 0.0f) center = target.xy;
                 else if (u.graphMorph.y < 1.0f) center = mix(target.xy,center,u.graphMorph.y);
             }
-            else morphOpacity = target.z < -0.5f ? 0.0f : u.graphMorph.y;
+            else morphOpacity = target.z < -0.5f ? 0.0f : max(0.0f,u.graphMorph.y);
         }
         float floorRadius = u.displayStyle.x > 0.5f ? 1.25f*u.displayStyle.z : (u.finishWeights.w > 0.5f ? 0.8f : 0.5f);
         float radiusPixels = max(floorRadius,radius*u.centerScale.w*side*0.5f);
@@ -453,6 +460,8 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
     private var anchors: [Anchor] = []
     private var mapBuffer: MTLBuffer?
     private var mapTargets: [SIMD4<Float>] = []
+    private var seedMapBuffer: MTLBuffer?
+    private var seedMapTargets: [SIMD4<Float>] = []
     private var mapBufferKey: String?
     private struct DisplayedSelection {
         let anchors: [Anchor]
@@ -461,6 +470,7 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
         let morphDigest: String?
         let morphAmount: Float?
         let targets: [SIMD4<Float>]
+        let seedTargets: [SIMD4<Float>]
     }
     private var displayedSelection: DisplayedSelection?
     private var reportedMorphAvailability: (key: String, ready: Bool)?
@@ -521,7 +531,7 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
             fallbackLoading?.cancel(); fallbackLoading = nil; fallbackKey = nil
             fallbackImage.image = nil; fallbackImage.isHidden = true
             frameNumbers = nil; anchors = []; buffers = nil; detail = .medium; slowFrames = 0
-            mapBuffer = nil; mapTargets = []; mapBufferKey = nil; displayedSelection = nil
+            mapBuffer = nil; mapTargets = []; seedMapBuffer = nil; seedMapTargets = []; mapBufferKey = nil; displayedSelection = nil
         }
         if configuration?.selectableIDs != next.selectableIDs || configuration?.structure != next.structure
             || configuration?.graphMorph?.digest != next.graphMorph?.digest {
@@ -529,7 +539,7 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
             displayedSelection = nil
             if configuration?.graphMorph?.digest != next.graphMorph?.digest {
                 reportedMorphProgress = nil
-                mapBuffer = nil; mapTargets = []; mapBufferKey = nil
+                mapBuffer = nil; mapTargets = []; seedMapBuffer = nil; seedMapTargets = []; mapBufferKey = nil
                 buffers = nil; frameNumbers = nil
                 clearSurface()
             }
@@ -554,7 +564,7 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
     }
     func stop() {
         isPaused = true; loading?.cancel(); loading = nil; frameNumbers = nil; anchors = []; buffers = nil
-        mapBuffer = nil; mapTargets = []; mapBufferKey = nil; displayedSelection = nil
+        mapBuffer = nil; mapTargets = []; seedMapBuffer = nil; seedMapTargets = []; mapBufferKey = nil; displayedSelection = nil
         reportedMorphAvailability = nil
         reportedMorphProgress = nil
         fallbackLoading?.cancel(); fallbackLoading = nil; fallbackKey = nil; fallbackImage.image = nil
@@ -686,7 +696,10 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
                     let mapKey = "\(morph.digest):\(frames.lower.pointCount)"
                     if self.mapBufferKey != mapKey {
                         let targets = morph.mapTargets(count: frames.lower.pointCount)
+                        let seedTargets = morph.seedTargets(count: frames.lower.pointCount)
                         self.mapBuffer = try pipeline.mapBuffer(targets)
+                        self.seedMapBuffer = try pipeline.mapBuffer(seedTargets)
+                        self.seedMapTargets = seedTargets
                         self.mapTargets = targets; self.mapBufferKey = mapKey
                     }
                 }
@@ -737,15 +750,17 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
             graphMorphProgress: c.graphMorph == nil ? nil : c.graphMorphProgress)
         do {
             try pipeline.encode(command: command, pass: pass, buffers: buffers, count: pointCount,
-                uniforms: uniforms, seedTexture: seedTexture, mapBuffer: c.graphMorph == nil ? nil : mapBuffer)
+                uniforms: uniforms, seedTexture: seedTexture, mapBuffer: c.graphMorph == nil ? nil : mapBuffer,
+                seedMapBuffer: c.graphMorph == nil ? nil : seedMapBuffer)
         } catch {
             failedKey = key; anchors = []; self.buffers = nil
             clearSurface(); updateVisibility(); return
         }
         let selection = DisplayedSelection(anchors: anchors, fraction: fraction, centerAndScale: uniforms.centerAndScale,
             morphDigest: c.graphMorph?.digest, morphAmount: c.graphMorph == nil ? nil : uniforms.graphMorph.y,
-            targets: c.graphMorph == nil ? [] : mapTargets)
-        let renderedMorphProgress = c.graphMorphProgress.isFinite ? min(1, max(0, c.graphMorphProgress)) : 0
+            targets: c.graphMorph == nil ? [] : mapTargets,
+            seedTargets: c.graphMorph == nil ? [] : seedMapTargets)
+        let renderedMorphProgress = LiminalGraphMorph.boundedProgress(c.graphMorphProgress)
         command.present(drawable)
         command.addCompletedHandler { [weak self] buffer in
             let duration = buffer.gpuEndTime - buffer.gpuStartTime
@@ -818,7 +833,13 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
                 guard displayed.targets.indices.contains(anchor.rank) else { continue }
                 let target = displayed.targets[anchor.rank]
                 guard target.z > 0.5 else { continue }
-                clip = SIMD2(target.x, target.y) + (clip - SIMD2(target.x, target.y)) * amount
+                if amount < 0 {
+                    guard displayed.seedTargets.indices.contains(anchor.rank) else { continue }
+                    let seed = displayed.seedTargets[anchor.rank]
+                    clip = SIMD2(target.x, target.y) * (1 + amount) - SIMD2(seed.x, seed.y) * amount
+                } else {
+                    clip = SIMD2(target.x, target.y) + (clip - SIMD2(target.x, target.y)) * amount
+                }
             }
             let x = bounds.midX + CGFloat(clip.x) * bounds.width / 2
             let y = bounds.midY + CGFloat(clip.y) * bounds.height / 2

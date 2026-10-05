@@ -1,5 +1,7 @@
 # One authored ARCHi source
 
+> Publication note: references marked “local reference” are intentionally omitted from this curated snapshot. Their authored documents and receipts remain preserved in the main workspace; this page does not reproduce their evidence.
+
 The main ARCHi workspace is the source of changes. The curated GitHub checkout is an outbound publication copy, not a second place to develop features. The native app continues to own profile identity, evidence, memory and reviewed outcomes. WikiOS, Unity and future device panels use those owners through explicit contracts.
 
 ## Local workflow
@@ -27,8 +29,14 @@ These are preservation roles, not six shipping products. A directory may contain
 
 ## Current consolidation
 
+**5 October 2026:** the single desktop 1.0 plan (local reference) and feature register (local reference) now govern consolidation sequencing. The October checkpoint preserves selected text source locally; it is not a complete independent backup. The current reconciliation receipt (local reference) records 38 exact code promotions into the local outbound checkout: 1,024 matching files, four approved resource-pin pairs and zero unexplained scoped differences. Its 1,802-row manifest covers every staged/tracked file except itself. This defines the reviewed source cohort. The developer ledger records its subsequent delivery status; the earlier receipt retains the pre-publication state. Earlier parity receipts remain historical. Preserve paused Unity/mobile work and all unique donor mechanisms. No feature retirement is authorized by a missing runtime caller alone.
+
+### Historical 2 October reconciliation
+
 The 2 October reconciliation brings publication's memory/evidence/method flow back into the main source, preserves the main source's Liminal structure/finish/light and WikiOS handoff, and promotes reviewed implementation back through the one existing draft. Native and Unity protocol changes travel together. Original authored and sanitized publication assets retain their own verified literal hashes.
 
 Desktop R1 was relocated with `git worktree move` and locked as a donor archive after complete file/state preservation checks. A removed temporary-worktree registration referred to an already absent directory. Its branch and commits were retained. No live profile, original art, R1 repository or unique branch was deleted. The installed desktop app and physical phone are separate delivery gates; this source cleanup does not replace them.
 
 See [contribution rules](../CONTRIBUTING.md), [security boundaries](../SECURITY.md), [native authority](native-authority-and-lineage.md), and the developer ledger for actual checks and remaining work.
+
+The fresh-export allowlist now includes the shared Apple package and explicit native packaging helpers. Its bounded build-recipe dependency check rejects an omitted helper rather than exporting an incomplete recipe. This is not dynamic dependency resolution or blanket asset approval: the fresh main export still reports 79 unreviewed file-kind findings. Promote only the reviewed code cohort into the existing curated publication; retain its qualified asset transformations.

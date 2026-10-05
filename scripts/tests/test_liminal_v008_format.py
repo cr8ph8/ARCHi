@@ -1,8 +1,10 @@
 """Synthetic small format fixtures; never production v008 or Houdini evidence."""
 import array
+from contextlib import contextmanager
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import struct
 import sys
 import tempfile
@@ -13,6 +15,8 @@ SCRIPT = Path(__file__).resolve().parents[2]/"script"
 sys.path.insert(0, str(SCRIPT))
 import liminal_v008_validate as fmt
 import liminal_v008_export as exporter
+import package_liminal_finish as finish
+import package_liminal_v008 as packager
 
 
 def comparison(runtime_count=200000):
@@ -158,6 +162,85 @@ class LiminalFormatTests(unittest.TestCase):
             (root/"manifest.json").write_text(json.dumps(manifest))
             with self.assertRaisesRegex(fmt.InvalidAsset, "pixels"):
                 fmt.validate_package(root)
+
+    @contextmanager
+    def assembled_fixture(self, qualified_images=False):
+        """Small base and real finish validation with a process-local synthetic pin."""
+        ids = fmt.ranked_ids(8, 4)
+        with tempfile.TemporaryDirectory() as directory, mock.patch.multiple(fmt, COUNT=8, RUNTIME_COUNT=4), \
+                mock.patch.object(fmt, "ranked_ids", return_value=ids), mock.patch.object(finish, "COUNT", 4):
+            root = Path(directory) / "source"; root.mkdir()
+            manifest = self.fixture(root, ids)
+            if qualified_images:
+                manifest["endpointImages"] = exporter.endpoint_images(root, manifest["bounds"], manifest["frames"], manifest["master"])
+                (root / "manifest.json").write_text(json.dumps(manifest))
+            child = root / "finish-v11"; child.mkdir()
+            (child / "annotations.bin").write_bytes(struct.pack("<3fI", 1, 0, 0, 1) * 4)
+            data = {**finish.DISPLAY_METADATA, "schemaVersion": 1, "revision": finish.REVISION,
+                    "sourceManifestSHA256": fmt.sha256(root / "manifest.json"),
+                    "lodSHA256": manifest["lod"]["ids"]["sha256"], "blenderSHA256": "c" * 64,
+                    "pointCount": 4, "stride": finish.STRIDE,
+                    "annotations": fmt.file_ref(child / "annotations.bin", child)}
+            (child / "manifest.json").write_text(json.dumps(data))
+            with mock.patch.object(finish, "EXPECTED_MANIFEST_SHA256", fmt.sha256(child / "manifest.json")):
+                yield root
+
+    def test_assembled_finish_is_explicit_and_base_corruption_still_rejected(self):
+        with self.assembled_fixture() as root:
+            with self.assertRaisesRegex(fmt.InvalidAsset, "unexpected files"):
+                fmt.validate_package(root)
+            self.assertEqual(fmt.validate_package(root, allow_finish=True)["status"], "passed")
+            with self.assertRaisesRegex(fmt.InvalidAsset, "requires explicit finish"):
+                fmt.validate_package(root, allow_light=True)
+            with (root / "endpoints.bin").open("r+b") as stream:
+                stream.write(b"changed")
+            with self.assertRaisesRegex(fmt.InvalidAsset, "digest mismatch"):
+                fmt.validate_package(root, allow_finish=True)
+
+    def test_assembled_opt_in_rejects_altered_unknown_and_linked_children(self):
+        for mutation in ("manifest", "annotations", "extra-file", "empty-directory", "child-link", "file-link", "unselected-light"):
+            with self.subTest(mutation=mutation), self.assembled_fixture() as root:
+                child = root / "finish-v11"
+                if mutation in ("manifest", "annotations"):
+                    path = child / ("manifest.json" if mutation == "manifest" else "annotations.bin")
+                    path.write_bytes(path.read_bytes() + b"changed")
+                elif mutation == "extra-file":
+                    (root / "unknown.bin").write_bytes(b"preserve")
+                elif mutation == "empty-directory":
+                    (root / "unknown-child").mkdir()
+                elif mutation in ("child-link", "file-link"):
+                    path = child if mutation == "child-link" else child / "annotations.bin"
+                    outside = root.parent / "retained"
+                    path.rename(outside); path.symlink_to(outside)
+                else:
+                    (root / "light-v12").mkdir()
+                    (root / "light-v12/manifest.json").write_text("{}")
+                with self.assertRaises(ValueError):
+                    fmt.validate_package(root, allow_finish=True)
+
+    def test_assembled_packaging_preserves_bytes_and_stripped_unity_base(self):
+        with self.assembled_fixture(qualified_images=True) as source:
+            before = {p.relative_to(source): p.read_bytes() for p in source.rglob("*") if p.is_file()}
+            qualification = source.parent / "qualification.json"
+            qualification.write_text(json.dumps({"schemaVersion": 1, "assetID": "liminal-v008",
+                "manifestSHA256": fmt.sha256(source / "manifest.json"), "sourceCooked": True,
+                "nativeEndpointsPassed": True, "unityEndpointsPassed": True, "installedWalkthroughPassed": False}))
+            native, unity = source.parent / "native", source.parent / "unity"
+            shutil.copytree(source, unity / "LiminalV008", ignore=shutil.ignore_patterns("finish-v11"))
+            result = packager.package(source, qualification, native, unity, allow_finish=True)
+            self.assertFalse(result["installedWalkthroughPassed"])
+            self.assertEqual(before, {p.relative_to(source): p.read_bytes() for p in source.rglob("*") if p.is_file()})
+            for name, data in before.items():
+                self.assertEqual((native / "LiminalV008" / name).read_bytes(), data)
+                if name.parts[0] != "finish-v11":
+                    self.assertEqual((unity / "LiminalV008" / name).read_bytes(), data)
+            # The existing child packager completes the deliberately stripped helper.
+            finish.package_finish(source / "finish-v11", source, native, unity)
+            for name, data in before.items():
+                self.assertEqual((unity / "LiminalV008" / name).read_bytes(), data)
+            (native / "LiminalV008/finish-v11/annotations.bin").write_bytes(b"altered")
+            with self.assertRaises(ValueError):
+                packager.package(source, qualification, native, unity, allow_finish=True)
 
 
 if __name__ == "__main__":

@@ -234,6 +234,14 @@ enum HamptonNumericalDynamics {
         let (peak, length) = normParts(vector)
         guard peak > 0, peak > limit / length else { return (vector, 1) }
         let scale = (limit / peak) / length
+        // The ratio can underflow even when the capped vector is representable.
+        // Normalize first in that case; retain ordinary arithmetic so existing
+        // domain receipts keep their exact replay values. normScale records the
+        // rounded ratio and can legitimately be zero for a nonzero capped step.
+        if limit > 0, scale < Double.leastNormalMagnitude {
+            let radius = limit / length
+            return (vector.map { ($0 / peak) * radius }, scale)
+        }
         return (vector.map { $0 * scale }, scale)
     }
 
@@ -247,7 +255,9 @@ enum HamptonNumericalDynamics {
                 guard abs(left - right) <= 1e-12 + 1e-10 * max(abs(left), abs(right)) else {
                     throw Failure.invalidInput("asymmetric \(name)")
                 }
-                matrix[i][j] = left * 0.5 + right * 0.5
+                // Halving the smallest equal subnormal entries erases them.
+                // An already symmetric entry needs no averaging at all.
+                matrix[i][j] = left == right ? left : left * 0.5 + right * 0.5
             }
         }
         var factor = Array(repeating: Array(repeating: 0.0, count: count), count: count)
@@ -271,6 +281,13 @@ enum HamptonNumericalDynamics {
     private static func potential(_ vector: [Double], target: [Double], factor: [[Double]]) throws -> Double {
         let displacement = try zip(vector, target).map { try finite($0 - $1, "potential displacement") }
         let transformed = try multiply(transpose(factor), displacement)
+        let (peak, length) = normParts(transformed)
+        if peak > 0, peak < sqrt(Double.leastNormalMagnitude) {
+            // Sum scaled squares before restoring magnitude. Individually
+            // rounded half-squares can all be zero while their sum is a
+            // representable subnormal. Ordinary receipt arithmetic is unchanged.
+            return try finite(peak * (peak * (0.5 * length * length)), "potential sum")
+        }
         var result = 0.0
         for value in transformed {
             result = try finite(result + finite((value * 0.5) * value, "potential square"), "potential sum")

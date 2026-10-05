@@ -98,4 +98,40 @@ final class HamptonNumericalDynamicsTests: XCTestCase {
         XCTAssertThrowsError(try Dynamics.boundedQuotientCandidate(coordinates: ["support"], previous: [0.5],
             innovation: [Double.greatestFiniteMagnitude], learningMatrix: [[2]], error: [0], configuration: valid))
     }
+
+    func testNormCapPreservesRepresentableStepWhenScaleUnderflows() throws {
+        let cap = 1e-100
+        let candidate = try Dynamics.boundedQuotientCandidate(coordinates: ["usefulness"], previous: [0],
+            innovation: [1e300], learningMatrix: [[1]], error: [0],
+            configuration: .init(learningRate: 1, deltaMax: cap, target: [1], potentialMatrix: [[1]]))
+        XCTAssertTrue(candidate.accepted)
+        XCTAssertEqual(candidate.status, .damped)
+        XCTAssertEqual(candidate.normScale, 0, "The ratio is below Double's range; the capped step is not.")
+        XCTAssertEqual(candidate.cappedDelta, [cap])
+        XCTAssertEqual(candidate.candidate, [cap])
+        XCTAssertEqual(candidate.effectiveDelta, [cap])
+    }
+
+    func testPositiveSubnormalMetricDoesNotDisappearDuringSymmetrization() throws {
+        let tiny = Double.leastNonzeroMagnitude
+        let force = try Dynamics.intelligenceForce(previous: [1], target: [0],
+            potentialMatrix: [[tiny]], metricMatrix: [[tiny]], gain: 1)
+        XCTAssertEqual(force, [-1], "Equal positive P and G cancel; the metric is not zero.")
+        XCTAssertEqual(try Dynamics.quadraticPotential(previous: [2], target: [0],
+            potentialMatrix: [[tiny]]), tiny * 2)
+    }
+
+    func testSubnormalPotentialAccumulatesBeforeRoundingAwayHalfSquares() throws {
+        let tiny = Double.leastNonzeroMagnitude
+        let matrix = [[tiny * 4, 0], [0, tiny * 4]]
+        XCTAssertEqual(try Dynamics.quadraticPotential(previous: [0.5, 0.5], target: [0, 0],
+            potentialMatrix: matrix), tiny)
+        let candidate = try Dynamics.boundedQuotientCandidate(coordinates: ["first", "second"],
+            previous: [0, 0], innovation: [0.5, 0.5], learningMatrix: [[1, 0], [0, 1]], error: [0, 0],
+            configuration: .init(learningRate: 1, deltaMax: 1, target: [0, 0],
+                                 potentialMatrix: matrix, maxBacktracks: 0))
+        XCTAssertFalse(candidate.accepted, "The full finite step increases a representable potential from zero.")
+        XCTAssertEqual(candidate.status, .rejectedUnchanged)
+        XCTAssertEqual(candidate.candidate, [0, 0])
+    }
 }

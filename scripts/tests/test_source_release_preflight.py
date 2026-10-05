@@ -43,6 +43,36 @@ class SourceReleasePreflightTests(unittest.TestCase):
         self.assertIn("unity/ARCHi/Assets/Resources/Proto/body.fbx", paths)
         self.assertEqual(blockers, [])
 
+    def test_new_build_helper_cannot_be_silently_omitted_or_auto_exported(self):
+        recipe = "script/build_and_run.sh"
+        helper = "script/new_helper.py"
+        self.put(recipe, b'python3 "$REPO_ROOT/script/new_helper.py"\n')
+        self.put(helper, b"unreviewed helper contents")
+        paths, blockers = preflight.collect(self.root, {recipe}, {})
+        self.assertEqual(paths, [recipe])
+        self.assertEqual(blockers, [{"code": "SOURCE_BUILD_DEPENDENCY_MISSING",
+                                    "path": recipe, "dependency": helper}])
+        paths, blockers = preflight.collect(self.root, {recipe, helper}, {})
+        self.assertEqual(set(paths), {recipe, helper})
+        self.assertEqual(blockers, [])
+        (self.root / helper).unlink()
+        _, blockers = preflight.collect(self.root, {recipe, helper}, {})
+        self.assertIn({"code": "SOURCE_BUILD_DEPENDENCY_MISSING", "path": recipe,
+                       "dependency": helper}, blockers)
+
+    def test_native_local_package_is_exported_without_its_cache_or_private_data(self):
+        package = "shared/ARCHiSpatial"
+        self.put(package + "/Package.swift")
+        self.put(package + "/Sources/ARCHiSpatial/ImageRegion.swift")
+        self.put(package + "/Tests/ARCHiSpatialTests/ImageRegionTests.swift")
+        self.put(package + "/.build/private.swift")
+        self.put(package + "/profiles/private.json")
+        paths, blockers = preflight.collect(self.root)
+        self.assertTrue({package + "/Package.swift", package + "/Sources/ARCHiSpatial/ImageRegion.swift",
+                         package + "/Tests/ARCHiSpatialTests/ImageRegionTests.swift"} <= set(paths))
+        self.assertFalse(any("private" in path for path in paths))
+        self.assertFalse(any(row.get("path", "").startswith(package) for row in blockers))
+
     def test_missing_unity_meta_blocks_reproducibility(self):
         self.put("unity/ARCHi/Assets/body.fbx")
         paths, blockers = preflight.collect(self.root, set(), {"unity/ARCHi/Assets": {".fbx", ".meta"}})

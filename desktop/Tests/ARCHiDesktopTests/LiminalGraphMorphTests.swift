@@ -91,6 +91,85 @@ final class LiminalGraphMorphTests: XCTestCase {
         XCTAssertNil(try make(asset, sidecar: bindings, visible: ["missing-record"]))
     }
 
+    func testSeedTargetsKeepTheSameRecordArtIDsAcrossFilteringFocusAndDensity() throws {
+        let asset = makeAsset(), bindings = try sidecar(asset: asset)
+        let morph = try XCTUnwrap(make(asset, sidecar: bindings))
+        let focused = try XCTUnwrap(make(asset, sidecar: bindings, visible: ["memory-a"], focus: ["memory-a"]))
+        let field = KnowledgeParticleField(snapshot: map)
+        let framing = KnowledgeParticleField.framing(particles: field.particles, spread: 0, reduceMotion: true)
+        let expected = KnowledgeParticleField.displayPositions(particles: field.particles, frame: framing,
+            spread: 0, reduceMotion: true, width: viewport.width, height: viewport.height)
+        XCTAssertEqual(morph.anchorArtIDsByNodeID, focused.anchorArtIDsByNodeID)
+        XCTAssertEqual(morph.seedTargetsByRank.count, morph.mapTargetsByRank.count)
+        for anchor in morph.anchors {
+            let expectedPoint = try XCTUnwrap(expected[anchor.nodeID])
+            XCTAssertEqual(anchor.seedPoint, CGPoint(x: expectedPoint.x, y: expectedPoint.y))
+            XCTAssertEqual(focused.anchors.first { $0.nodeID == anchor.nodeID }?.seedPoint, anchor.seedPoint)
+            let target = try XCTUnwrap(morph.seedTargetsByRank[anchor.rank])
+            XCTAssertEqual(target, SIMD4(anchor.seedClip.x, anchor.seedClip.y, 1, 0))
+            let filtered = try XCTUnwrap(focused.seedTargetsByRank[anchor.rank])
+            XCTAssertEqual(filtered.x, target.x); XCTAssertEqual(filtered.y, target.y)
+            XCTAssertEqual(filtered.z, anchor.nodeID == "memory-a" ? 1 : -1)
+            let binding = try XCTUnwrap(bindings.bindings.first { $0.nodeID == anchor.nodeID })
+            for id in binding.particleIDs {
+                let rank = try XCTUnwrap(asset.artIDs.firstIndex(of: id))
+                let target = try XCTUnwrap(morph.seedTargetsByRank[rank])
+                let point = LiminalGraphMorph.screenPosition(clip: SIMD2(target.x, target.y), viewport: viewport)
+                XCTAssertLessThanOrEqual(hypot(point.x - anchor.seedPoint.x, point.y - anchor.seedPoint.y), 6.0001)
+            }
+        }
+        let low = morph.seedTargets(count: 50_000), high = morph.seedTargets(count: 200_000)
+        XCTAssertEqual(Array(high.prefix(low.count)), low)
+        XCTAssertTrue(high.dropFirst(50_000).allSatisfy { $0 == .zero })
+        for count in [-1, 1, 200_001] { XCTAssertTrue(morph.seedTargets(count: count).isEmpty) }
+    }
+
+    func testSignedProgressIsContinuousAndExactAtSeedMapAndBody() throws {
+        let seed = SIMD2<Float>(0.1, -0.1), map = SIMD2<Float>(-0.8, 0.6), body = SIMD2<Float>(0.7, -0.4)
+        func point(_ value: Double) -> SIMD2<Float>? {
+            LiminalGraphMorph.interpolate(seed: seed, map: map, body: body, progress: value)
+        }
+        XCTAssertEqual(point(-1), seed); XCTAssertEqual(point(0), map); XCTAssertEqual(point(1), body)
+        XCTAssertEqual(point(-0.5), (seed + map) * 0.5)
+        XCTAssertEqual(point(0.5), (map + body) * 0.5)
+        XCTAssertEqual(point(-2), seed); XCTAssertEqual(point(2), body)
+        for invalid in [Double.nan, .infinity, -.infinity] {
+            XCTAssertEqual(point(invalid), map)
+            XCTAssertEqual(LiminalGraphMorph.boundedProgress(invalid), 0)
+        }
+        for step in -100...100 {
+            let progress = Double(step) / 100, result = try XCTUnwrap(point(progress))
+            let endpoint = progress < 0 ? seed : body
+            XCTAssertTrue((min(map.x, endpoint.x)...max(map.x, endpoint.x)).contains(result.x))
+            XCTAssertTrue((min(map.y, endpoint.y)...max(map.y, endpoint.y)).contains(result.y))
+        }
+        XCTAssertEqual(try XCTUnwrap(point(-0.00001)).x, map.x, accuracy: 0.000001)
+        XCTAssertEqual(try XCTUnwrap(point(0.00001)).x, map.x, accuracy: 0.000001)
+        XCTAssertNil(LiminalGraphMorph.interpolate(seed: SIMD2(.nan, 0), map: map, body: body, progress: -0.5))
+    }
+
+    func testNegativeProgressPickingUsesExactlyTheDisplayedSeedAndMapGeometry() throws {
+        let asset = makeAsset(), morph = try XCTUnwrap(make(asset)), frame = makeFrame()
+        let seed = morph.anchorPositions(asset: asset, frame: frame, progress: -1)
+        let midpoint = morph.anchorPositions(asset: asset, frame: frame, progress: -0.5)
+        for anchor in morph.anchors {
+            let point = try XCTUnwrap(seed[anchor.nodeID]), middle = try XCTUnwrap(midpoint[anchor.nodeID])
+            XCTAssertEqual(point.x, anchor.seedPoint.x, accuracy: 0.0001)
+            XCTAssertEqual(point.y, anchor.seedPoint.y, accuracy: 0.0001)
+            XCTAssertEqual(middle.x, (anchor.seedPoint.x + anchor.mapPoint.x) * 0.5, accuracy: 0.0001)
+            XCTAssertEqual(middle.y, (anchor.seedPoint.y + anchor.mapPoint.y) * 0.5, accuracy: 0.0001)
+        }
+        let filtered = try XCTUnwrap(make(asset, visible: ["memory-a"]))
+        XCTAssertEqual(Set(filtered.anchorPositions(asset: asset, frame: frame, progress: -1).keys), ["memory-a"])
+        let sidecar = try sidecar(asset: asset)
+        let replacedSession = LiminalKnowledgeBindings.Sidecar(schemaVersion: sidecar.schemaVersion,
+            sessionID: "00000000-0000-4000-8000-000000000002", originDigest: sidecar.originDigest,
+            manifestSHA256: sidecar.manifestSHA256, graphDigest: sidecar.graphDigest, bindings: sidecar.bindings)
+        let replaced = try XCTUnwrap(make(asset, sidecar: replacedSession))
+        XCTAssertEqual(replaced.seedTargetsByRank, morph.seedTargetsByRank)
+        XCTAssertNotEqual(replaced.digest, morph.digest, "Identical record IDs cannot keep a retired profile/session renderer current")
+    }
+
     func testFullGraphAndMemorySubsetHaveSeparateDigestsButExactCurrentRecords() throws {
         let bindings = try sidecar()
         let morph = try XCTUnwrap(make(sidecar: bindings))

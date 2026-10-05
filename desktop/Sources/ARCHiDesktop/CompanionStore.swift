@@ -144,7 +144,11 @@ final class CompanionStore: ObservableObject {
     @Published private(set) var stewardMessage: String?
     /// Navigation focus is transient and never enters a profile or usage journal.
     @Published private(set) var selectedStewardTaskID: String?
-    @Published private(set) var selectedGraphNodeID: String?
+    @Published private(set) var selectedGraphNodeID: String? {
+        didSet { if selectedGraphNodeID != oldValue { stopResonancePlayback() } }
+    }
+    /// Explicit, ephemeral playback over a current record; never serialized.
+    @Published var resonancePlaybackRequest: CompanionResonancePlaybackRequest?
     /// Transient cross-surface focus, never persisted as identity or learning.
     @Published private(set) var memoryParticleSelection: CompanionParticleSelection?
     /// Disposable projection cache; rebuilt whenever owner evidence changes.
@@ -185,6 +189,7 @@ final class CompanionStore: ObservableObject {
                 // before SwiftUI dismantles its native view during an update.
                 invalidateTextSelection(reason: "Work together closed. Select the passage again when you return.")
             }
+            if destination != .nodeLab { stopResonancePlayback() }
             // Publish only the accepted route, never a transient rejected view.
             presentedSection = destination
         }
@@ -192,7 +197,8 @@ final class CompanionStore: ObservableObject {
     @Published var preferences = CompanionPreferences() {
         didSet {
             if preferences.quiet { stopKinLightPreview() }
-            if preferences.quiet || !preferences.musicalCues || preferences.musicalVolume == 0 { stopHarmonyTheme() }
+            if preferences.quiet || !preferences.musicalCues || !preferences.musicalVolume.isFinite
+                || preferences.musicalVolume <= 0 { stopHarmonyTheme(); stopResonancePlayback() }
             if preferences != oldValue { invalidatePlacementPreview(reason: "Appearance or preferences changed. Preview again.") }
             refreshReactorReference()
         }
@@ -200,6 +206,7 @@ final class CompanionStore: ObservableObject {
     @Published var isVisible = true {
         didSet {
             if !isVisible {
+                stopResonancePlayback()
                 desktopInterest.cancel(reason: "ARCHi hidden. Point again when ready.")
                 stopKinLightPreview()
                 stopHarmonyTheme()
@@ -439,6 +446,7 @@ final class CompanionStore: ObservableObject {
         guard canPreviewKinLight, mode != .rest else { return false }
         let now = monotonicTime()
         guard now.isFinite, now >= 0 else { return false }
+        stopResonancePlayback()
         stopHarmonyTheme()
         stopKinLightPreview()
         let preview = KinLightPreview(id: UUID(), mode: mode, startedAt: now, ticket: contextTicket())
@@ -463,6 +471,7 @@ final class CompanionStore: ObservableObject {
 
     func previewHarmonyTheme() {
         guard canPreviewHarmonyTheme else { return }
+        stopResonancePlayback()
         stopKinLightPreview()
         harmonyThemeRequest = UUID()
     }
@@ -949,6 +958,7 @@ final class CompanionStore: ObservableObject {
     }
 
     private func clearParticleNavigationForProfileChange() {
+        stopResonancePlayback()
         // A restored graph may have identical IDs and bytes. Retire the active
         // transport session too, so its earlier acknowledgments cannot survive.
         unityPresentation.stop()
@@ -3171,6 +3181,7 @@ final class CompanionStore: ObservableObject {
         unityPresentation.stop()
         desktopInterest.cancel(reason: "ARCHi is closing.")
         clearLocalConversation()
+        stopResonancePlayback()
         isShuttingDown = true
         modelInventoryTask?.cancel(); modelInventoryTask = nil; isRefreshingModels = false
         cancelWork(reason: "App is shutting down.")

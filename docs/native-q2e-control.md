@@ -1,6 +1,10 @@
-# Native Q2E control for document work and ARC3
+# Native Q2E control for document work, reading and ARC3
 
-19 September 2026 · Built and installed; bounded native observation
+> Publication note: references marked “local reference” are intentionally omitted from this curated snapshot. Their authored documents and receipts remain preserved in the main workspace; this page does not reproduce their evidence.
+
+19 September 2026 · Historical installed observation and v1 derivation
+
+**Current scope, 5 October 2026:** document revision, reading and ARC3 consume the shared controller and numerical approach policy. Their records, coordinate identities and admission remain separate. See [numerical adaptation](native-numerical-adaptation.md) and the dated consolidation note below. The two-loop account and original formulas that follow preserve the September evidence; they are not a new installed qualification.
 
 Document preparation wording updated 27 September 2026 for [explicit method selection](native-method-finder.md). The original observation and v1 mathematical definitions below are retained; current document numerical updates are described in [numerical adaptation](native-numerical-adaptation.md).
 
@@ -64,4 +68,16 @@ Document decisions are optional fields on existing `DocumentWorkRecord` entries;
 
 This completes a bounded native operational control path for these two domains. Remaining work includes learned/calibrated coupling, measured transfer, richer task goals, cross-domain dependency retrieval, general-purpose workflow planning and learned prediction. The authored matrix and Beta updates are useful implementation mechanisms; their presence does not establish beneficial generalization or completion of all Hampton research.
 
-Implementation: [HamptonQ2EController.swift](../desktop/Sources/ARCHiDesktop/HamptonQ2EController.swift), [HamptonDocumentControl.swift](../desktop/Sources/ARCHiDesktop/HamptonDocumentControl.swift), [CompanionStore.swift](../desktop/Sources/ARCHiDesktop/CompanionStore.swift), [DocumentWorkJournal.swift](../desktop/Sources/ARCHiDesktop/DocumentWorkJournal.swift), [ARC3Planner.swift](../desktop/Sources/ARCHiDesktop/ARC3Planner.swift) and [ARC3SessionStore.swift](../desktop/Sources/ARCHiDesktop/ARC3SessionStore.swift). See also [task memory/outcomes](native-task-memory-outcomes.md) and the [remaining integration map](research/hampton-remaining-integration-2026-09-19.md).
+Implementation: [HamptonQ2EController.swift](../desktop/Sources/ARCHiDesktop/HamptonQ2EController.swift), [HamptonDocumentControl.swift](../desktop/Sources/ARCHiDesktop/HamptonDocumentControl.swift), [CompanionStore.swift](../desktop/Sources/ARCHiDesktop/CompanionStore.swift), [DocumentWorkJournal.swift](../desktop/Sources/ARCHiDesktop/DocumentWorkJournal.swift), [ARC3Planner.swift](../desktop/Sources/ARCHiDesktop/ARC3Planner.swift) and [ARC3SessionStore.swift](../desktop/Sources/ARCHiDesktop/ARC3SessionStore.swift). See also [task memory/outcomes](native-task-memory-outcomes.md) and the remaining integration map (local reference).
+
+## 5 October 2026 — Jev comparison and shared approach policy
+
+The current document, reading and ARC3 numerical adapters now call one pure `HamptonApproachNumericalPolicy` in the existing controller file. Their separate evidence admission, coordinate identities, versioned receipts and replay ordering remain in their domain owners. This consolidates a repeated calculation; it does not combine outcomes from different domains.
+
+The user's reference to Jev is consistent with TypeSafe AI's decision model. Its [official API](https://docs.typesafe.ai/api), reviewed 5 October, evaluates supplied state using typed yes/no, finite-choice or rubric-score questions. A choice response includes the selected option, option probabilities and a separate distribution-derived confidence. Those quantities are provider outputs, not ARCHi outcome evidence.
+
+ARCHi already chooses bounded retain/expand/repair/stop lanes and checks prerequisites, budget and current state before execution. Its present policy is deterministic and attributable to retained observations; it is not a Jev model implementation or a calibrated probabilistic classifier. An eventual Jev adapter would propose a choice among current legal alternatives through the existing provider/request owner. The native consumer must still validate allowed choices, exact context/revision, budget and authority. A model score cannot override a hard stop or write memory.
+
+After consolidation, a separately scoped provider experiment can compare against the existing deterministic policy on a small nonprivate, held-out decision set; record actual choice correctness, abstention, calibration, latency and cost, including stale/invalid responses. No Jev SDK, API key, request or second decision store was added in this consolidation.
+
+Lean belongs in optional developer assurance around this existing implementation. Initial proof candidates are hard-stop precedence, the bounded numerical step under explicit real-number assumptions, and duplicate-outcome idempotence. A theorem about a specification does not certify Swift floating-point behavior, persistence, concurrency or beneficial learning. Bind any future proof to its assumptions and source version, and keep runtime checks. No Lean toolchain, theorem or new runtime dependency is included here.

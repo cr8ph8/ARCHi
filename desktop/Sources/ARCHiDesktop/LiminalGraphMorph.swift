@@ -16,6 +16,9 @@ struct LiminalGraphMorph: Equatable, Sendable {
         let mapPoint: CGPoint
         /// Metal clip coordinates: x right, y up.
         let mapClip: SIMD2<Float>
+        /// The same record's compact Seed position, not another art or memory owner.
+        let seedPoint: CGPoint
+        let seedClip: SIMD2<Float>
         let isVisible: Bool
     }
 
@@ -29,6 +32,7 @@ struct LiminalGraphMorph: Equatable, Sendable {
     let mapPoints: [String: CGPoint]
     /// xy = map endpoint, z = visible(1), hidden(-1), decorative(0); w is unused.
     let mapTargetsByRank: [Int: SIMD4<Float>]
+    let seedTargetsByRank: [Int: SIMD4<Float>]
     private let finishDigest: String?
 
     var anchorArtIDsByNodeID: [String: UInt32] {
@@ -88,44 +92,77 @@ struct LiminalGraphMorph: Equatable, Sendable {
         let positions = KnowledgeParticleField.displayPositions(particles: field.particles, frame: frame,
             spread: 1, reduceMotion: true, width: viewport.width, height: viewport.height)
         let mapPoints = positions.mapValues { CGPoint(x: $0.x, y: $0.y) }
-        var targets: [Int: SIMD4<Float>] = [:], anchors: [Anchor] = []
+        // Seed framing always uses the complete field. Search or focus must not
+        // move its records to a different place in the continuing companion.
+        let seedFrame = KnowledgeParticleField.framing(particles: field.particles, spread: 0, reduceMotion: true)
+        let seedPositions = KnowledgeParticleField.displayPositions(particles: field.particles, frame: seedFrame,
+            spread: 0, reduceMotion: true, width: viewport.width, height: viewport.height)
+        var targets: [Int: SIMD4<Float>] = [:], seedTargets: [Int: SIMD4<Float>] = [:], anchors: [Anchor] = []
         for binding in bindings.bindings.sorted(by: { $0.nodeID < $1.nodeID }) where mapIDs.contains(binding.nodeID) {
             guard let point = mapPoints[binding.nodeID], let clip = clipPosition(point: point, viewport: viewport),
+                  let seed = seedPositions[binding.nodeID],
+                  let seedClip = clipPosition(point: CGPoint(x: seed.x, y: seed.y), viewport: viewport),
                   let anchorRank = ranks[binding.anchorID] else { return nil }
             let visible = visibleNodeIDs.contains(binding.nodeID)
             anchors.append(.init(nodeID: binding.nodeID, artID: binding.anchorID, rank: anchorRank,
-                                 mapPoint: point, mapClip: clip, isVisible: visible))
+                                 mapPoint: point, mapClip: clip, seedPoint: CGPoint(x: seed.x, y: seed.y),
+                                 seedClip: seedClip, isVisible: visible))
             for id in binding.particleIDs {
                 guard let rank = ranks[id] else { return nil }
                 let offset = clusterOffset(artID: id, anchorID: binding.anchorID)
                 let shifted = CGPoint(x: point.x + CGFloat(offset.x), y: point.y + CGFloat(offset.y))
                 guard let target = clipPosition(point: shifted, viewport: viewport) else { return nil }
                 targets[rank] = SIMD4(target.x, target.y, visible ? 1 : -1, 0)
+                guard let seedTarget = clipPosition(point: CGPoint(x: seed.x + Double(offset.x),
+                    y: seed.y + Double(offset.y)), viewport: viewport) else { return nil }
+                seedTargets[rank] = SIMD4(seedTarget.x, seedTarget.y, visible ? 1 : -1, 0)
             }
         }
         let mapDigest = LiminalKnowledgeBindings.digest(mapGraph)
-        var pieces = ["liminal-graph-morph/v1", originDigest, bindings.graphDigest, mapDigest,
+        var pieces = ["liminal-graph-morph/v2", originDigest, bindings.graphDigest, mapDigest,
                       LiminalKnowledgeBindings.sha256(sidecarData), asset.manifestSHA256,
                       asset.finish?.digest ?? "", String(Double(viewport.width)), String(Double(viewport.height))]
         for rank in targets.keys.sorted() {
             let value = targets[rank]!
             pieces += [String(rank), String(value.x.bitPattern), String(value.y.bitPattern), String(value.z)]
+            let seed = seedTargets[rank]!
+            pieces += [String(seed.x.bitPattern), String(seed.y.bitPattern), String(seed.z)]
         }
         let digest = LiminalKnowledgeBindings.sha256(Data(pieces.map { "\($0.utf8.count):\($0)" }.joined().utf8))
         return .init(digest: digest, manifestSHA256: asset.manifestSHA256, originDigest: originDigest,
                      graphDigest: bindings.graphDigest, mapGraphDigest: mapDigest, viewport: viewport,
                      anchors: anchors, mapPoints: mapPoints, mapTargetsByRank: targets,
+                     seedTargetsByRank: seedTargets,
                      finishDigest: asset.finish?.digest)
     }
 
     /// The runtime uses only authenticated nested prefixes. All bound points
     /// are in the lowest prefix, so adapting density cannot lose an anchor.
     func mapTargets(count: Int) -> [SIMD4<Float>] {
+        paddedTargets(mapTargetsByRank, count: count)
+    }
+
+    func seedTargets(count: Int) -> [SIMD4<Float>] {
+        paddedTargets(seedTargetsByRank, count: count)
+    }
+
+    private func paddedTargets(_ targets: [Int: SIMD4<Float>], count: Int) -> [SIMD4<Float>] {
         guard count > 0, count <= LiminalPointAsset.Detail.high.rawValue,
-              mapTargetsByRank.keys.allSatisfy({ $0 < count }) else { return [] }
+              targets.keys.allSatisfy({ $0 >= 0 && $0 < count }) else { return [] }
         var values = [SIMD4<Float>](repeating: .zero, count: count)
-        for (rank, value) in mapTargetsByRank { values[rank] = value }
+        for (rank, value) in targets { values[rank] = value }
         return values
+    }
+
+    /// -1 = gathered record motes, 0 = map, +1 = authored Beast. Nonfinite
+    /// input falls back to the map; this value never enters saved appearance.
+    static func boundedProgress(_ progress: Double) -> Double {
+        progress.isFinite ? min(1, max(-1, progress)) : 0
+    }
+
+    static func signedSmoothstep(_ progress: Double) -> Float {
+        let value = boundedProgress(progress)
+        return value < 0 ? -smoothstep(-value) : smoothstep(value)
     }
 
     static func smoothstep(_ progress: Double) -> Float {
@@ -139,6 +176,16 @@ struct LiminalGraphMorph: Equatable, Sendable {
         if t == 0 { return map }
         if t == 1 { return body }
         return map * (1 - t) + body * t
+    }
+
+    static func interpolate(seed: SIMD2<Float>, map: SIMD2<Float>, body: SIMD2<Float>,
+                            progress: Double) -> SIMD2<Float>? {
+        guard finite(seed), finite(map), finite(body) else { return nil }
+        let t = signedSmoothstep(progress)
+        if t == -1 { return seed }
+        if t == 0 { return map }
+        if t == 1 { return body }
+        return t < 0 ? map * (1 + t) - seed * t : map * (1 - t) + body * t
     }
 
     /// Match liminal_vertex's orthographic projection after authored finishing.
@@ -171,7 +218,7 @@ struct LiminalGraphMorph: Equatable, Sendable {
             guard let source = frame.sample(at: anchor.rank) else { return [:] }
             let finished = asset.finish?.display(source, rank: anchor.rank, frame: frame.frame) ?? source
             guard let body = Self.bodyClipPosition(position: finished.position, asset: asset, frame: frame.frame, viewport: viewport),
-                  let clip = Self.interpolate(map: anchor.mapClip, body: body, progress: progress) else { return [:] }
+                  let clip = Self.interpolate(seed: anchor.seedClip, map: anchor.mapClip, body: body, progress: progress) else { return [:] }
             points[anchor.nodeID] = Self.screenPosition(clip: clip, viewport: viewport)
         }
         return points

@@ -8,6 +8,8 @@ The main ARCHi workspace is the authored source. The curated publication checkou
 
 User profiles never belong in Git, including fixtures, issue attachments, logs and commit history. Use disposable synthetic profiles for reproductions. Source promotion must exclude private records, credentials, local databases, model weights, caches and application bundles. An ignore rule alone does not review tracked files or history.
 
+Current consolidation prioritizes the main desktop. Preserve Unity, iPhone, iPad and donor features while their development is paused. Optional Lean proofs and Jev comparisons belong behind the existing contracts described in [native Q2E control](docs/native-q2e-control.md); they are not cleanup prerequisites or additional state owners.
+
 ## Preserve the existing owners
 
 Native Swift owns assistance, permissions, shared working copies, kept lessons and saved companion development. KIN Seed and body are one continuing individual. Changes to presentation or graph inspection must not silently invoke a provider, save a remembered fact, award development or duplicate state.
@@ -18,7 +20,7 @@ Local model runtimes, the creator service and optional external model routes sup
 
 ## Local checks
 
-Choose checks for the changed behavior. Documentation-only changes need link, source-consistency and diff review. Native behavior changes should build and run the affected suites with synthetic data; use `swift test --package-path desktop --filter <AffectedTestSuite>` to select them. Broad ARC runs, live models and the full benchmark suite are not prerequisites for a focused fix or for entering Marketplace/Arena.
+Choose checks for the changed behavior. Documentation-only changes need link, source-consistency and diff review. Native behavior changes should build and run the affected suites with synthetic data; use `swift test --package-path desktop --scratch-path "/private/tmp/archi-desktop-build-$(id -u)" --filter <AffectedTestSuite>` to select them. Broad ARC runs, live models and the full benchmark suite are not prerequisites for a focused fix or for entering Marketplace/Arena.
 
 For broader retained TypeScript verification with Node.js 24 and npm:
 
@@ -27,8 +29,8 @@ For broader retained TypeScript verification with Node.js 24 and npm:
 
 For native source on macOS 14+ with Swift 6 and the macOS SDK:
 
-    swift build --package-path desktop
-    swift test --package-path desktop
+    swift build --package-path desktop --scratch-path "/private/tmp/archi-desktop-build-$(id -u)"
+    swift test --package-path desktop --scratch-path "/private/tmp/archi-desktop-build-$(id -u)"
 
 The [CI workflow template](docs/source-checks.yml.example) documents a smaller deterministic native subset suitable for unattended runners; a template is not evidence that CI ran. The full suite intentionally skips opt-in tests whose external or windowed prerequisites are absent. Report skips separately. Do not enable live-provider, real-profile or native capture tests merely to make a skipped count smaller; use explicitly chosen synthetic fixtures and required permissions when validating those paths.
 

@@ -12,6 +12,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "script"))
 import package_liminal_light as light
+import package_liminal_finish as finish
+import liminal_v008_validate as base
 
 
 class LightPackagingTests(unittest.TestCase):
@@ -113,6 +115,38 @@ class LightPackagingTests(unittest.TestCase):
         with self.assertRaises(ValueError): light.package_light(self.light, self.source, self.finish, *targets)
         self.assertEqual((conflict / "authored.txt").read_text(), "keep")
         self.assertFalse((targets[0] / "LiminalV008/light-v12").exists())
+
+    def test_assembled_children_use_real_pinned_finish_and_light_validators(self):
+        # This case replaces the ordinary suite's finish stub with the actual
+        # validator. Only the trusted pin is synthetic, local to this fixture.
+        annotations = struct.pack("<3fI", 1, 0, 0, 1) * finish.COUNT
+        (self.finish / "annotations.bin").write_bytes(annotations)
+        manifest = {**finish.DISPLAY_METADATA, "schemaVersion": 1, "revision": finish.REVISION,
+                    "sourceManifestSHA256": hashlib.sha256(self.base).hexdigest(),
+                    "lodSHA256": self.manifest["lodSHA256"], "blenderSHA256": "c" * 64,
+                    "pointCount": finish.COUNT, "stride": finish.STRIDE,
+                    "annotations": base.file_ref(self.finish / "annotations.bin", self.finish)}
+        (self.finish / "manifest.json").write_text(json.dumps(manifest))
+        pin = base.sha256(self.finish / "manifest.json")
+        self.manifest["finishManifestSHA256"] = pin
+        self.qualify()
+        shutil.copytree(self.finish, self.source / "finish-v11")
+        shutil.copytree(self.light, self.source / "light-v12")
+        with patch.object(finish, "EXPECTED_MANIFEST_SHA256", pin), \
+                patch.object(light, "validate_finish", finish.validate_finish):
+            self.assertEqual(base._validated_display_files(self.source, allow_finish=True, allow_light=True), {
+                "finish-v11/manifest.json", "finish-v11/annotations.bin", "light-v12/manifest.json", "light-v12/curves.json"})
+            for name in ("manifest.json", "curves.json"):
+                with self.subTest(changed=name):
+                    path = self.source / "light-v12" / name
+                    original = path.read_bytes(); path.write_bytes(original + b"changed")
+                    with self.assertRaises(ValueError):
+                        base._validated_display_files(self.source, allow_finish=True, allow_light=True)
+                    path.write_bytes(original)
+            child = self.source / "light-v12"
+            child.rename(self.root / "saved-light"); child.symlink_to(self.root / "saved-light")
+            with self.assertRaisesRegex(ValueError, "regular directory"):
+                base._validated_display_files(self.source, allow_finish=True, allow_light=True)
 
 
 if __name__ == "__main__": unittest.main()

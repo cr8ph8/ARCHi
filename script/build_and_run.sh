@@ -122,6 +122,10 @@ BUNDLE_DIR="$PLAY_STAGE/$APP_NAME.app"
 INSTALL_STAGE=""
 trap 'rm -rf "$PLAY_STAGE"; if [[ -n "$INSTALL_STAGE" ]]; then rm -rf "$INSTALL_STAGE"; fi' EXIT
 
+# Bind the working tree, including dirty/untracked native inputs and local
+# dependencies. Git HEAD alone cannot identify what this compiler will read.
+BUILD_INPUTS="$PLAY_STAGE/native-source-inputs.json"
+python3 "$REPO_ROOT/script/native_build_identity.py" capture "$REPO_ROOT" "$BUILD_INPUTS" --verify "$VERIFY"
 swift build --package-path "$REPO_ROOT/desktop" --scratch-path "$BUILD_SCRATCH"
 if [[ "$VERIFY" == 1 ]]; then swift test --package-path "$REPO_ROOT/desktop" --scratch-path "$BUILD_SCRATCH"; fi
 BIN_DIR="$(swift build --package-path "$REPO_ROOT/desktop" --scratch-path "$BUILD_SCRATCH" --show-bin-path)"
@@ -194,7 +198,7 @@ if [[ -n "$UNITY_PLAYER" ]]; then
                 [[ "$LIMINAL_CAPABILITY" == "6" ]] || { echo "Capability 7 requires explicit --liminal-light with --liminal-finish." >&2; exit 2; }
             fi
             # Only this generated clone is adapted. Keep the source player and
-            # its signature intact while the unchanged base validator runs.
+            # its signature intact while the base and selected extensions validate.
             mv "$BUNDLE_DIR/Contents/Resources/UnityCompanion.app/Contents/Resources/Data/StreamingAssets/LiminalV008/finish-v11" "$PLAY_STAGE/player-finish-v11"
         else
             case "$LIMINAL_CAPABILITY" in
@@ -202,8 +206,11 @@ if [[ -n "$UNITY_PLAYER" ]]; then
                 *) echo "Capabilities 6 and 7 require explicit --liminal-finish; capability 7 also requires --liminal-light." >&2; exit 2 ;;
             esac
         fi
-        python3 "$REPO_ROOT/script/package_liminal_v008.py" "$LIMINAL_PACKAGE" "$LIMINAL_QUALIFICATION" \
-            "$BUNDLE_DIR/Contents/Resources" "$BUNDLE_DIR/Contents/Resources/UnityCompanion.app/Contents/Resources/Data/StreamingAssets"
+        LIMINAL_PACKAGE_ARGS=("$LIMINAL_PACKAGE" "$LIMINAL_QUALIFICATION"
+            "$BUNDLE_DIR/Contents/Resources" "$BUNDLE_DIR/Contents/Resources/UnityCompanion.app/Contents/Resources/Data/StreamingAssets")
+        [[ -z "$LIMINAL_FINISH" ]] || LIMINAL_PACKAGE_ARGS+=(--allow-finish)
+        [[ -z "$LIMINAL_LIGHT" ]] || LIMINAL_PACKAGE_ARGS+=(--allow-light)
+        python3 "$REPO_ROOT/script/package_liminal_v008.py" "${LIMINAL_PACKAGE_ARGS[@]}"
         if [[ -n "$LIMINAL_FINISH" ]]; then
             [[ "$(python3 "$REPO_ROOT/script/package_liminal_finish.py" package "$LIMINAL_FINISH" "$LIMINAL_PACKAGE" \
                 "$BUNDLE_DIR/Contents/Resources" "$BUNDLE_DIR/Contents/Resources/UnityCompanion.app/Contents/Resources/Data/StreamingAssets")" == "$LIMINAL_FINISH_SHA" ]] || exit 2
@@ -242,7 +249,6 @@ cat > "$BUNDLE_DIR/Contents/Info.plist" <<PLIST
 <key>CFBundleName</key><string>$APP_NAME</string>
 <key>CFBundleDisplayName</key><string>$APP_NAME</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
-<key>CFBundleVersion</key><string>1</string>
 <key>CFBundleShortVersionString</key><string>0.7.0</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>
@@ -273,6 +279,10 @@ if [[ -n "$LIMINAL_LIGHT_SHA" ]]; then
     plutil -insert ARCHiLiminalPointLightStyle -string "liminal-light-flow/v12" "$BUNDLE_DIR/Contents/Info.plist"
     plutil -insert ARCHiLiminalPointLightSHA256 -string "$LIMINAL_LIGHT_SHA" "$BUNDLE_DIR/Contents/Info.plist"
 fi
+# Recheck inputs after compilation/packaging, and identify the actual packaged
+# executable/resources. This receipt explicitly precedes the outer signature;
+# final signed-artifact hashes belong in the external delivery evidence.
+python3 "$REPO_ROOT/script/native_build_identity.py" seal "$REPO_ROOT" "$BUILD_INPUTS" "$BUNDLE_DIR"
 plutil -lint "$BUNDLE_DIR/Contents/Info.plist"
 # Finder may attach metadata after a preview is opened; remove it only from this
 # regenerated development bundle before signing the next build.

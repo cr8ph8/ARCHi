@@ -10,7 +10,13 @@ public static class ArenaValidation
     [Serializable] private sealed class Corpus {public int schema;public string sourceDigest;public Case[] cases;}
     [Serializable] private sealed class Case {public string field;public int seed;public Step[] steps;}
     [Serializable] private sealed class Step {public string move,rival,winner;public int round,integrity,rivalIntegrity,spark,rivalSpark;public bool exposed,rivalExposed;}
-    [Serializable] private sealed class Receipt {public string schema="archi-arena-rule-parity/v1";public string utc,sourceDigest;public int bouts,rounds,assertions;public bool passed;}
+    [Serializable] private sealed class Receipt {public string schema="archi-arena-rule-parity/v1";public string utc,sourceDigest,runID;public int bouts,rounds,assertions;public bool passed;}
+    [Serializable] private sealed class LatestSuccess
+    {
+        public string schema="archi-arena-rule-parity-latest/v1";
+        public string runID,receiptPath,receiptSHA256;
+        public string scope="Mutable pointer to the last successful immutable receipt; not a new validation run.";
+    }
     [MenuItem("ARCHi/Arena/Validate Rule Parity")]
     public static void Validate()
     {
@@ -46,8 +52,25 @@ public static class ArenaValidation
         Check(!exhausted.Resolve(ArenaMove.Signature,unchanged)&&exhausted.Round==unchanged,"empty spark cannot act",receipt);
         Check(!exhausted.Resolve((ArenaMove)99,unchanged),"unknown move rejected",receipt);
         receipt.passed=true;
-        string output=Path.Combine(repository,"output/battle-evolution-2026-09-16");Directory.CreateDirectory(output);
-        File.WriteAllText(Path.Combine(output,"rule-parity.json"),JsonUtility.ToJson(receipt,true));
+        // Keep the old dated receipt untouched. New evidence is immutable; only
+        // the explicitly named latest-success pointer is replaced.
+        string output=Path.Combine(repository,"output/arena-rule-parity");
+        receipt.runID=DateTime.UtcNow.ToString("yyyyMMddTHHmmssfffffffZ")+"-"+Guid.NewGuid().ToString("N");
+        string runDirectory=Path.Combine(output,receipt.runID);
+        Directory.CreateDirectory(runDirectory);
+        string receiptPath=Path.Combine(runDirectory,"rule-parity.json");
+        using(var file=new FileStream(receiptPath,FileMode.CreateNew,FileAccess.Write,FileShare.None))
+        using(var writer=new StreamWriter(file))writer.Write(JsonUtility.ToJson(receipt,true));
+        string receiptHash;
+        using(var hash=SHA256.Create())receiptHash=BitConverter.ToString(hash.ComputeHash(File.ReadAllBytes(receiptPath))).Replace("-","").ToLowerInvariant();
+        var latest=new LatestSuccess{runID=receipt.runID,receiptPath=receipt.runID+"/rule-parity.json",receiptSHA256=receiptHash};
+        string pending=Path.Combine(output,"latest-success-"+receipt.runID+".tmp");
+        using(var file=new FileStream(pending,FileMode.CreateNew,FileAccess.Write,FileShare.None))
+        using(var writer=new StreamWriter(file))writer.Write(JsonUtility.ToJson(latest,true));
+        string latestPath=Path.Combine(output,"latest-success.json");
+        if(File.Exists(latestPath))File.Replace(pending,latestPath,null);
+        else File.Move(pending,latestPath);
+        Debug.Log("ARCHI_ARENA_PARITY_RECEIPT "+receiptPath);
         Debug.Log($"ARCHI_ARENA_PARITY_PASS {receipt.bouts} bouts / {receipt.rounds} rounds / {receipt.assertions} assertions");
     }
     private static void Check(bool success,string label,Receipt receipt){if(!success)throw new InvalidOperationException("Arena parity failed: "+label);receipt.assertions++;}

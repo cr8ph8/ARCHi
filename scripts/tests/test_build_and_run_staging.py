@@ -37,6 +37,9 @@ if name == "mv":
         (target / "authored.txt").write_text("preserve concurrent bundle")
     os.execv("/bin/mv", ["mv"] + sys.argv[1:])
 if name == "swift":
+    if "--version" in sys.argv:
+        print("Swift version fixture (no compiler invoked)")
+        sys.exit(0)
     gate = os.environ.get("ARCHI_TEST_BUILD_GATE")
     if gate and "--show-bin-path" not in sys.argv:
         deadline = time.monotonic() + 8
@@ -46,6 +49,16 @@ if name == "swift":
             sys.exit(91)
     if "--show-bin-path" in sys.argv:
         print(os.environ["ARCHI_TEST_BIN"])
+    elif os.environ.get("ARCHI_TEST_SOURCE_MUTATION"):
+        pathlib.Path(os.environ["ARCHI_TEST_SOURCE_MUTATION"]).write_text("changed during fake compile")
+if name == "codesign" and "--force" in sys.argv and pathlib.Path(sys.argv[-1]).name == "ARCHi.app":
+    app = pathlib.Path(sys.argv[-1])
+    receipt = json.loads((app / "Contents/Resources/ARCHiBuildIdentity.json").read_text())
+    info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
+    assert receipt["candidateID"] == info["ARCHiCandidateID"]
+    assert receipt["sourceContentID"] == info["ARCHiSourceContentID"]
+    with open(os.environ["ARCHI_TEST_TRACE"], "a") as log:
+        log.write(json.dumps(["identity-observed-at-outer-sign", receipt["candidateID"]]) + "\n")
 if name == "codesign" and "--verify" in sys.argv and ".archi-install." in sys.argv[-1]:
     collision = os.environ.get("ARCHI_TEST_COLLISION")
     if collision:
@@ -64,7 +77,19 @@ class BuildAndRunStagingTests(unittest.TestCase):
         script.parent.mkdir(parents=True)
         shutil.copy2(SCRIPT, script)
         shutil.copy2(SCRIPT.parent / "verify_preserved_liminal_seed.py", script.parent)
+        shutil.copy2(SCRIPT.parent / "native_build_identity.py", script.parent)
+        # This suite exercises orchestration; the supplement's byte guards have
+        # their own tests. Existing fixture artwork needs no optional supplement.
+        (script.parent / "package_companion_supplement.py").write_text("# fixture: no optional portraits\n")
         self.script = script
+        (self.root / "repo/desktop/Package.swift").parent.mkdir(parents=True, exist_ok=True)
+        (self.root / "repo/desktop/Package.swift").write_text('.package(path: "../shared/ARCHiSpatial")')
+        (self.root / "repo/desktop/Tests").mkdir()
+        shared = self.root / "repo/shared/ARCHiSpatial"
+        (shared / "Sources").mkdir(parents=True)
+        (shared / "Tests").mkdir()
+        (shared / "Package.swift").write_text("// fixture local package")
+        (shared / "Sources/Fixture.swift").write_text("// fixture dependency")
         resources = self.root / "repo/desktop/Sources/ARCHiDesktop/Resources"
         for name in ["CompanionArt/archi-pearl-study-v1.png", "Branding/AppIcon.icns", "ReactorBridge/worker.py",
                      "ARC3Bridge/archi_arc3_bridge.py", "RecordReader/fixture.json"]:
@@ -99,7 +124,16 @@ class BuildAndRunStagingTests(unittest.TestCase):
         for name in ("package_record_reader.py", "package_representation_runtime.py"):
             (script.parent / name).write_text(copy_resource)
         (script.parent / "package_liminal_v008.py").write_text('''import pathlib,shutil,sys
+allow_finish="--allow-finish" in sys.argv
+allow_light="--allow-light" in sys.argv
+assert not allow_light or allow_finish
+for flag in ("--allow-finish", "--allow-light"):
+    if flag in sys.argv: sys.argv.remove(flag)
 source=pathlib.Path(sys.argv[1])
+allowed={"manifest.json"}
+if allow_finish: allowed.add("finish-v11")
+if allow_light: allowed.add("light-v12")
+assert {p.name for p in source.iterdir()} <= allowed, "assembled source requires explicit selection"
 for root in sys.argv[3:5]:
     target=pathlib.Path(root)/"LiminalV008"
     if target.exists():
@@ -116,7 +150,10 @@ if mode == "check-player":
     assert info.get("ARCHiLiminalPointFinishSHA256") == "a"*64
     assert (player/"Contents/Resources/Data/StreamingAssets/LiminalV008/finish-v11/manifest.json").is_file()
 else:
-    for root in sys.argv[4:6]: shutil.copytree(finish,pathlib.Path(root)/"LiminalV008/finish-v11")
+    for root in sys.argv[4:6]:
+        target=pathlib.Path(root)/"LiminalV008/finish-v11"
+        if not target.exists(): shutil.copytree(finish,target)
+        assert (target/"annotations.bin").read_bytes() == (pathlib.Path(finish)/"annotations.bin").read_bytes()
 print("a"*64)
 ''')
         (script.parent / "package_liminal_light.py").write_text('''import pathlib,plistlib,shutil,sys
@@ -131,7 +168,8 @@ else:
     for root in sys.argv[5:7]:
         target=pathlib.Path(root)/"LiminalV008"
         assert (target/"finish-v11/manifest.json").is_file()
-        shutil.copytree(light,target/"light-v12")
+        if not (target/"light-v12").exists(): shutil.copytree(light,target/"light-v12")
+        assert (target/"light-v12/curves.json").read_bytes() == (pathlib.Path(light)/"curves.json").read_bytes()
 print("b"*64)
 ''')
         tools = self.root / "tools"
@@ -182,7 +220,7 @@ print("b"*64)
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("swift", [json.loads(line)[0] for line in self.trace.read_text().splitlines()])
 
-    def test_light_option_detaches_only_generated_clone_and_repackages_after_base(self):
+    def test_light_option_preserves_assembled_source_and_repackages_only_generated_clone(self):
         finish = self.finish_fixture(capability=7)
         light = self.root / "light-v12"; light.mkdir()
         (light / "manifest.json").write_text('{"syntheticLight": true}')
@@ -191,6 +229,9 @@ print("b"*64)
         plist = self.player / "Contents/Info.plist"; info = plistlib.loads(plist.read_bytes())
         info.update(ARCHiLiminalPointLightStyle="liminal-light-flow/v12", ARCHiLiminalPointLightSHA256="b" * 64)
         plist.write_bytes(plistlib.dumps(info))
+        shutil.copytree(finish, self.base / "finish-v11")
+        shutil.copytree(light, self.base / "light-v12")
+        source_before = {p.relative_to(self.base): p.read_bytes() for p in self.base.rglob("*") if p.is_file()}
         before = {str(p.relative_to(self.player)): p.read_bytes() for p in self.player.rglob("*") if p.is_file()}
         stage = self.root / "light-review"
         result = self.run_script("--stage-only", "--stage-dir", stage, "--liminal-finish", finish, "--liminal-light", light)
@@ -199,6 +240,7 @@ print("b"*64)
         for target in (resources / "LiminalV008/light-v12", resources / "UnityCompanion.app/Contents/Resources/Data/StreamingAssets/LiminalV008/light-v12"):
             self.assertEqual((target / "curves.json").read_bytes(), b"synthetic curves")
         self.assertEqual(before, {str(p.relative_to(self.player)): p.read_bytes() for p in self.player.rglob("*") if p.is_file()})
+        self.assertEqual(source_before, {p.relative_to(self.base): p.read_bytes() for p in self.base.rglob("*") if p.is_file()})
         installed_info = plistlib.loads((stage / "ARCHi.app/Contents/Info.plist").read_bytes())
         self.assertEqual(installed_info["ARCHiLiminalPointLightStyle"], "liminal-light-flow/v12")
         self.assertEqual(installed_info["ARCHiLiminalPointLightSHA256"], "b" * 64)
@@ -236,6 +278,35 @@ print("b"*64)
         self.assertEqual(stage.stat().st_mode & 0o777, 0o700)
         self.assertNotIn("open", [json.loads(line)[0] for line in self.trace.read_text().splitlines()])
         self.assertEqual(sorted(p.name for p in stage.iterdir()), ["ARCHi.app"])
+
+    def test_identity_is_bound_after_packaging_before_signing_and_promotion(self):
+        stage = self.root / "identity-review"
+        result = self.run_script("--stage-only", "--stage-dir", stage)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        app = stage / "ARCHi.app"
+        receipt = json.loads((app / "Contents/Resources/ARCHiBuildIdentity.json").read_text())
+        payload = {row["path"] for row in receipt["preSignPayload"]}
+        self.assertIn("Contents/MacOS/ARCHiDesktop", payload)
+        self.assertIn("Contents/Resources/UnityCompanion.app/Contents/Info.plist", payload)
+        self.assertIn("Contents/Resources/LiminalV008/manifest.json", payload)
+        self.assertNotIn("Contents/Resources/ARCHiBuildIdentity.json", payload)
+        events = [json.loads(line) for line in self.trace.read_text().splitlines()]
+        sign = next(i for i, event in enumerate(events) if event[0] == "identity-observed-at-outer-sign")
+        build = next(i for i, event in enumerate(events) if event[:2] == ["swift", "build"])
+        promote = next(i for i, event in enumerate(events) if event[0] == "mv")
+        self.assertLess(build, sign)
+        self.assertLess(sign, promote)
+
+    def test_source_change_during_build_stops_before_outer_sign_or_promotion(self):
+        source = self.root / "repo/shared/ARCHiSpatial/Sources/Fixture.swift"
+        stage = self.root / "mutated-source-review"
+        result = self.run_script("--stage-only", "--stage-dir", stage,
+                                 extra_env={"ARCHI_TEST_SOURCE_MUTATION": str(source)})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("inputs changed during the build", result.stderr)
+        self.assertFalse((stage / "ARCHi.app").exists())
+        events = [json.loads(line) for line in self.trace.read_text().splitlines()]
+        self.assertFalse(any(event[0] in ("identity-observed-at-outer-sign", "mv", "open") for event in events))
 
     def test_missing_or_changed_seed_stops_before_signing_or_promotion(self):
         art = self.script.parent.parent / "desktop/Sources/ARCHiDesktop/Resources/CompanionArt"
