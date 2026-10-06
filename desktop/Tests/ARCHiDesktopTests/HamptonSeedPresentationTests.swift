@@ -31,7 +31,7 @@ final class HamptonSeedPresentationTests: XCTestCase {
         XCTAssertEqual(store.presentationForm, .hamptonSeed)
         XCTAssertEqual(store.cursorPresentationForm, .hamptonSeed)
         XCTAssertEqual(store.kinBodyTitle, "Liminal Seed")
-        XCTAssertTrue(store.cursorAccessibilityValue.contains("Liminal · Seed cursor"))
+        XCTAssertTrue(store.cursorAccessibilityValue.contains("Liminal · Memory avatar"))
         XCTAssertFalse(store.cursorAccessibilityValue.contains("KIN"))
         XCTAssertFalse(store.kinGrowthControlsAvailable)
         XCTAssertTrue(store.kinGrowthEvidence.isEmpty)

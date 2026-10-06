@@ -36,6 +36,41 @@ struct CompanionMemoryParticleField: View {
     }
 }
 
+/// The floating companion is the map's connected record field at cursor scale.
+/// A fixed drawing size keeps nodes and reviewed-use motifs legible as the user
+/// resizes the panel. No second layout, record collection or growth state exists.
+struct CompanionMemoryAvatar: View {
+    let scene: CompanionParticleScene
+    let size: CGFloat
+    let reduceMotion: Bool
+    var seedColor: CompanionSeedColor = .original
+    var equipment: CompanionEquipment = .empty
+    var expression: KinLightExpression = .resting
+    var animationVisible: Bool? = nil
+    var selectedID: String?
+
+    var body: some View {
+        ZStack {
+            KnowledgeParticleView(field: scene.field, nodes: scene.graph.nodes, selectedID: selectedID,
+                spread: 1, pulses: !reduceMotion, reduceMotion: reduceMotion, tint: seedColor.accent,
+                showsLabels: false, expression: expression, interactive: false,
+                growthByRecordID: scene.growthByRecordID, animationVisible: animationVisible, onSelect: { _ in })
+                .frame(width: 256, height: 256)
+                .scaleEffect(size / 256)
+                .frame(width: size, height: size)
+            if !equipment.isEmpty {
+                CompanionEquipmentArt(equipment: equipment, size: size, activated: false,
+                    reduceMotion: reduceMotion)
+            }
+        }
+        .frame(width: size, height: size)
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("ARCHi memory avatar")
+        .accessibilityIdentifier("companion.memory-avatar")
+    }
+}
+
 /// Captures presentation choices for unfolding the current Seed into its map.
 /// Folding never changes saved identity, form, equipment or personal color.
 struct CompanionParticleAppearance {

@@ -182,6 +182,7 @@ extension EnvironmentValues {
 /// Rechecks file-backed support even when no in-process owner publishes a change.
 @MainActor struct LiminalStructureScope: ViewModifier {
     @ObservedObject var store: CompanionStore
+    var refreshEnabled = true
     @State private var recheckedAt = Date()
     func body(content: Content) -> some View {
         let structure = LiminalV008Runtime.asset.flatMap {
@@ -193,7 +194,8 @@ extension EnvironmentValues {
         content.environment(\.companionParticleScene, store.companionParticleScene(at: recheckedAt))
             .environment(\.companionParticleSelection, store.memoryParticleSelection)
             .environment(\.liminalPointStructure, structure)
-            .task {
+            .task(id: refreshEnabled) {
+                guard refreshEnabled else { return }
                 recheckedAt = Date()
                 while !Task.isCancelled {
                     do { try await Task.sleep(for: .seconds(2)) } catch { return }

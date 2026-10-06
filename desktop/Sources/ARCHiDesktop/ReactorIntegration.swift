@@ -53,13 +53,35 @@ struct LiveCompanionPresence: View {
     @ObservedObject var store: CompanionStore
     let size: CGFloat
     var role: CompanionPresentationRole = .body
+    var cursorWindowVisible: Bool? = nil
+    var body: some View {
+        LiveCompanionDrawing(store: store, size: size, role: role, cursorWindowVisible: cursorWindowVisible)
+            .modifier(LiminalStructureScope(store: store,
+                refreshEnabled: role != .cursor || (store.isVisible && !store.isShuttingDown && (cursorWindowVisible ?? true))))
+    }
+}
+
+/// Reads the current scene inside its existing revalidation scope. The cursor
+/// never caches an earlier profile's network when current records are unavailable.
+@MainActor private struct LiveCompanionDrawing: View {
+    @ObservedObject var store: CompanionStore
+    let size: CGFloat
+    let role: CompanionPresentationRole
+    let cursorWindowVisible: Bool?
+    @Environment(\.companionParticleScene) private var particleScene
+    @Environment(\.companionParticleSelection) private var selection
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     var body: some View {
         let form = store.presentationForm(for: store.preferences, role: role)
         Group {
-            // KIN's authored Seed and event-bound light remain native. A full
-            // generated raster must not replace his body or contradict a cue.
-            if !store.hasPersonalQiMon,
+            if role == .cursor, let particleScene {
+                CompanionMemoryAvatar(scene: particleScene, size: size,
+                    reduceMotion: store.preferences.reduceMotion || systemReduceMotion || store.preferences.quiet,
+                    seedColor: store.preferences.seedColor, equipment: store.preferences.equipment,
+                    expression: store.kinLightExpression,
+                    animationVisible: store.isVisible && !store.isShuttingDown ? cursorWindowVisible : false,
+                    selectedID: selection?.selectedID(in: particleScene))
+            } else if !store.hasPersonalQiMon,
                !store.preferences.quiet && !store.preferences.reduceMotion && !systemReduceMotion,
                store.reactorReferenceMatchesCurrentAppearance,
                let image = store.reactor.frameImage {
@@ -77,7 +99,6 @@ struct LiveCompanionPresence: View {
                     .environment(\.liminalPointProgress, role == .cursor ? LiminalV008Runtime.orbProgress : store.preferences.liminalPointProgress)
             }
         }.frame(width: size, height: size)
-        .modifier(LiminalStructureScope(store: store))
         .accessibilityValue(store.activeQiMon == nil ? "" : store.kinLightExpression.label)
     }
 }

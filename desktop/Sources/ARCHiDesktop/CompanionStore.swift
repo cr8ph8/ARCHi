@@ -512,10 +512,14 @@ final class CompanionStore: ObservableObject {
                                      role: CompanionPresentationRole = .body) -> String {
         let cue = gesture?.purpose == .practice ? ". Practicing staff gesture"
             : gesture?.purpose == .pointing ? ". Pointing with staff" : ""
-        let identity = role == .cursor ? activeQiMon.map { "\($0.name) · Seed cursor. " } ?? "" : ""
-        return identity + CompanionVisualAsset.label(form: presentationForm(for: preferences, role: role), family: presentationFamily,
+        let memoryAvatar = role == .cursor && companionParticleScene() != nil
+        let identity = role == .cursor ? activeQiMon.map { "\($0.name) · \(memoryAvatar ? "Memory avatar" : "Seed cursor"). " } ?? "" : ""
+        let appearance = memoryAvatar ? "Connected memory particles. \(preferences.seedColor.title)"
+            + (preferences.equipment.item.map { " · " + $0.title } ?? "")
+            : CompanionVisualAsset.label(form: presentationForm(for: preferences, role: role), family: presentationFamily,
             treatment: preferences.visualTreatment, recipe: presentationRecipe,
-            naturalVariation: presentationNaturalVariation, equipment: preferences.equipment, seedColor: preferences.seedColor) + ". Assistant: " + assistantActivity.title + cue
+            naturalVariation: presentationNaturalVariation, equipment: preferences.equipment, seedColor: preferences.seedColor)
+        return identity + appearance + ". Assistant: " + assistantActivity.title + cue
             + (activeQiMon == nil ? "" : ". Light expression: " + kinLightExpression(for: preferences).label)
             + (desktopInterest.phase == .idle ? "" : ". Object of interest: " + desktopInterest.message)
     }

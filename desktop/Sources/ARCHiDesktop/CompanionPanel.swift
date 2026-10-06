@@ -224,6 +224,7 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
         store.isVisible = true
         // A passive appearance must not activate ARCHi or steal the user's typing.
         if !presentedInHabitat { window.orderFrontRegardless() }
+        refreshParticleVisibility()
     }
 
     /// Handoff only changes which surface draws ARCHi, retaining desktop position
@@ -237,6 +238,7 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
             interestOutline.hide(); window.orderOut(nil)
         }
         else if store.isVisible { window.orderFrontRegardless() }
+        refreshParticleVisibility()
     }
 
     func hide() {
@@ -245,6 +247,7 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
         store.invalidatePlacementPreview(reason: "Companion hidden. Preview again when shown.")
         store.isVisible = false
         window.orderOut(nil)
+        refreshParticleVisibility()
     }
 
     func showChatBubble() {
@@ -270,6 +273,17 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
     }
 
     func windowDidMove(_ notification: Notification) { publishPlacement() }
+
+    var particleAnimationVisible: Bool {
+        !presentedInHabitat && window.isVisible && window.isOnActiveSpace
+            && window.occlusionState.contains(.visible)
+    }
+
+    func windowDidChangeOcclusionState(_ notification: Notification) { refreshParticleVisibility() }
+
+    private func refreshParticleVisibility() {
+        interaction?.setParticleVisibility(particleAnimationVisible)
+    }
 
     private func applyPreferences(_ preferences: CompanionPreferences) {
         let nextScale = CGFloat(preferences.size.isFinite ? min(1.6, max(0.65, preferences.size)) : 1)
@@ -329,6 +343,7 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
     }
 
     @objc private func activeSpaceChanged(_ notification: Notification) {
+        refreshParticleVisibility()
         interaction.cancelPointerGesture()
         store.desktopInterest.cancel(reason: "Desktop space changed. Point again.")
         dismissChatBubble()
@@ -407,13 +422,14 @@ private struct PlacementGhostBody: View {
 
 struct FloatingCompanionBody: View {
     @ObservedObject var store: CompanionStore
+    var windowVisible: Bool? = nil
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     var body: some View {
         GeometryReader { geometry in
             let size = min(geometry.size.width, geometry.size.height * 128 / 154)
             VStack(spacing: 0) {
-                LiveCompanionPresence(store: store, size: size * 0.89, role: .cursor)
+                LiveCompanionPresence(store: store, size: size * 0.89, role: .cursor, cursorWindowVisible: windowVisible)
                     .overlay {
                         if let playback = store.focusGesturePlayback,
                            playback.purpose != .preview,
@@ -457,6 +473,8 @@ struct FloatingCompanionBody: View {
 @MainActor
 private final class CompanionInteractionView: NSView {
     private let store: CompanionStore
+    private let hosting: NSHostingView<FloatingCompanionBody>
+    private var particleVisible = false
     private let menuButton = NSButton()
     private var pointerGesture = CompanionPointerGesture()
     var move: ((CGRect, CGPoint?) -> Void)?
@@ -465,8 +483,8 @@ private final class CompanionInteractionView: NSView {
 
     init(store: CompanionStore) {
         self.store = store
+        hosting = NSHostingView(rootView: FloatingCompanionBody(store: store, windowVisible: false))
         super.init(frame: CGRect(x: 0, y: 0, width: 128, height: 154))
-        let hosting = NSHostingView(rootView: FloatingCompanionBody(store: store))
         hosting.translatesAutoresizingMaskIntoConstraints = false
         addSubview(hosting)
         NSLayoutConstraint.activate([
@@ -488,6 +506,7 @@ private final class CompanionInteractionView: NSView {
         setAccessibilityHelp("Drag to place ARCHi. Click to open the attached chat bubble. Arrow keys move when focused; Escape hides. Right-click for the menu.")
         setAccessibilityCustomActions([
             NSAccessibilityCustomAction(name: "Open ARCHi menu", target: self, selector: #selector(accessibilityMenu)),
+            NSAccessibilityCustomAction(name: "Open memory map", target: self, selector: #selector(accessibilityMemoryMap)),
             NSAccessibilityCustomAction(name: "Move ARCHi left", target: self, selector: #selector(accessibilityLeft)),
             NSAccessibilityCustomAction(name: "Move ARCHi right", target: self, selector: #selector(accessibilityRight)),
             NSAccessibilityCustomAction(name: "Move ARCHi up", target: self, selector: #selector(accessibilityUp)),
@@ -496,8 +515,17 @@ private final class CompanionInteractionView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func setParticleVisibility(_ visible: Bool) {
+        guard visible != particleVisible else { return }
+        particleVisible = visible
+        hosting.rootView = FloatingCompanionBody(store: store, windowVisible: visible)
+    }
     override var acceptsFirstResponder: Bool { true }
     override var needsPanelToBecomeKey: Bool { true }
+    // File-backed ownership can become unavailable without a Combine event.
+    // Resolve the description on demand just as the drawing revalidates its scene.
+    override func accessibilityValue() -> Any? { store.cursorAccessibilityValue }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func layout() {
@@ -581,6 +609,7 @@ private final class CompanionInteractionView: NSView {
             return item
         }
         _ = add(AskARCHiBrand.title + "…", #selector(ask))
+        _ = add("Memory map…", #selector(openMemoryMap))
         _ = add("Point at a window…", #selector(pointAtWindow))
         _ = add("Work together…", #selector(context))
         menu.addItem(.separator())
@@ -597,6 +626,7 @@ private final class CompanionInteractionView: NSView {
 
     @objc private func openMenu() { quickMenu().popUp(positioning: nil, at: NSPoint(x: bounds.maxX - 18, y: 36), in: self) }
     @objc private func ask() { openChat?() }
+    @objc private func openMemoryMap() { store.openMemoryMap() }
     @objc private func context() { store.open(.context) }
     @objc private func pointAtWindow() { store.beginDesktopInterest() }
     @objc private func openAppearance() { store.open(.appearance) }
@@ -606,6 +636,7 @@ private final class CompanionInteractionView: NSView {
     @objc private func hide() { store.hideCompanion() }
     @objc private func quit() { NSApp.terminate(nil) }
     @objc private func accessibilityMenu() -> Bool { openMenu(); return true }
+    @objc private func accessibilityMemoryMap() -> Bool { store.openMemoryMap(); return true }
     @objc private func accessibilityLeft() -> Bool { nudge(dx: -20, dy: 0); return true }
     @objc private func accessibilityRight() -> Bool { nudge(dx: 20, dy: 0); return true }
     @objc private func accessibilityUp() -> Bool { nudge(dx: 0, dy: 20); return true }

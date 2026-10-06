@@ -9,8 +9,8 @@
     },
     {
       "path": "desktop/Tests/ARCHiDesktopTests/HamptonSeedPresentationTests.swift",
-      "sourceSHA256": "f612060ab337f322ea2d26dab6c90aca150852543fef930a72229a9beb3af615",
-      "publicationSHA256": "b9b56f4bf1072b4ef4d45a1b9dd7fd160147568c043d2603577f9d6460a30103",
+      "sourceSHA256": "26f3ac6cf5c8eb13f044444faad34208e06a513026be53609d61f865e57f2484",
+      "publicationSHA256": "193d2c28a9cef22204ca52a636e46b3a7e2115d4486f4ec55e86fb3f94da9a31",
       "reason": "Runtime/test pins for existing metadata-sanitized publication assets; implementation otherwise identical."
     },
     {

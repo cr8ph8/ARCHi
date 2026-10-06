@@ -24,6 +24,9 @@ struct KnowledgeParticleView: View, @MainActor Animatable {
     /// Transient image-space attention. This never changes record bindings.
     var regionTarget: CGRect?
     var regionProgress: Double = 1
+    /// AppKit's floating host supplies real window visibility; scene-based views
+    /// retain their ordinary SwiftUI lifecycle. This controls drawing only.
+    var animationVisible: Bool? = nil
     let onSelect: (String) -> Void
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -35,8 +38,8 @@ struct KnowledgeParticleView: View, @MainActor Animatable {
         let visible = Set(nodes.map(\.id))
         let particles = field.particles.filter { visible.contains($0.nodeID) }
         let edges = field.edges.filter { visible.contains($0.source) && visible.contains($0.target) }
-        let active = interactive ? (hoveredID.flatMap { visible.contains($0) ? $0 : nil }
-            ?? selectedID.flatMap { visible.contains($0) ? $0 : nil }) : nil
+        let active = (interactive ? hoveredID.flatMap { visible.contains($0) ? $0 : nil } : nil)
+            ?? selectedID.flatMap { visible.contains($0) ? $0 : nil }
         let neighbours = Set(edges.filter { $0.source == active || $0.target == active }.flatMap { [$0.source, $0.target] })
         let framing = KnowledgeParticleField.framing(particles: field.particles, spread: spread,
             reduceMotion: still, focusIDs: focusIDs)
@@ -58,7 +61,7 @@ struct KnowledgeParticleView: View, @MainActor Animatable {
                         .allowsHitTesting(false)
                 } else {
                     TimelineView(.animation(minimumInterval: 1 / 15,
-                        paused: !pulses || scenePhase != .active || !isPresented)) { tick in
+                        paused: !pulses || !(animationVisible ?? (scenePhase == .active)) || !isPresented)) { tick in
                         particleCanvas(particles: particles, edges: edges, points: points,
                             center: center, scale: scale, active: active, neighbours: neighbours,
                             time: pulses ? tick.date.timeIntervalSinceReferenceDate : 0, still: false)
