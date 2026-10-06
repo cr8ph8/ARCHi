@@ -4,6 +4,35 @@ import XCTest
 
 /// Small synthetic contract fixtures only. None is a qualified Houdini package.
 final class LiminalPointAssetTests: XCTestCase {
+    func testAnchorLookupPreservesSelectionOrderAndFirstOccurrenceWithinVisiblePoints() {
+        let ids: [UInt32] = [90, 7, 42, 7, 3]
+        XCTAssertEqual(LiminalPointAsset.anchorIndices(for: [42, 7, 999, 90, 7, 3], in: ids, pointCount: 4),
+                       [2, 1, 0, 1])
+        XCTAssertEqual(LiminalPointAsset.anchorIndices(for: [3, 90], in: ids, pointCount: 100), [4, 0])
+        for count in [0, -1] {
+            XCTAssertEqual(LiminalPointAsset.anchorIndices(for: [90], in: ids, pointCount: count), [])
+        }
+        XCTAssertEqual(LiminalPointAsset.anchorIndices(for: [], in: ids, pointCount: 5), [])
+        XCTAssertEqual(LiminalPointAsset.anchorIndices(for: [90], in: [], pointCount: 5), [])
+    }
+
+    func testAnchorBudgetDoesNotBackfillMissingRequests() {
+        let requested = [UInt32.max] + (0..<512).map(UInt32.init)
+        let actual = LiminalPointAsset.anchorIndices(for: requested, in: Array(requested.dropFirst()), pointCount: 512)
+        XCTAssertEqual(actual, Array(0..<511))
+    }
+
+    func testAnchorLookupMatchesPriorSelectionAcrossRuntimeDetails() {
+        let ids = (0..<200_000).map { UInt32($0 * 3 + 1) }
+        let requested = (0..<512).map { ids[$0 * 389] } + [UInt32.max]
+        for detail in [50_000, 100_000, 200_000] {
+            let previous = requested.prefix(512).compactMap { id in
+                ids.firstIndex(of: id).flatMap { $0 < detail ? $0 : nil }
+            }
+            XCTAssertEqual(LiminalPointAsset.anchorIndices(for: requested, in: ids, pointCount: detail), previous)
+        }
+    }
+
     func testSeedRestorationKeepsBodyFramingAndBoundedReversibleTransition() {
         let center = SIMD3<Float>(0.1, 1.24, 0), span: Float = 5.51
         for frame in [1, 24, 66, 90] {

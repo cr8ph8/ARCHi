@@ -686,9 +686,8 @@ final class LiminalMetalSurface: MTKView, MTKViewDelegate {
                 guard !Task.isCancelled, let self, self.loadingKey == key, self.canPresentPoints,
                       self.configuration?.asset.manifestSHA256 == asset.manifestSHA256,
                       let pipeline = self.pipeline else { return }
-                let indices = (self.configuration?.selectableIDs ?? []).prefix(512).compactMap { id in
-                    asset.artIDs.firstIndex(of: id).flatMap { $0 < frames.lower.pointCount ? $0 : nil }
-                }
+                let indices = LiminalPointAsset.anchorIndices(for: self.configuration?.selectableIDs ?? [],
+                    in: asset.artIDs, pointCount: frames.lower.pointCount)
                 guard self.configuration?.structure?.digest == c.structure?.digest,
                       self.configuration?.graphMorph?.digest == c.graphMorph?.digest,
                       c.graphMorph == nil || c.graphMorph?.manifestSHA256 == asset.manifestSHA256 else { return }

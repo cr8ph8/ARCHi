@@ -952,7 +952,7 @@ final class CompanionStore: ObservableObject {
     /// A callback from an old projection cannot clear or replace a newer pick.
     @discardableResult
     func selectGraphRecord(_ id: String?, in snapshot: CompanionGraphSnapshot,
-                           particleScene: CompanionParticleScene?) -> Bool {
+                           particleScene: CompanionParticleScene?, memoryOnly: Bool = false) -> Bool {
         guard profileRecoveryBlock == nil, !isShuttingDown else { return false }
         let current: CompanionGraphSnapshot
         let scene: CompanionParticleScene?
@@ -960,7 +960,13 @@ final class CompanionStore: ObservableObject {
             guard let fresh = companionParticleScene(),
                   particleScene.isCurrent(graph: fresh.graph, originDigest: fresh.originDigest) else { return false }
             current = fresh.graph; scene = fresh
-        } else { current = companionGraphSnapshot(); scene = companionParticleScene() }
+        } else {
+            // The Memory map remains usable without an active particle form.
+            // Validate its exact scope; unrelated document/activity nodes belong
+            // only to All activity and must not make a current memory pick stale.
+            current = memoryOnly ? memoryMapSnapshot() : companionGraphSnapshot()
+            scene = companionParticleScene()
+        }
         guard LiminalKnowledgeBindings.digest(snapshot) == LiminalKnowledgeBindings.digest(current),
               id == nil || current.nodes.contains(where: { $0.id == id }) else { return false }
         selectedGraphNodeID = id
@@ -1926,7 +1932,7 @@ final class CompanionStore: ObservableObject {
 
     func documentFeedbackUsageCurrent(_ record: DocumentWorkRecord) -> Bool {
         guard let feedback = record.feedback, record.feedbackUsageSyncedID == feedback.id,
-              tokenSteward.loadError == nil,
+              tokenSteward.isCurrentOnDisk,
               let outcome = tokenSteward.tasks.first(where: { $0.id == record.requestID })?.outcomes.last(where: { $0.kind == .userUseful }) else { return false }
         return outcome.evidenceID == "document-review-" + feedback.id && outcome.value == (feedback.verdict == .helpful)
     }
@@ -2695,11 +2701,9 @@ final class CompanionStore: ObservableObject {
             dependencies += localConversationReadingSources ?? []
             knowledgeDependencies += localConversationKnowledgePages ?? []
         }
-        let uniqueKnowledge = knowledgeDependencies.reduce(into: [KnowledgePageBinding]()) { if !$0.contains($1) { $0.append($1) } }.sorted { $0.id < $1.id }
+        let uniqueKnowledge = HamptonMemoryDependencies.exactUnion(knowledgeDependencies).sorted { $0.id < $1.id }
         let capturedKnowledgeDependencies: [KnowledgePageBinding]? = uniqueKnowledge.isEmpty ? nil : uniqueKnowledge
-        let uniqueDependencies = dependencies.reduce(into: [ReadingSourceBinding]()) { result, item in
-            if !result.contains(item) { result.append(item) }
-        }.sorted { $0.id < $1.id }
+        let uniqueDependencies = HamptonMemoryDependencies.exactUnion(dependencies).sorted { $0.id < $1.id }
         let capturedReadingDependencies: [ReadingSourceBinding]? = uniqueDependencies.isEmpty ? nil : uniqueDependencies
         let conversationParents = request.localConversation.isEmpty ? Set<UUID>() : localConversationRequestIDs
         let owner = UUID(), epoch = connectionGenerations[provider, default: 0]
@@ -3894,18 +3898,15 @@ extension CompanionStore {
     private func dependencyBoundedLessons(question: String, taskScope: HamptonTaskScope)
         -> (snapshots: [LessonSnapshot], omissionCount: Int) {
         guard localPreferenceMemoryIsCurrent else { return ([], 0) }
-        func union<T: Equatable>(_ lhs: [T], _ rhs: [T]) -> [T] {
-            rhs.reduce(into: lhs) { if !$0.contains($1) { $0.append($1) } }
-        }
         var pages = selectedKnowledgePages
         var sources = currentKnowledgeContext?.readingSources ?? []
         if selectedKnowledgePages.isEmpty, taskScope == .documentQuestion,
            sourceName != nil, !sharedText.isEmpty {
-            sources = union(sources, currentReadingReferences.map(\.binding))
+            sources = HamptonMemoryDependencies.exactUnion(sources, currentReadingReferences.map(\.binding))
         }
         if !nextReplyConversation.isEmpty {
-            pages = union(pages, localConversationKnowledgePages ?? [])
-            sources = union(sources, localConversationReadingSources ?? [])
+            pages = HamptonMemoryDependencies.exactUnion(pages, localConversationKnowledgePages ?? [])
+            sources = HamptonMemoryDependencies.exactUnion(sources, localConversationReadingSources ?? [])
         }
         let now = wallClock()
         var snapshots: [LessonSnapshot] = []
@@ -3916,8 +3917,8 @@ extension CompanionStore {
             && lessonDependenciesAreCurrent(lesson.origin)
             && lesson.matches(question: question, sourceName: sourceName,
                 sourceText: sharedText, now: now, taskScope: taskScope) {
-            let nextPages = union(pages, lesson.origin?.knowledgePages ?? [])
-            let nextSources = union(sources, lesson.origin?.readingSources ?? [])
+            let nextPages = HamptonMemoryDependencies.exactUnion(pages, lesson.origin?.knowledgePages ?? [])
+            let nextSources = HamptonMemoryDependencies.exactUnion(sources, lesson.origin?.readingSources ?? [])
             guard KnowledgePageBinding.valid(nextPages.isEmpty ? nil : nextPages),
                   ReadingSourceBinding.valid(nextSources.isEmpty ? nil : nextSources) else {
                 omissionCount += 1

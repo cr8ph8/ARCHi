@@ -31,6 +31,9 @@ final class DocumentMethodFollowThroughTests: XCTestCase {
 
         let journalBytes = try Data(contentsOf: fixture.journalURL)
         let methodBytes = try Data(contentsOf: fixture.procedureURL)
+        let usageBytes = try Data(contentsOf: fixture.usageURL)
+        let task = try XCTUnwrap(fixture.store.tokenSteward.tasks.first { $0.id == helpful.requestID })
+        XCTAssertTrue(fixture.store.documentFeedbackUsageCurrent(helpful))
         let reopened = fixture.reopen()
         defer { reopened.disconnectAssistant() }
         let restored = try XCTUnwrap(reopened.documentWork.records.first { $0.id == helpful.id })
@@ -38,9 +41,15 @@ final class DocumentMethodFollowThroughTests: XCTestCase {
         XCTAssertEqual(reopened.documentMethodFollowThrough(for: restored), .used(method, isHistorical: false))
         XCTAssertEqual(reopened.documentProcedures.procedures, [method])
         XCTAssertEqual(reopened.outcomes(for: method)?.helpful, 1)
+        XCTAssertEqual(reopened.tokenSteward.tasks.first { $0.id == helpful.requestID }, task)
+        XCTAssertTrue(reopened.documentFeedbackUsageCurrent(restored))
+        reopened.syncDocumentFeedback(id: restored.id)
+        XCTAssertEqual(reopened.tokenSteward.tasks.first { $0.id == helpful.requestID }, task,
+            "Retry after reopening must not add another helpful outcome.")
         XCTAssertTrue(reopened.sharedText.isEmpty, "A retained receipt does not restore the working copy.")
         XCTAssertEqual(try Data(contentsOf: fixture.journalURL), journalBytes)
         XCTAssertEqual(try Data(contentsOf: fixture.procedureURL), methodBytes)
+        XCTAssertEqual(try Data(contentsOf: fixture.usageURL), usageBytes)
         XCTAssertEqual(fixture.client.requests, 2)
     }
 
@@ -52,6 +61,21 @@ final class DocumentMethodFollowThroughTests: XCTestCase {
         let applied = try await fixture.appliedEdit(using: method)
         let helpful = try fixture.review(applied, as: .helpful)
         XCTAssertNil(fixture.store.documentProcedureUnavailable(method.binding))
+        let task = try XCTUnwrap(fixture.store.tokenSteward.tasks.first { $0.id == helpful.requestID })
+        let provenance = try XCTUnwrap(task.requestProvenance)
+        XCTAssertEqual(provenance.knowledgeDependencies, [page.binding])
+        XCTAssertEqual(provenance.readingDependencies, page.anchors.map(\.source))
+        XCTAssertEqual(provenance.inputDigest, helpful.learning?.requestBinding.inputDigest)
+        let feedback = try XCTUnwrap(helpful.feedback)
+        XCTAssertEqual(task.outcomes.last { $0.kind == .userUseful }?.evidenceID, "document-review-" + feedback.id)
+        let reopened = fixture.reopen()
+        defer { reopened.disconnectAssistant() }
+        let restored = try XCTUnwrap(reopened.documentWork.records.first { $0.id == helpful.id })
+        XCTAssertEqual(reopened.tokenSteward.tasks.first { $0.id == helpful.requestID }, task)
+        XCTAssertEqual(restored.procedureUse, method.binding)
+        XCTAssertEqual(reopened.documentProcedures.procedure(matching: method.binding)?.knowledgeOrigin, page.binding)
+        XCTAssertTrue(reopened.documentFeedbackUsageCurrent(restored))
+        XCTAssertNil(reopened.documentProcedureUnavailable(method.binding))
 
         let corrected = try fixture.review(helpful, as: .needsCorrection)
         XCTAssertEqual(corrected.procedureUseRejected, true)
@@ -67,6 +91,44 @@ final class DocumentMethodFollowThroughTests: XCTestCase {
             "Lost source support blocks new reuse without disguising the earlier use as ordinary work.")
         XCTAssertEqual(fixture.store.documentProcedures.procedures, [method])
         XCTAssertFalse(fixture.store.canPrepareDocumentProcedure(method))
+    }
+
+    func testExternallyChangedUsageCannotClaimCurrentFeedbackOrReplayEarlierReview() async throws {
+        let fixture = Fixture()
+        defer { fixture.clean() }
+        let helpful = try fixture.review(try await fixture.appliedEdit(), as: .helpful)
+        XCTAssertTrue(fixture.store.documentFeedbackUsageCurrent(helpful))
+        let journalBytes = try Data(contentsOf: fixture.journalURL)
+        let originalEvent = try XCTUnwrap(helpful.feedback)
+        let other = TokenStewardStore(url: fixture.usageURL)
+        let newerEvent = "fixture-review-" + UUID().uuidString
+        try other.recordUserFeedback(requestID: helpful.requestID, evidenceID: newerEvent, useful: false)
+        let usageBytes = try Data(contentsOf: fixture.usageURL)
+
+        XCTAssertTrue(fixture.store.documentWork.isCurrentOnDisk)
+        XCTAssertNil(fixture.store.tokenSteward.loadError)
+        XCTAssertFalse(fixture.store.tokenSteward.isCurrentOnDisk)
+        XCTAssertFalse(fixture.store.documentFeedbackUsageCurrent(helpful),
+            "A cached matching event cannot claim that externally changed Usage is current.")
+        XCTAssertEqual(try Data(contentsOf: fixture.usageURL), usageBytes)
+        XCTAssertEqual(try Data(contentsOf: fixture.journalURL), journalBytes)
+
+        try fixture.store.tokenSteward.refresh()
+        XCTAssertFalse(fixture.store.documentFeedbackUsageCurrent(helpful))
+        fixture.store.syncDocumentFeedback(id: helpful.id)
+        XCTAssertFalse(fixture.store.documentFeedbackUsageCurrent(helpful),
+            "Retry must not replay an older helpful event over a later outcome.")
+        XCTAssertEqual(fixture.store.documentWork.records.first { $0.id == helpful.id }?.feedback, originalEvent)
+        XCTAssertEqual(try Data(contentsOf: fixture.usageURL), usageBytes)
+        XCTAssertEqual(try Data(contentsOf: fixture.journalURL), journalBytes)
+
+        let corrected = try fixture.review(helpful, as: .needsCorrection)
+        XCTAssertEqual(corrected.feedback?.revision, originalEvent.revision + 1)
+        XCTAssertTrue(fixture.store.documentFeedbackUsageCurrent(corrected))
+        let outcomes = try XCTUnwrap(fixture.store.tokenSteward.tasks.first { $0.id == helpful.requestID }).outcomes
+        XCTAssertEqual(outcomes.filter { $0.kind == .userUseful }.count, 3)
+        XCTAssertEqual(outcomes.last { $0.kind == .userUseful }?.evidenceID,
+            "document-review-" + (try XCTUnwrap(corrected.feedback).id))
     }
 
     func testSupersedingMethodDoesNotRetargetEarlierUseToLatestVersion() async throws {
@@ -206,9 +268,10 @@ final class DocumentMethodFollowThroughTests: XCTestCase {
         var preferenceURL: URL { directory.appendingPathComponent("preferences.json") }
         var journalURL: URL { directory.appendingPathComponent("preferences.document-work.json") }
         var procedureURL: URL { directory.appendingPathComponent("preferences.document-procedures.json") }
+        var usageURL: URL { directory.appendingPathComponent("usage.json") }
         lazy var store = CompanionStore(preferenceURL: preferenceURL, assistant: client,
             assistantFactory: { [client] _, _ in client }, wallClock: { [clock] in clock.now },
-            allowsPlay: false, tokenSteward: TokenStewardStore())
+            allowsPlay: false, tokenSteward: TokenStewardStore(url: usageURL))
 
         func appliedEdit(using method: DocumentProcedure? = nil,
                          passage: String = "Original copy.") async throws -> DocumentWorkRecord {
@@ -265,7 +328,7 @@ final class DocumentMethodFollowThroughTests: XCTestCase {
 
         func reopen() -> CompanionStore {
             CompanionStore(preferenceURL: preferenceURL, assistant: FollowThroughClient(),
-                wallClock: { [clock] in clock.now }, allowsPlay: false, tokenSteward: TokenStewardStore())
+                wallClock: { [clock] in clock.now }, allowsPlay: false, tokenSteward: TokenStewardStore(url: usageURL))
         }
 
         func wait(_ condition: @MainActor () -> Bool) async throws {

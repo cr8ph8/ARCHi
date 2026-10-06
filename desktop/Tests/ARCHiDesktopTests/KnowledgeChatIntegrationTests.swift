@@ -109,24 +109,51 @@ final class KnowledgeChatIntegrationTests: XCTestCase {
         XCTAssertEqual(fixture.external.calls, 0)
     }
 
-    func testPageDerivedLessonsRespectDependencyCapacityBeforeDispatch() throws {
-        let fixture = Fixture()
-        defer { fixture.clean() }
-        for index in 0..<5 {
-            let page = try fixture.page()
-            fixture.store.beginLessonCorrection()
-            var draft = try XCTUnwrap(fixture.store.lessonDraft)
-            draft.topic = "Context \(index)"; draft.text = "Check the source behind this claim."
-            draft.taskScope = .conversation
-            draft.origin = LessonOrigin(requestID: UUID().uuidString, inputDigest: String(repeating: "a", count: 64),
-                readingSources: page.anchors.map(\.source), knowledgePages: [page.binding])
-            XCTAssertTrue(fixture.store.keepLesson(draft), fixture.store.lessonMessage)
+    func testPageDerivedLessonsRespectDependencyCapacityBeforeDispatch() async throws {
+        for selectSupportingPage in [false, true] {
+            let fixture = Fixture()
+            defer { fixture.clean() }
+            var pages: [KnowledgePage] = []
+            for index in 0..<5 {
+                let page = try fixture.page()
+                pages.append(page)
+                fixture.store.beginLessonCorrection()
+                var draft = try XCTUnwrap(fixture.store.lessonDraft)
+                draft.topic = "Context \(index)"; draft.text = "Check the source behind this claim."
+                draft.taskScope = .conversation
+                draft.origin = LessonOrigin(requestID: UUID().uuidString, inputDigest: String(repeating: "a", count: 64),
+                    readingSources: page.anchors.map(\.source), knowledgePages: [page.binding])
+                XCTAssertTrue(fixture.store.keepLesson(draft), fixture.store.lessonMessage)
+            }
+            if selectSupportingPage { XCTAssertTrue(fixture.store.useKnowledgePageInChat(pages[0])) }
+            fixture.store.setAssistantRoute(.automatic)
+            fixture.store.prompt = "Explain the reviewed claims."
+            let kept = fixture.store.keptLessons
+            let preview = fixture.store.nextReplyLessons
+            XCTAssertEqual(kept.count, 5)
+            XCTAssertEqual(preview, kept.prefix(4).map(LessonSnapshot.init(lesson:)),
+                "A selected page already supporting a lesson shares its exact binding.")
+            XCTAssertNotNil(fixture.store.nextReplyKnowledgeOmissionMessage)
+            XCTAssertNotNil(fixture.store.nextAssistantFallbackBlockedReason)
+            XCTAssertEqual(fixture.local.calls, 0)
+
+            fixture.store.submit()
+            try await fixture.wait { fixture.local.request != nil }
+            let request = try XCTUnwrap(fixture.local.request)
+            XCTAssertEqual(request.localLessons, preview)
+            XCTAssertEqual(request.localKnowledge?.bindings, selectSupportingPage ? [pages[0].binding] : nil)
+            fixture.local.complete()
+            try await fixture.wait { !fixture.store.isWorking }
+            XCTAssertEqual(fixture.store.compareResults[.qwen]?.state, .complete, fixture.store.status)
+            let receipt = try XCTUnwrap(fixture.store.compareResults[.qwen]?.receipt)
+            XCTAssertEqual(receipt.localLessons, preview)
+            XCTAssertEqual(receipt.knowledgeDependencies, pages.prefix(4).map(\.binding).sorted { $0.id < $1.id })
+            XCTAssertEqual(receipt.readingDependencies, pages.prefix(4).flatMap(\.anchors).map(\.source).sorted { $0.id < $1.id })
+            XCTAssertTrue(fixture.store.isCurrentReplyContext(receipt))
+            XCTAssertEqual(fixture.store.keptLessons, kept)
+            XCTAssertEqual(fixture.local.calls, 1)
+            XCTAssertEqual(fixture.external.calls, 0)
         }
-        XCTAssertEqual(fixture.store.keptLessons.count, 5)
-        XCTAssertEqual(fixture.store.nextReplyLessons.count, 4)
-        XCTAssertNotNil(fixture.store.nextReplyKnowledgeOmissionMessage)
-        XCTAssertNotNil(fixture.store.nextAssistantFallbackBlockedReason)
-        XCTAssertEqual(fixture.local.calls, 0)
     }
 
     @MainActor

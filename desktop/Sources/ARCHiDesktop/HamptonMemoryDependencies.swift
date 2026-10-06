@@ -7,6 +7,14 @@ import Foundation
 enum HamptonMemoryDependencies {
     static let version = "hampton-native-memory-dependencies/v1"
 
+    /// Only equal full bindings share a dependency. Conflicting versions or
+    /// provenance remain distinct so the existing binding contracts reject them.
+    static func exactUnion<Binding: Equatable>(_ groups: [Binding]...) -> [Binding] {
+        groups.reduce(into: [Binding]()) { result, group in
+            for binding in group where !result.contains(binding) { result.append(binding) }
+        }
+    }
+
     struct ReadingDependency: Equatable, Sendable {
         let requestID: UUID
         let sourceDigest: String

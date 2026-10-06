@@ -156,7 +156,7 @@ struct CompanionGraphWorkspace: View {
                         },
                         selectionID: store.selectedGraphNodeID,
                         onSelectionChange: { id in
-                            store.selectGraphRecord(id, in: snapshot, particleScene: particleScene)
+                            store.selectGraphRecord(id, in: snapshot, particleScene: particleScene, memoryOnly: !includesActivity)
                         }, onPlayNote: { node in
                             _ = store.previewResonance(nodeID: node.id, in: snapshot, particleScene: particleScene, capturedOriginDigest: companionScene?.originDigest)
                         }, canPlayNote: { node in

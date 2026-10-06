@@ -8,6 +8,161 @@ import XCTest
 /// profile, live assistant, game, or external accessibility target is used.
 final class KnowledgeRecordInspectionPresentationTests: XCTestCase {
     @MainActor
+    func testNativeMethodWorkReviewAndReopenUseTheSameRecords() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["ARCHI_GRAPH_NATIVE_ACTIONS"] == "1",
+              let path = environment["ARCHI_GRAPH_RENDER_DIR"], !path.isEmpty else {
+            throw XCTSkip("Opt in to disposable native method-flow interaction with ARCHI_GRAPH_NATIVE_ACTIONS and ARCHI_GRAPH_RENDER_DIR.")
+        }
+        let output = URL(fileURLWithPath: path).appendingPathComponent("method-journey-\(UUID())")
+        let profile = FileManager.default.temporaryDirectory.appendingPathComponent("archi-method-journey-\(UUID())")
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: profile) }
+        let preference = profile.appendingPathComponent("preferences.json")
+        let usage = profile.appendingPathComponent("usage.json")
+        var preferences = CompanionPreferences()
+        preferences.reduceMotion = true; preferences.quiet = true
+        try NativePreferenceDocument(preferences: preferences).encoded().write(to: preference)
+        let client = MethodJourneyFixtureAssistant()
+        func makeStore() -> CompanionStore {
+            CompanionStore(preferenceURL: preference, assistant: client,
+                assistantFactory: { _, _ in client }, allowsPlay: false, tokenSteward: TokenStewardStore(url: usage))
+        }
+        var store = makeStore()
+        defer { store.cancelWork(); store.disconnectAssistant() }
+        // Synthetic setup is explicit. Only later Press actions qualify native controls;
+        // neither the fixed reply nor scripted Helpful review is learning evidence.
+        let source = try store.readingSources.keep(title: "Synthetic plain-language guidance",
+            text: "Use plain words and retain the requested action.")
+        let anchor = try store.readingSources.makeAnchor(sourceID: source.id,
+            range: NSRange(location: 0, length: source.text.utf16.count))
+        let draft = try store.readingSources.saveKnowledgePage(title: "Synthetic plain requests",
+            body: "Use plain words and retain the requested action.", kind: .concept, anchors: [anchor])
+        let page = try store.readingSources.reviewKnowledgePage(id: draft.id, expectedRevision: draft.revision)
+        XCTAssertTrue(store.keepKnowledgeProcedure(page: page, title: "Synthetic plain-language method",
+            instruction: "Use plain words and retain the requested action.", requirements: .init()))
+        let method = try XCTUnwrap(store.documentProcedures.latestProcedures.first)
+        let methodNodeID = DocumentMethodGraph.nodeID(method.binding)
+        let play = HostedPlayHost(profile: .acceptance, assetDirectory: nil)
+        let app = NSApplication.shared, previousPolicy = app.activationPolicy()
+        let previousApp = NSWorkspace.shared.frontmostApplication
+        _ = app.setActivationPolicy(.accessory); app.finishLaunching()
+        defer {
+            _ = app.setActivationPolicy(previousPolicy)
+            if previousApp?.processIdentifier != ProcessInfo.processInfo.processIdentifier { previousApp?.activate(options: []) }
+        }
+        let window = WorkspaceWindow(contentRect: NSRect(x: 60, y: 60, width: 1200, height: 900),
+            styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        window.title = "ARCHi · Disposable method journey · scripted replies"
+        window.isReleasedWhenClosed = false
+        defer {
+            for sheet in window.sheets { window.endSheet(sheet) }
+            window.contentView = nil; window.close()
+        }
+        var previousRecord: DocumentWorkRecord?
+        var previousTask: TokenStewardTask?
+        for pass in 0..<2 {
+            if pass == 1 {
+                let retained = try files(in: profile)
+                await store.shutdownAssistant()
+                store = makeStore()
+                XCTAssertEqual(try files(in: profile), retained, "Reopening must not rewrite retained records.")
+                XCTAssertEqual(store.documentWork.records.first { $0.id == previousRecord?.id }, previousRecord)
+                XCTAssertEqual(store.tokenSteward.tasks.first { $0.id == previousTask?.id }, previousTask)
+                XCTAssertTrue(store.documentFeedbackUsageCurrent(try XCTUnwrap(previousRecord)))
+                XCTAssertEqual(store.documentProcedures.procedures, [method])
+                XCTAssertEqual(store.outcomes(for: method)?.helpful, 1)
+                XCTAssertTrue(store.sharedText.isEmpty, "History cannot restore a discarded session-only copy.")
+            }
+            // Passage import/selection is fixture setup, not a tested text-entry action.
+            let passage = pass == 0 ? "Please undertake a review of the report." : "Please conduct a review of the report."
+            store.share(text: passage, name: "disposable-\(pass).txt")
+            store.section = .nodeLab
+            window.contentView = WorkspaceView.makeHostingView(store: store, playHost: play)
+            window.makeKeyAndOrderFront(nil); app.activate(ignoringOtherApps: true)
+            try await settle(window)
+            await initializeAccessibility()
+            try await expect { self.node("companion-graph.list-toggle", in: window) != nil }
+            if node("companion-graph.list-node.\(methodNodeID)", in: window) == nil {
+                try press("companion-graph.list-toggle", in: window)
+            }
+            try await expect { self.node("companion-graph.list-node.\(methodNodeID)", in: window) != nil }
+            try press("companion-graph.list-node.\(methodNodeID)", in: window)
+            try await settle(window)
+            XCTAssertEqual(store.selectedGraphNodeID, methodNodeID)
+            try capture("selected-method-\(pass)", window: window, output: output)
+            try await expect { self.node("companion-graph.open-target", in: window) != nil }
+            try press("companion-graph.open-target", in: window)
+            try await expect { window.attachedSheet != nil }
+            let methodSheet = try XCTUnwrap(window.attachedSheet)
+            try await settle(methodSheet)
+            try capture("method-sheet-\(pass)", window: methodSheet, output: output)
+            XCTAssertEqual(store.inspectedDocumentMethod?.binding, method.binding)
+            XCTAssertFalse(store.isWorking)
+            XCTAssertFalse(store.hasOpenKnowledgeDraft)
+            XCTAssertTrue(store.documentProcedures.latestProcedures.contains(method))
+            XCTAssertNil(store.documentProcedureUnavailable(method.binding))
+            try press("document.inspect-method.try", in: methodSheet)
+            try await expect { window.attachedSheet == nil && store.section == .context }
+            store.selectText(range: NSRange(location: 0, length: passage.utf16.count), sourceRevision: store.sourceRevision)
+            store.preparePassageRevision()
+            store.documentRequirements = .init()
+            store.setAssistantRoute(.automatic); store.setLocalWorkPreference(.reasoning)
+            try await settle(window)
+            XCTAssertTrue(store.canPrepareDocumentProcedure(method))
+            try await expect { self.node("document.method-to-try.preview", in: window) != nil }
+            try press("document.method-to-try.preview", in: window)
+            try await expect { window.attachedSheet != nil }
+            let preview = try XCTUnwrap(window.attachedSheet)
+            try await settle(preview)
+            try await expect { self.node("document.method-preview.confirm", in: preview) != nil }
+            try press("document.method-preview.confirm", in: preview)
+            try await expect { window.attachedSheet == nil }
+            XCTAssertEqual(store.preparedDocumentProcedure, method.binding)
+            XCTAssertEqual(client.requests.count, pass)
+            try press("work.send", in: window)
+            try await expect { client.requests.count == pass + 1 && !store.isWorking }
+            XCTAssertEqual(client.requests.last?.prompt, method.instruction)
+            XCTAssertEqual(client.requests.last?.localProcedureKnowledge, [page.binding])
+            XCTAssertEqual(store.sharedText, passage, "Completion must not apply the edit.")
+            try await expect { self.node("work.apply.qwen", in: window) != nil }
+            try press("work.apply.qwen", in: window)
+            try await expect { store.currentDocumentOutcome != nil }
+            let applied = try XCTUnwrap(store.currentDocumentOutcome)
+            XCTAssertEqual(store.sharedText, "Please review the report.")
+            XCTAssertNil(applied.feedback)
+            try await expect { self.node("document.helpful.\(applied.id)", in: window) != nil }
+            try press("document.helpful.\(applied.id)", in: window)
+            try await expect { store.currentDocumentOutcome?.feedback?.verdict == .helpful }
+            let reviewed = try XCTUnwrap(store.currentDocumentOutcome)
+            XCTAssertTrue(store.documentFeedbackUsageCurrent(reviewed))
+            XCTAssertEqual(store.outcomes(for: method)?.helpful, pass + 1)
+            let task = try XCTUnwrap(store.tokenSteward.tasks.first { $0.id == reviewed.requestID })
+            XCTAssertEqual(task.requestProvenance?.knowledgeDependencies, [page.binding])
+            XCTAssertEqual(task.requestProvenance?.readingDependencies, [source.binding])
+            XCTAssertEqual(task.outcomes.last(where: { $0.kind == .userUseful })?.evidenceID,
+                "document-review-" + (try XCTUnwrap(reviewed.feedback)).id)
+            try await settle(window)
+            try capture("0\(pass + 1)-reviewed-use", window: window, output: output)
+            try press("document.method-follow-through.map.\(method.id).\(method.revision)", in: window)
+            try await expect { store.section == .nodeLab && store.selectedGraphNodeID == methodNodeID }
+            previousRecord = reviewed; previousTask = task
+        }
+        XCTAssertEqual(store.documentProcedures.procedures, [method], "Reusing a method must not create another family.")
+        let historical = store.documentWork.records
+        store.withdrawKnowledgePage(page)
+        XCTAssertNotNil(store.documentProcedureUnavailable(method.binding))
+        XCTAssertEqual(store.documentWork.records, historical, "Losing support must retain exact historical records.")
+        XCTAssertEqual(client.requests.count, 2)
+        XCTAssertNil(play.webView)
+        try await settle(window)
+        try capture("03-source-withdrawn", window: window, output: output)
+        await store.shutdownAssistant(); await play.shutdown()
+        print("Disposable native method journey evidence: \(output.path)")
+    }
+
+    @MainActor
     func testNativeExactRecordSheetsPreserveMapAndMethodInspection() async throws {
         let environment = ProcessInfo.processInfo.environment
         guard environment["ARCHI_GRAPH_NATIVE_ACTIONS"] == "1",
@@ -273,6 +428,7 @@ final class KnowledgeRecordInspectionPresentationTests: XCTestCase {
     }
 
     @MainActor private func press(_ identifier: String, in root: NSObject) throws {
+        print("Native Press:", identifier)
         try performPress(XCTUnwrap(node(identifier, in: root), "Missing native control: \(identifier)"))
     }
 
@@ -310,7 +466,7 @@ final class KnowledgeRecordInspectionPresentationTests: XCTestCase {
             .write(to: output.appendingPathComponent(name + ".json"))
     }
 
-    private func files(in directory: URL) throws -> [String: Data] {
+private func files(in directory: URL) throws -> [String: Data] {
         guard let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey]) else { return [:] }
         var result: [String: Data] = [:]
         for case let url as URL in enumerator where try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true {
@@ -327,5 +483,19 @@ final class KnowledgeRecordInspectionPresentationTests: XCTestCase {
     func reply(to request: AssistantRequest, onEvent: @escaping @MainActor (AssistantEvent) -> Void) async throws {
         calls += 1
         XCTFail("Record inspection cannot dispatch a model.")
+    }
+}
+
+/// Fixed in-process proposal for native interaction checks; no network or model.
+@MainActor private final class MethodJourneyFixtureAssistant: AssistantClient {
+    private(set) var requests: [AssistantRequest] = []
+    func connect() async throws {}
+    func disconnect() {}
+    func reply(to request: AssistantRequest, onEvent: @escaping @MainActor (AssistantEvent) -> Void) async throws {
+        requests.append(request)
+        let target = try XCTUnwrap(request.revisionTarget)
+        onEvent(.revision(PassageRevisionProposal(target: target, decision: .propose,
+            replacement: "Please review the report.", explanation: "Synthetic proposal for interaction checks.",
+            sourceIDs: ["selected-passage"], memoryIDs: [])))
     }
 }

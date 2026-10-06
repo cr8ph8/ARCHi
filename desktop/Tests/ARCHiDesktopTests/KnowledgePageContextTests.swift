@@ -73,6 +73,42 @@ final class KnowledgePageContextTests: XCTestCase {
         XCTAssertFalse(mixed.codexInput.contains(quote))
     }
 
+    func testDependencyUnionPreservesConflictingPageVersionsAndCapacity() {
+        let original = page().binding
+        let revised = KnowledgePageBinding(id: original.id, revision: original.revision + 1,
+            digest: LessonSource.digest(of: "Revised page"))
+        let conflict = HamptonMemoryDependencies.exactUnion([original], [original, revised])
+        XCTAssertEqual(conflict, [original, revised])
+        XCTAssertFalse(KnowledgePageBinding.valid(conflict), "Never silently choose one version of a page.")
+
+        let pages = [original] + (0..<4).map { index in
+            KnowledgePageBinding(id: UUID().uuidString, revision: 1, digest: LessonSource.digest(of: "Page \(index)"))
+        }
+        let withinLimit = HamptonMemoryDependencies.exactUnion(Array(pages.prefix(4)), [original])
+        XCTAssertEqual(withinLimit, Array(pages.prefix(4)))
+        XCTAssertTrue(KnowledgePageBinding.valid(withinLimit))
+        XCTAssertFalse(KnowledgePageBinding.valid(HamptonMemoryDependencies.exactUnion(withinLimit, [pages[4]])))
+    }
+
+    func testDependencyUnionPreservesLegacyAndProvenanceSourceConflicts() {
+        let legacy = page().anchors[0].source
+        let declared = ReadingSourceBinding(id: legacy.id, revision: legacy.revision, digest: legacy.digest,
+            provenance: ReadingSourceProvenance(origin: .human, acquisition: .userCopy).receipt)
+        XCTAssertTrue(legacy.isValid)
+        XCTAssertTrue(declared.isValid)
+        let conflict = HamptonMemoryDependencies.exactUnion([legacy], [declared, legacy])
+        XCTAssertEqual(conflict, [legacy, declared])
+        XCTAssertFalse(ReadingSourceBinding.valid(conflict), "Equal text does not erase a different provenance binding.")
+
+        let sources = [legacy] + (0..<8).map { index in
+            ReadingSourceBinding(id: UUID().uuidString, revision: 1, digest: LessonSource.digest(of: "Source \(index)"))
+        }
+        let withinLimit = HamptonMemoryDependencies.exactUnion(Array(sources.prefix(8)), [legacy])
+        XCTAssertEqual(withinLimit, Array(sources.prefix(8)))
+        XCTAssertTrue(ReadingSourceBinding.valid(withinLimit))
+        XCTAssertFalse(ReadingSourceBinding.valid(HamptonMemoryDependencies.exactUnion(withinLimit, [sources[8]])))
+    }
+
     private func request(knowledge: KnowledgePageContext? = nil) -> AssistantRequest {
         AssistantRequest(prompt: "Explain this selected claim.", sourceName: nil, sourceText: "",
             sourceRevision: 0, placementRevision: 0, tone: "Calm", replyLength: 0.5, localKnowledge: knowledge)

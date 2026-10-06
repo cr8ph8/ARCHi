@@ -351,6 +351,7 @@ struct DocumentMethodInspectionView: View {
             }
         }
         .padding(20).frame(width: 560)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("document.inspect-method")
     }
 }

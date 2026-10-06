@@ -99,6 +99,96 @@ final class CompanionParticleSelectionTests: XCTestCase {
     }
 
     @MainActor
+    func testMemoryMapWithoutParticleSceneSelectsMethodBesideWorkingCopyAndRejectsWrongScope() throws {
+        let fixture = try ParticleSelectionFixture(withIdentity: false)
+        defer { fixture.cleanUp() }
+        let store = fixture.store
+        let source = try store.readingSources.keep(title: "Synthetic method source", text: "Use precise verbs.")
+        let anchor = try store.readingSources.makeAnchor(sourceID: source.id,
+            range: NSRange(location: 0, length: source.text.utf16.count))
+        let draft = try store.readingSources.saveKnowledgePage(title: "Precise revisions", body: "Prefer precise verbs.",
+            kind: .concept, anchors: [anchor])
+        let page = try store.readingSources.reviewKnowledgePage(id: draft.id, expectedRevision: draft.revision)
+        XCTAssertTrue(store.keepKnowledgeProcedure(page: page, title: "Precise revision", instruction: "Use precise verbs.",
+            requirements: .init(mustBeShorter: false, preserveNumbersAndLinks: true)))
+        let method = try XCTUnwrap(store.documentProcedures.latestProcedures.first)
+        store.share(text: "An unretained synthetic working copy.", name: "Selection fixture.txt")
+        XCTAssertNil(store.companionParticleScene())
+        let memory = store.memoryMapSnapshot()
+        let activity = store.companionGraphSnapshot()
+        let methodID = DocumentMethodGraph.nodeID(method.binding)
+        let memoryIDs = Set(memory.nodes.map(\.id))
+        let activityOnly = try XCTUnwrap(activity.nodes.first { !memoryIDs.contains($0.id) })
+        XCTAssertNotEqual(LiminalKnowledgeBindings.digest(memory), LiminalKnowledgeBindings.digest(activity))
+        let files = try fixture.files()
+        let section = store.section
+
+        XCTAssertTrue(store.selectGraphRecord(methodID, in: memory, particleScene: nil, memoryOnly: true))
+        XCTAssertEqual(store.selectedGraphNodeID, methodID)
+        XCTAssertNil(store.memoryParticleSelection)
+        XCTAssertEqual(store.section, section)
+        XCTAssertFalse(store.selectGraphRecord(nil, in: memory, particleScene: nil), "All activity validates its own scope.")
+        XCTAssertFalse(store.selectGraphRecord(nil, in: activity, particleScene: nil, memoryOnly: true))
+        XCTAssertFalse(store.selectGraphRecord(activityOnly.id, in: memory, particleScene: nil, memoryOnly: true))
+        XCTAssertEqual(store.selectedGraphNodeID, methodID)
+
+        XCTAssertTrue(store.selectGraphRecord(nil, in: memory, particleScene: nil, memoryOnly: true))
+        XCTAssertNil(store.selectedGraphNodeID)
+        XCTAssertTrue(store.selectGraphRecord(activityOnly.id, in: activity, particleScene: nil))
+        XCTAssertEqual(store.selectedGraphNodeID, activityOnly.id)
+        XCTAssertNil(store.memoryParticleSelection)
+        XCTAssertEqual(try fixture.files(), files)
+        fixture.assertNoInferenceOrDevelopment()
+    }
+
+    @MainActor
+    func testMemoryMapWithoutParticleSceneRejectsRevisedRecordsReloadedGraphAndRecovery() throws {
+        let fixture = try ParticleSelectionFixture(withIdentity: false)
+        defer { fixture.cleanUp() }
+        let store = fixture.store
+        store.share(text: "An unretained working copy.", name: "Selection fixture.txt")
+        let oldGraph = store.memoryMapSnapshot()
+        let oldID = CompanionGraph.lessonNodeID(fixture.lessons[0])
+        XCTAssertNil(store.companionParticleScene())
+        XCTAssertTrue(store.selectGraphRecord(oldID, in: oldGraph, particleScene: nil, memoryOnly: true))
+
+        store.beginLessonCorrection(revisingID: fixture.lessons[0].id)
+        var correction = try XCTUnwrap(store.lessonDraft)
+        correction.text = "Check the revised synthetic method."
+        XCTAssertTrue(store.keepLesson(correction))
+        let current = try XCTUnwrap(store.keptLessons.first { $0.id == fixture.lessons[0].id })
+        let currentID = CompanionGraph.lessonNodeID(current)
+        let currentGraph = store.memoryMapSnapshot()
+        XCTAssertTrue(store.selectGraphRecord(currentID, in: currentGraph, particleScene: nil, memoryOnly: true))
+        let files = try fixture.files()
+        XCTAssertFalse(store.selectGraphRecord(nil, in: oldGraph, particleScene: nil, memoryOnly: true))
+        XCTAssertFalse(store.selectGraphRecord(oldID, in: currentGraph, particleScene: nil, memoryOnly: true))
+        XCTAssertEqual(store.selectedGraphNodeID, currentID)
+        XCTAssertEqual(try fixture.files(), files)
+
+        let replacement = KeptLesson(topic: "Restored profile", text: "Keep this profile's distinct saved procedure.",
+            createdAt: fixture.now)
+        try NativePreferenceDocument(lessons: [replacement]).encoded().write(to: fixture.url)
+        try store.admitRestoredProfile()
+        XCTAssertNil(store.selectedGraphNodeID)
+        XCTAssertNil(store.companionParticleScene())
+        let restoredGraph = store.memoryMapSnapshot()
+        let restoredID = CompanionGraph.lessonNodeID(replacement)
+        XCTAssertTrue(store.selectGraphRecord(restoredID, in: restoredGraph, particleScene: nil, memoryOnly: true))
+        XCTAssertFalse(store.selectGraphRecord(nil, in: currentGraph, particleScene: nil, memoryOnly: true))
+        XCTAssertFalse(store.selectGraphRecord(currentID, in: currentGraph, particleScene: nil, memoryOnly: true))
+        XCTAssertEqual(store.selectedGraphNodeID, restoredID)
+        let restoredFiles = try fixture.files()
+
+        store.blockProfileForRecovery("Synthetic recovery block")
+        XCTAssertNil(store.selectedGraphNodeID)
+        XCTAssertNil(store.memoryParticleSelection)
+        XCTAssertFalse(store.selectGraphRecord(restoredID, in: restoredGraph, particleScene: nil, memoryOnly: true))
+        XCTAssertEqual(try fixture.files(), restoredFiles)
+        fixture.assertNoInferenceOrDevelopment()
+    }
+
+    @MainActor
     func testProfileReloadRetiresIdenticalRecordIDsAndRecoveryBlocksSelection() throws {
         let fixture = try ParticleSelectionFixture()
         defer { fixture.cleanUp() }
@@ -144,7 +234,7 @@ final class CompanionParticleSelectionTests: XCTestCase {
     let client: ParticleSelectionNoCalls
     let store: CompanionStore
 
-    init() throws {
+    init(withIdentity: Bool = true) throws {
         let date = Date(timeIntervalSince1970: 1_789_000_000)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("archi-particle-selection-\(UUID())")
         let profile = directory.appendingPathComponent("preferences.json")
@@ -154,7 +244,7 @@ final class CompanionParticleSelectionTests: XCTestCase {
             KeptLesson(topic: "Review", text: "Check the source version before use.", createdAt: date.addingTimeInterval(-10))
         ]
         let identity = LocalQiMon(character: .hampton, originDigest: String(repeating: "a", count: 64), welcomedAt: date)
-        try NativePreferenceDocument(lessons: records, qiMon: identity).encoded().write(to: profile)
+        try NativePreferenceDocument(lessons: records, qiMon: withIdentity ? identity : nil).encoded().write(to: profile)
         let client = ParticleSelectionNoCalls()
         now = date; root = directory; url = profile; lessons = records
         self.client = client

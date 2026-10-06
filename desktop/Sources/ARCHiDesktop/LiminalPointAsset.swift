@@ -158,6 +158,24 @@ struct LiminalPointAsset: Sendable {
     let finish: LiminalPointFinish?
     let surfaceLight: LiminalSurfaceLight?
     var lowDetailIDs: [UInt32] { Array(artIDs.prefix(Detail.low.rawValue)) }
+
+    /// Resolve the bounded selection in request order with one visible-ID scan.
+    /// Missing or lower-detail-culled IDs do not backfill the 512-anchor budget.
+    static func anchorIndices(for selectableIDs: [UInt32], in artIDs: [UInt32], pointCount: Int) -> [Int] {
+        let requested = selectableIDs.prefix(512)
+        var remaining = Set(requested)
+        guard !remaining.isEmpty, pointCount > 0 else { return [] }
+        var indices: [UInt32: Int] = [:]
+        indices.reserveCapacity(remaining.count)
+        for (index, id) in artIDs.prefix(pointCount).enumerated() {
+            if remaining.remove(id) != nil {
+                indices[id] = index
+                if remaining.isEmpty { break }
+            }
+        }
+        return requested.compactMap { indices[$0] }
+    }
+
     var center: SIMD3<Float> {
         SIMD3(Float((manifest.bounds.min[0] + manifest.bounds.max[0]) / 2),
               Float((manifest.bounds.min[1] + manifest.bounds.max[1]) / 2),
