@@ -1,0 +1,108 @@
+{
+  "schema": "archi-paste-intake-delivery/v1",
+  "recordedAt": "2026-09-30T19:11:37.446370+00:00",
+  "publicationBase": "58c29b8fe59db9ed9ce7ae3b1e82d9a1dbde107b",
+  "changes": [
+    "Paste text uses the existing session working-copy owner; exact body bytes and unsent question retained.",
+    "Unsaved pasted content is protected before and after import; quit/profile switch/restore and export boundaries retained.",
+    "Stale source/profile and active voice/proposal work cannot be replaced; no model or memory write on intake."
+  ],
+  "checks": {
+    "schema": "archi-paste-intake-checks/v1",
+    "focusedTests": 9,
+    "failures": 0,
+    "covered": [
+      "exact UTF-8 and prompt preservation",
+      "no intake model or memory write",
+      "initial pasted-copy export requirement",
+      "failed and stale export retention",
+      "invalid/oversized input",
+      "stale source and profile ownership",
+      "declined and reentrant replacement",
+      "active proposal/recovery/shutdown blocking",
+      "unimported draft quit/restore retention"
+    ],
+    "reviewedSourceGuards": [
+      "voice recording and voice-review blocking",
+      "profile switch protection"
+    ],
+    "nativeWalkthrough": "Installed Paste text \u2192 exact working copy \u2192 passage selection \u2192 Shorten \u2192 one local Qwen proposal; Apply remained blocked. Cmd-Q with unimported draft retained text.",
+    "modelCalls": 1,
+    "puzzleRuns": 0,
+    "broadSuiteRun": false
+  },
+  "installation": {
+    "recordedAt": "2026-09-30T19:06:14.522564+00:00",
+    "profileFileCount": 22,
+    "profileFilesUnchanged": true,
+    "resources": {
+      "UnityCompanion.app": {
+        "fileCount": 324,
+        "unchanged": true
+      },
+      "RepresentationBridge": {
+        "fileCount": 10,
+        "unchanged": true
+      },
+      "RecordReader": {
+        "fileCount": 1,
+        "unchanged": true
+      },
+      "LiminalV008": {
+        "fileCount": 82,
+        "unchanged": true
+      }
+    },
+    "installedExecutableSHA256": "dfe4802e18beef1c8d0b9e55da891ed671208d6d3b30ed0fa1453c12075a9169",
+    "signaturePassed": true,
+    "guardedUpdater": true,
+    "rollbackRetained": true,
+    "compiledUUID": "179C8C6C-C89D-3D0F-A309-61004C67DDE3",
+    "installedUUID": "179C8C6C-C89D-3D0F-A309-61004C67DDE3",
+    "compiledTextSHA256": "beb3679c256e8516be88fcbdf934bfd78acdc3d54b1a9e83bd80ab1091bd1190",
+    "installedTextSHA256": "beb3679c256e8516be88fcbdf934bfd78acdc3d54b1a9e83bd80ab1091bd1190"
+  },
+  "realWork": {
+    "model": "qwen3.5:9b",
+    "route": "Local only",
+    "localModelCalls": 1,
+    "cloudCalls": 0,
+    "inputTokens": 3447,
+    "outputTokens": 424,
+    "clientElapsedMS": 18722,
+    "observedState": "Ready to review; Apply disabled by required mechanical check",
+    "numericMismatch": [
+      "4 changed to four",
+      "6 changed to six"
+    ],
+    "semanticReview": [
+      "Omitted explicit non-validation of general intelligence and improved performance",
+      "Did not place next action last as requested"
+    ],
+    "originalUnchanged": true,
+    "applied": false,
+    "helpfulFeedbackSubmitted": false,
+    "methodKept": false,
+    "developmentCreditSubmitted": false,
+    "ownerReview": "pending"
+  },
+  "sourceScope": {
+    "desktop/Sources/ARCHiDesktop/PastedDocumentImport.swift": "6b84f2009dfb8e70468b83058b17f02e0a21fed291fc7efca67ddd4f0a15ebb1",
+    "desktop/Sources/ARCHiDesktop/PastedDocumentImportSheet.swift": "762b499ffabf8592ab88f8751b1b6c714384777972c0f9aec556fef39262491c",
+    "desktop/Sources/ARCHiDesktop/CompanionStore.swift": "a024dbf6c789a3ab5c8d2e20bff9ecf7046c59ecce5ff7af1a156b58af5e4bfa",
+    "desktop/Sources/ARCHiDesktop/CompanionQuitReview.swift": "5fef50afcf34584ae18d57652a5a9e2769ed8a8d8429c9b7ce6305718d8b1e3e",
+    "desktop/Sources/ARCHiDesktop/ARCHiDesktopApp.swift": "04e8c0f17fac604700653fac467dfcbfaa231723ac65387ae55a4ed7068a05e0",
+    "desktop/Sources/ARCHiDesktop/WorkTogetherWorkspace.swift": "65c1c46e4eb50359db5fec6cd6ffc2f8d9e9e2a01b0e4d72e53cc6a657d83834",
+    "desktop/Tests/ARCHiDesktopTests/PastedDocumentImportTests.swift": "529ec2e9e6829aefc167f75c8c79fa32d7cb1ad5d55cc7eeb939c2b1875841da"
+  },
+  "limits": [
+    "The blocked live proposal is not a successful revision or owner-useful result.",
+    "No learned method, useful transfer or whole-Hampton-stack validation established.",
+    "One local call, no puzzle or broad suite; no activation measurement/control on this call.",
+    "Phone, paired worlds, full visual acceptance and existing release blockers remain open."
+  ],
+  "privacy": {
+    "personalProfileContentsPublished": false,
+    "modelPromptAndReplyPublished": false
+  }
+}

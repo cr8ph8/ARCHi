@@ -1,0 +1,123 @@
+{
+  "schema": "archi-particle-mechanic-refinement/v1",
+  "date": "2026-10-03",
+  "status": "INSTALLED_NATIVE_ANCHOR_AND_SELECTION_REFINEMENT_AX_PASSED_VISUAL_UNQUALIFIED",
+  "scope": "Native current-record particle anchors, retained Seed rendering and exact-record selection; excludes the graph-to-authored-body morph now in progress.",
+  "canonicalOwner": "Existing native profile, source, memory, knowledge, method and reviewed outcome records",
+  "newPersistedStore": false,
+  "delivery": {
+    "version": "0.7.0",
+    "build": "1",
+    "installedUUID": "B10CA7BD-C04B-38CF-BA9C-F17501255CD9",
+    "compiledUUID": "B10CA7BD-C04B-38CF-BA9C-F17501255CD9",
+    "installedBinarySHA256": "b1adcf78f92327b4039eb74c3fbfd26d7c4e833806c4e414c816615901a82c25",
+    "UUIDsMatch": true,
+    "strictLocalSigningPassed": true,
+    "signing": "ad-hoc",
+    "notarized": false,
+    "monitoredProfileFiles": 23,
+    "changedProfileFilesImmediatelyAfterInstall": 0,
+    "profileContentsIncludedInReceipt": false,
+    "receipt": "output/particle-mechanic-refinement-2026-10-03/delivery-installed.json"
+  },
+  "checks": {
+    "regularContractCasesPassed": 65,
+    "targetedGPUCasesPassed": 2,
+    "executionCountSource": "Retained focused, selection, publication-focused and point-frames test logs.",
+    "regularCasesSkippedWithoutLiveAssetEnvironment": 1,
+    "regularCasesFailed": 0,
+    "authoredAndPublicationRunsOverlap": true,
+    "runBreakdown": [
+      {
+        "log": "output/particle-mechanic-refinement-2026-10-03/focused-tests.log",
+        "passed": 61,
+        "skipped": 1,
+        "failed": 0
+      },
+      {
+        "log": "output/particle-mechanic-refinement-2026-10-03/selection-tests.log",
+        "passed": 4,
+        "skipped": 0,
+        "failed": 0
+      },
+      {
+        "log": "output/particle-mechanic-refinement-2026-10-03/publication-focused-tests.log",
+        "passed": 65,
+        "skipped": 1,
+        "failed": 0,
+        "repeatsAuthoredContractCoverage": true
+      },
+      {
+        "log": "output/particle-mechanic-refinement-2026-10-03/point-frames.log",
+        "passed": 2,
+        "skipped": 0,
+        "failed": 0,
+        "includesLiveAssetCaseSkippedByRegularRun": true
+      }
+    ],
+    "countsAreNotIndependentCapabilityMeasurements": true,
+    "gpuFixturesSynthetic": true,
+    "qualifiedManifestSHA256": "9f89cc0914f537242d6cbc3d6ab4040c56f97f08872d954ed3cf3c33bb07e1ed",
+    "retainedSeedSHA256": "6a60509d41e00d8dd6b204dd894b988498b6e38dabbc29349db058046e7228d0",
+    "retainedSeedRenderCases": 17,
+    "retainedSeedSourceSamplesUnchanged": true,
+    "retainedSeedRenderer": "production Metal",
+    "pointFramePoses": ["beast", "ball", "seed"],
+    "pointFrameBodyPointsEach": 50000,
+    "pointFrameSyntheticMotifPointsEach": 168,
+    "pointFrameLODIdentical": true,
+    "unityRuntimeExercisedByTheseGPUReceipts": false
+  },
+  "installedAccessibilityWalkthrough": {
+    "evidenceSource": "Current development-session native accessibility readback",
+    "exactKnowledgeSourceVersionInspector": "passed",
+    "selectionRetainedWhenSearchExcludesRecord": "passed",
+    "revealReturnsToSameSelectedRecord": "passed",
+    "revealedMapRecords": 25,
+    "revealedMapRelationships": 60,
+    "focusGatherUnfoldAndBack": "passed",
+    "sameExactVersionInspectorRetained": true,
+    "focusedRecords": 4,
+    "focusedRelationships": 6,
+    "backRestoresRecords": 25,
+    "backRestoresRelationships": 60,
+    "fullSizeVisualAcceptance": false,
+    "sustainedFPSMeasured": false,
+    "physicalIPhoneARAcceptance": false
+  },
+  "publication": {
+    "reviewedPromotedPaths": 17,
+    "scannedPaths": 17,
+    "scanFindings": 0,
+    "parityStatus": "different",
+    "matchedPaths": 999,
+    "reviewedResourcePinTransformations": 4,
+    "unpromotedQiMonPathDifferences": [
+      "desktop/Sources/ARCHiDesktop/QiMonEmbeddedGame.swift",
+      "desktop/Sources/ARCHiDesktop/QiMonLocalGame.swift",
+      "desktop/Sources/ARCHiDesktop/UnityWorkspace.swift",
+      "desktop/Tests/ARCHiDesktopTests/QiMonLocalGameTests.swift"
+    ],
+    "parityReceipt": "output/particle-mechanic-refinement-2026-10-03/source-parity.json",
+    "publicationScanReceipt": "output/particle-mechanic-refinement-2026-10-03/publication-scan.json"
+  },
+  "evidence": [
+    "output/particle-mechanic-refinement-2026-10-03/retained-seed/receipt.json",
+    "output/particle-mechanic-refinement-2026-10-03/point-frames/readback.json"
+  ],
+  "remaining": [
+    "Graph-to-authored-body morph is being implemented separately; require its own source, test, GPU and installed evidence.",
+    "Full-size visual acceptance and sustained active 30 fps with hidden suspension and automatic detail reduction.",
+    "Unity graph-to-body morph consumer and cross-runtime selection/session acceptance.",
+    "Phone qualified point-asset package, native point renderer and explicit source-bound transfer.",
+    "Native iPhone AR camera, world scale, transient target/session and tracking-loss implementation plus physical-device acceptance.",
+    "Independent direct-world experience attribution through existing reviewed outcomes."
+  ],
+  "claimsExcluded": [
+    "Visual particles create additional knowledge or permissions.",
+    "A renderer check validates Hampton's complete theory or patent.",
+    "The new graph-to-body morph is included in this installed build.",
+    "These native receipts prove Unity, physical iPhone AR, full-size visual or sustained frame-rate acceptance.",
+    "All authored/publication paths match."
+  ]
+}

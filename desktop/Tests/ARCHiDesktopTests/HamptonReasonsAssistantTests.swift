@@ -30,7 +30,7 @@ struct HamptonReasonsAssistantTests {
             #expect(!sent.systemInstruction.contains(request.prompt))
             #expect(!sent.systemInstruction.contains(request.sourceText))
         }
-        #expect(fixture.assistant.snapshot.receipts.first?.policyVersion == "native-hampton/v5")
+        #expect(fixture.assistant.snapshot.receipts.first?.policyVersion == "native-hampton/v6")
         #expect(fixture.assistant.snapshot.records.isEmpty)
     }
 
@@ -189,38 +189,315 @@ struct HamptonReasonsAssistantTests {
         }
     }
 
-    @Test func admissionDistinguishesSelectorConnectionFailureFromModelGenerationFailure() async throws {
+    @Test func optionalSelectorAvailabilityFailureOmitsContextAndKeepsAnswerLocal() async throws {
         for connectionFailure in [true, false] {
-            let fixture = CoordinatorFixture(contextEnabled: true)
+            let fixture = CoordinatorFixture(contextEnabled: true, workPreference: .compact)
             defer { fixture.cleanUp() }
             if connectionFailure { fixture.selector.connectionFailure = QwenFailure.unavailable }
             else { fixture.selector.response = { _, _ in throw QwenFailure.generationFailed } }
             try await fixture.assistant.connect()
-            do {
-                try await fixture.assistant.reply(to: makeRequest("Keep this constraint."), onEvent: { _ in Issue.record("Failed role emitted text") })
-                Issue.record("The role must fail")
-            } catch { #expect(error is QwenFailure) }
-            let outcome = try #require(fixture.assistant.snapshot.admissionOutcome)
-            #expect(outcome.status == .rejected)
-            #expect(outcome.stage == (connectionFailure ? .connection : .generation))
-            #expect(outcome.role == .memorySelection)
-            #expect(outcome.reason == (connectionFailure ? .unavailable : .generationFailed))
-            #expect(UUID(uuidString: try #require(outcome.requestID)) != nil)
+            let events = CoordinatorEvents()
+            try await fixture.assistant.reply(to: makeRequest("Keep this constraint."), onEvent: events.receive)
+            let snapshot = fixture.assistant.snapshot
+            #expect(events.texts == ["Accepted local answer."])
+            #expect(snapshot.admissionOutcome?.status == .accepted)
+            #expect(snapshot.expertDecision?.target == .reasoning)
+            #expect(fixture.reasoner.requests.count == 1)
+            #expect(snapshot.records.isEmpty)
+            #expect(snapshot.turn == 1)
+            #expect(snapshot.evidence?.omissions.contains { $0.kind == .context && $0.reason == .unavailable } == true)
+            #expect(snapshot.evidence?.candidates.selectedIDs.isEmpty == true)
+            #expect(snapshot.evidence?.reasoningMemoryIDsDispatched.isEmpty == true)
+            #expect(snapshot.invocations.map(\.outcome) == (connectionFailure ? [.completed] : [.failed, .completed]))
+            #expect(snapshot.attemptedInvocations == (connectionFailure ? [.reasoning] : [.memorySelection, .reasoning]))
+        }
+    }
+
+    @Test func optionalReminderFailureRollsBackThisTurnsSelections() async throws {
+        let fixture = CoordinatorFixture(contextEnabled: true)
+        defer { fixture.cleanUp() }
+        try await fixture.assistant.connect()
+        try await fixture.assistant.reply(to: makeRequest("Remember the earlier constraint."), onEvent: { _ in })
+        let original = fixture.assistant.snapshot.records
+        #expect(original.count == 1)
+        fixture.selector.response = { request, model in
+            if request.role == .memoryReminder { throw QwenFailure.generationFailed }
+            return try roleResult(request, model: model)
+        }
+        try await fixture.assistant.reply(to: makeRequest("A different current constraint."), onEvent: { _ in })
+        let snapshot = fixture.assistant.snapshot
+        #expect(snapshot.records == original)
+        #expect(snapshot.turn == 2)
+        #expect(snapshot.expertDecision?.target == .reasoning)
+        #expect(snapshot.invocations.map(\.role) == [.memorySelection, .memoryReminder, .reasoning])
+        #expect(snapshot.invocations.map(\.outcome) == [.completed, .failed, .completed])
+        #expect(snapshot.evidence?.candidates.selectedIDs.isEmpty == true)
+        #expect(snapshot.evidence?.reminders.selectedIDs.isEmpty == true)
+        #expect(ids(try #require(fixture.reasoner.requests.last), "memories").isEmpty)
+    }
+
+    @Test func optionalSelectorInvalidEvidenceAndStopsNeverRecover() async throws {
+        for error in [QwenFailure.stopped, .modelChanged, .nonLocalModel, .invalidResponse] {
+            let fixture = CoordinatorFixture(contextEnabled: true)
+            defer { fixture.cleanUp() }
+            fixture.selector.response = { _, _ in throw error }
+            try await fixture.assistant.connect()
+            await #expect(throws: error) {
+                try await fixture.assistant.reply(to: makeRequest("Keep this constraint."), onEvent: { _ in Issue.record("Rejected selector emitted text") })
+            }
             #expect(fixture.reasoner.requests.isEmpty)
             #expect(fixture.assistant.snapshot.records.isEmpty)
-            #expect(fixture.assistant.snapshot.attemptedInvocations == (connectionFailure ? [] : [.memorySelection]))
-            let evidence = try #require(fixture.assistant.snapshot.evidence)
-            #expect(!evidence.candidates.offeredIDs.isEmpty)
-            #expect(evidence.candidates.dispatchedIDs == (connectionFailure ? [] : evidence.candidates.offeredIDs))
-            #expect(evidence.reasoningSourceIDsDispatched.isEmpty)
-            #expect(evidence.reasoningMemoryIDsDispatched.isEmpty)
-            #expect(evidence.conversationDispatchedCount == nil)
-            #expect(fixture.assistant.snapshot.invocations.count == (connectionFailure ? 0 : 1))
-            if !connectionFailure {
-                #expect(fixture.assistant.snapshot.invocations.first?.outcome == .failed)
-                #expect(fixture.assistant.snapshot.invocations.first?.metrics == nil)
-            }
+            #expect(fixture.assistant.snapshot.evidence?.omissions.contains { $0.reason == .unavailable } == false)
         }
+        let fixture = CoordinatorFixture(contextEnabled: true)
+        defer { fixture.cleanUp() }
+        fixture.selector.response = { request, model in
+            try roleResult(request, model: model, additionalFields: ["candidateIDs": .array([.string("unknown-candidate")])])
+        }
+        try await fixture.assistant.connect()
+        await #expect(throws: HamptonAssistantFailure.invalidProposal) {
+            try await fixture.assistant.reply(to: makeRequest("Keep this constraint."), onEvent: { _ in Issue.record("Invalid selector emitted text") })
+        }
+        #expect(fixture.reasoner.requests.isEmpty)
+        #expect(fixture.assistant.snapshot.records.isEmpty)
+    }
+
+    @Test func optionalSelectorDeadlineRetiresOwnedCallBeforeReasoning() async throws {
+        for duringConnection in [true, false] {
+            let fixture = CoordinatorFixture(contextEnabled: true, optionalContextTimeout: .milliseconds(10))
+            defer { fixture.cleanUp() }
+            fixture.selector.pauseConnections = duringConnection
+            fixture.selector.shouldPause = { _ in !duringConnection }
+            try await fixture.assistant.connect()
+            let initialDisconnects = fixture.selector.disconnectCount
+            let events = CoordinatorEvents()
+            let work = Task { try await fixture.assistant.reply(to: makeRequest("Remember this constraint."), onEvent: events.receive) }
+            defer { work.cancel() }
+            try await eventually { fixture.selector.disconnectCount > initialDisconnects }
+            #expect(fixture.reasoner.requests.isEmpty, "Reasoning waits until the timed-out selector call retires")
+            if duringConnection { fixture.selector.resolveConnection(0) }
+            else { try fixture.selector.resolveFirstGeneration() }
+            try await work.value
+            #expect(events.texts == ["Accepted local answer."])
+            #expect(fixture.reasoner.requests.count == 1)
+            #expect(fixture.assistant.snapshot.records.isEmpty)
+            #expect(fixture.assistant.snapshot.expertDecision?.reason.contains("time budget") == true)
+            #expect(fixture.assistant.snapshot.invocations.map(\.outcome) == (duringConnection ? [.completed] : [.failed, .completed]))
+        }
+    }
+
+    @Test func compactWorkUsesTheSameReasoningContractAndValidation() async throws {
+        let fixture = CoordinatorFixture(contextEnabled: false, workPreference: .compact)
+        defer { fixture.cleanUp() }
+        try await fixture.assistant.connect()
+        let request = makeRequest("Give a short greeting.")
+        let events = CoordinatorEvents()
+        try await fixture.assistant.reply(to: request, onEvent: events.receive)
+        let sent = try #require(fixture.selector.requests.first)
+        #expect(sent.role == .reasoning)
+        #expect(sent.outputSchema == HamptonProposalValidator.schema(for: .reasoning,
+            requestID: sent.id, sourceIDs: request.localSourceIDs))
+        #expect(sent.input["context"]?["question"]?.string == request.prompt)
+        #expect(fixture.reasoner.requests.isEmpty)
+        #expect(fixture.selector.connectCount == 1)
+        #expect(events.texts == ["Accepted local answer."])
+        #expect(fixture.assistant.snapshot.expertDecision?.target == .compact)
+        #expect(fixture.assistant.snapshot.receipts.last?.model == fixture.selector.model)
+        #expect(fixture.assistant.snapshot.invocations.map(\.role) == [.reasoning])
+        #expect(fixture.assistant.snapshot.records.isEmpty)
+    }
+
+    @Test func missingReasonerStillAllowsAvailableCompactReplies() async throws {
+        for preference in [LocalWorkPreference.automatic, .compact] {
+            let fixture = CoordinatorFixture(contextEnabled: false, workPreference: preference)
+            defer { fixture.cleanUp() }
+            fixture.reasoner.connectionFailure = QwenFailure.modelUnavailable
+            try await fixture.assistant.connect()
+            #expect(fixture.reasoner.connectCount == 1)
+            #expect(fixture.selector.connectCount == 1)
+            #expect(fixture.trace.roles.isEmpty, "Readiness checks must not generate text")
+            let events = CoordinatorEvents()
+            try await fixture.assistant.reply(to: makeRequest("Hello"), onEvent: events.receive)
+            #expect(events.texts == ["Accepted local answer."])
+            #expect(fixture.reasoner.requests.isEmpty)
+            #expect(fixture.reasoner.connectCount == 1)
+            #expect(fixture.selector.connectCount == 1)
+            #expect(fixture.assistant.snapshot.expertDecision?.target == .compact)
+            #expect(fixture.assistant.snapshot.receipts.last?.model == fixture.selector.model)
+            fixture.assistant.disconnect()
+            try await fixture.assistant.connect()
+            #expect(fixture.reasoner.connectCount == 2)
+            #expect(fixture.selector.connectCount == 2, "Disconnect must clear each role's readiness")
+        }
+    }
+
+    @Test func missingReasonerNeverMovesProtectedWorkToCompact() async throws {
+        for preference in [LocalWorkPreference.automatic, .compact] {
+            let fixture = CoordinatorFixture(contextEnabled: true, workPreference: preference)
+            defer { fixture.cleanUp() }
+            fixture.reasoner.connectionFailure = QwenFailure.modelUnavailable
+            try await fixture.assistant.connect()
+            let request = try makeRevisionRequest()
+            await #expect(throws: QwenFailure.modelUnavailable) {
+                try await fixture.assistant.reply(to: request, onEvent: { _ in Issue.record("Protected work reached compact") })
+            }
+            #expect(fixture.reasoner.connectCount == 2)
+            #expect(fixture.trace.roles.isEmpty)
+            #expect(fixture.assistant.snapshot.expertDecision?.target == .reasoning)
+            #expect(fixture.assistant.snapshot.admissionOutcome?.stage == .connection)
+            #expect(fixture.assistant.snapshot.admissionOutcome?.role == .reasoning)
+            // A newly available reasoner can become ready on the next request
+            // without reconnecting the independent compact role.
+            fixture.assistant.setContextEnabled(false)
+            fixture.reasoner.connectionFailure = nil
+            fixture.reasoner.response = { try revisionRoleResult($0, model: $1) }
+            let events = CoordinatorEvents()
+            try await fixture.assistant.reply(to: request, onEvent: events.receive)
+            #expect(fixture.reasoner.connectCount == 3)
+            #expect(fixture.selector.requests.isEmpty)
+            #expect(events.revisions.count == 1)
+        }
+        let reasoningOnly = CoordinatorFixture(contextEnabled: false, workPreference: .reasoning)
+        defer { reasoningOnly.cleanUp() }
+        reasoningOnly.reasoner.connectionFailure = QwenFailure.modelUnavailable
+        await #expect(throws: QwenFailure.modelUnavailable) { try await reasoningOnly.assistant.connect() }
+        #expect(reasoningOnly.selector.connectCount == 0)
+    }
+
+    @Test func compactReadinessNeverMasksIdentityOrReaderFailures() async throws {
+        let failures: [any Error] = [QwenFailure.modelChanged, QwenFailure.nonLocalModel,
+            QwenFailure.invalidResponse, LocalRepresentationContractError.unavailable]
+        for failure in failures {
+            let fixture = CoordinatorFixture(contextEnabled: false, workPreference: .compact)
+            defer { fixture.cleanUp() }
+            fixture.reasoner.connectionFailure = failure
+            do {
+                try await fixture.assistant.connect()
+                Issue.record("Identity or reader failure incorrectly enabled compact readiness")
+            } catch {
+                if let expected = failure as? QwenFailure { #expect((error as? QwenFailure) == expected) }
+                else { #expect(error is LocalRepresentationContractError) }
+            }
+            #expect(fixture.selector.connectCount == 0)
+            #expect(fixture.trace.roles.isEmpty)
+        }
+    }
+
+    @Test func cancellationDuringRoleReadinessNeverRevivesTheOwner() async throws {
+        for stage in 0..<3 {
+            let fixture = CoordinatorFixture(contextEnabled: false, workPreference: .compact)
+            defer { fixture.cleanUp() }
+            let work: Task<Void, Error>
+            let pausedClient: ControlledRoleClient
+            let connectionIndex: Int
+            if stage == 0 {
+                fixture.reasoner.pauseConnections = true
+                pausedClient = fixture.reasoner
+                connectionIndex = 0
+                work = Task { try await fixture.assistant.connect() }
+            } else {
+                fixture.reasoner.connectionFailure = QwenFailure.modelUnavailable
+                if stage == 1 {
+                    fixture.selector.pauseConnections = true
+                    pausedClient = fixture.selector
+                    connectionIndex = 0
+                    work = Task { try await fixture.assistant.connect() }
+                } else {
+                    try await fixture.assistant.connect()
+                    fixture.reasoner.connectionFailure = nil
+                    fixture.reasoner.pauseConnections = true
+                    pausedClient = fixture.reasoner
+                    connectionIndex = 1
+                    work = Task {
+                        try await fixture.assistant.reply(to: makeRevisionRequest(),
+                            onEvent: { _ in Issue.record("Cancelled readiness emitted a revision") })
+                    }
+                }
+            }
+            defer { work.cancel() }
+            try await eventually { pausedClient.pendingConnectionCount == 1 }
+            fixture.assistant.disconnect()
+            work.cancel()
+            let stoppedSnapshot = fixture.assistant.snapshot
+            pausedClient.resolveConnection(connectionIndex)
+            await expectStopped(work)
+            #expect(fixture.assistant.snapshot == stoppedSnapshot)
+            #expect(fixture.trace.roles.isEmpty)
+            if stage == 0 { #expect(fixture.selector.connectCount == 0) }
+        }
+    }
+
+    @Test func optionalDeadlineDoesNotHideModelIdentityFailure() async throws {
+        let fixture = CoordinatorFixture(contextEnabled: true, optionalContextTimeout: .milliseconds(10))
+        defer { fixture.cleanUp() }
+        fixture.selector.shouldPause = { _ in true }
+        try await fixture.assistant.connect()
+        let initialDisconnects = fixture.selector.disconnectCount
+        let work = Task { try await fixture.assistant.reply(to: makeRequest("Remember this constraint."), onEvent: { _ in Issue.record("Changed model emitted text") }) }
+        defer { work.cancel() }
+        try await eventually { fixture.selector.disconnectCount > initialDisconnects }
+        fixture.selector.failFirstGeneration(QwenFailure.modelChanged)
+        await #expect(throws: QwenFailure.modelChanged) { try await work.value }
+        #expect(fixture.reasoner.requests.isEmpty)
+        #expect(fixture.assistant.snapshot.records.isEmpty)
+    }
+
+    @Test func compactAvailabilityFailureRetriesReasonerWithDistinctReceipt() async throws {
+        for connectionFailure in [true, false] {
+            let fixture = CoordinatorFixture(contextEnabled: false, workPreference: .compact)
+            defer { fixture.cleanUp() }
+            if connectionFailure { fixture.selector.connectionFailure = QwenFailure.modelUnavailable }
+            else { fixture.selector.response = { _, _ in throw QwenFailure.generationFailed } }
+            try await fixture.assistant.connect()
+            let request = makeRequest("Give a short greeting."), events = CoordinatorEvents()
+            try await fixture.assistant.reply(to: request, onEvent: events.receive)
+            let snapshot = fixture.assistant.snapshot
+            #expect(events.texts == ["Accepted local answer."])
+            #expect(snapshot.expertDecision?.target == .reasoning)
+            #expect(snapshot.invocations.map(\.outcome) == (connectionFailure ? [.completed] : [.failed, .completed]))
+            #expect(Set(snapshot.invocations.map(\.id)).count == snapshot.invocations.count)
+            #expect(fixture.reasoner.requests.count == 1)
+            #expect(fixture.reasoner.requests.first?.input["context"]?["question"]?.string == request.prompt)
+            #expect(snapshot.receipts.last?.model == fixture.reasoner.model)
+        }
+    }
+
+    @Test func compactInvalidOutputAndCancellationNeverRetryReasoner() async throws {
+        let fixture = CoordinatorFixture(contextEnabled: false, workPreference: .compact)
+        defer { fixture.cleanUp() }
+        fixture.selector.response = { request, model in
+            try roleResult(request, model: model, additionalFields: ["sourceIDs": .array([.string("unknown-source")])])
+        }
+        try await fixture.assistant.connect()
+        await #expect(throws: HamptonAssistantFailure.invalidProposal) {
+            try await fixture.assistant.reply(to: makeRequest("Give a short greeting."), onEvent: { _ in Issue.record("Invalid compact answer emitted") })
+        }
+        #expect(fixture.reasoner.requests.isEmpty)
+        fixture.selector.shouldPause = { _ in true }
+        fixture.selector.response = { try roleResult($0, model: $1) }
+        let work = Task { try await fixture.assistant.reply(to: makeRequest("Give a short greeting."), onEvent: { _ in Issue.record("Cancelled compact answer emitted") }) }
+        defer { work.cancel() }
+        try await eventually { fixture.selector.pendingGenerationCount == 1 }
+        fixture.assistant.disconnect()
+        let stoppedSnapshot = fixture.assistant.snapshot
+        try fixture.selector.resolveFirstGeneration()
+        await expectStopped(work)
+        #expect(fixture.reasoner.requests.isEmpty)
+        #expect(fixture.assistant.snapshot == stoppedSnapshot)
+    }
+
+    @Test func compactPreferenceKeepsRevisionOnReasoningModel() async throws {
+        let fixture = CoordinatorFixture(contextEnabled: false, workPreference: .compact)
+        defer { fixture.cleanUp() }
+        fixture.reasoner.response = { try revisionRoleResult($0, model: $1) }
+        try await fixture.assistant.connect()
+        let events = CoordinatorEvents()
+        try await fixture.assistant.reply(to: try makeRevisionRequest(), onEvent: events.receive)
+        #expect(fixture.selector.connectCount == 0)
+        #expect(fixture.selector.requests.isEmpty)
+        #expect(fixture.reasoner.requests.count == 1)
+        #expect(fixture.assistant.snapshot.expertDecision?.target == .reasoning)
+        #expect(events.revisions.count == 1)
     }
 
     @Test func admissionRejectsRequestBudgetBeforeAnyModelInvocation() async throws {
@@ -287,7 +564,7 @@ struct HamptonReasonsAssistantTests {
         #expect(fixture.assistant.snapshot.records.isEmpty)
         #expect(fixture.assistant.snapshot.receipts.map(\.role) == [.reasoning])
         #expect(fixture.assistant.snapshot.attemptedInvocations == [.reasoning])
-        #expect(fixture.assistant.snapshot.receipts.first?.policyVersion == "native-hampton/v5")
+        #expect(fixture.assistant.snapshot.receipts.first?.policyVersion == "native-hampton/v6")
     }
 
     @Test func revisionValidationFailureDoesNotCommitTentativeContext() async throws {
@@ -779,7 +1056,8 @@ struct HamptonReasonsAssistantTests {
         let fixture = CoordinatorFixture(contextEnabled: true)
         defer { fixture.cleanUp() }
         try await fixture.assistant.connect()
-        let request = makeRequest(String(repeating: "Remember this useful sentence. ", count: 500))
+        // Leave room for v6 grounding instructions while still exceeding the optional-span budget.
+        let request = makeRequest(String(repeating: "Remember this useful sentence. ", count: 350))
         var candidateBank = HamptonSessionContext()
         let originalCandidates = candidateBank.beginTurn(request: request)
         #expect(originalCandidates.count == HamptonSessionContext.maximumCandidates)
@@ -852,12 +1130,15 @@ private final class CoordinatorFixture {
     let selector: ControlledRoleClient
     let assistant: HamptonReasonsAssistant
 
-    init(contextEnabled: Bool) {
+    init(contextEnabled: Bool, workPreference: LocalWorkPreference = .reasoning,
+         optionalContextTimeout: Duration = .seconds(20)) {
         let trace = CoordinatorTrace()
         self.trace = trace
         reasoner = ControlledRoleClient(name: "reasoner-fixture", trace: trace)
         selector = ControlledRoleClient(name: "selector-fixture", trace: trace)
-        assistant = HamptonReasonsAssistant(reasoner: reasoner, contextSelector: selector, contextEnabled: contextEnabled)
+        assistant = HamptonReasonsAssistant(reasoner: reasoner, contextSelector: selector, contextEnabled: contextEnabled,
+            optionalContextTimeout: optionalContextTimeout)
+        assistant.workPreference = workPreference
     }
 
     func cleanUp() {

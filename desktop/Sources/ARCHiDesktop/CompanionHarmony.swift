@@ -95,6 +95,7 @@ enum HarmonySynth {
     static let attackDuration: TimeInterval = 0.018
     static let releaseDuration: TimeInterval = 0.065
     static let maximumDuration: TimeInterval = 1.5
+    static let resonanceNoteDuration: TimeInterval = 0.46
 
     static func frequency(forMIDINote note: Int) -> Double? {
         guard (0...127).contains(note) else { return nil }
@@ -133,6 +134,27 @@ enum HarmonySynth {
             start += count + (index == noteFrames.count - 1 ? 0 : gap)
         }
 
+        return encodeWAV(samples)
+    }
+
+    /// One artistic record note from the shared resonance catalogue. Selection
+    /// and hover never call this; the audio owner requires an explicit request.
+    static func resonanceWAV(for kind: CompanionGraphKind) -> Data? {
+        let note = CompanionResonance.forKind(kind).midiNote
+        guard HarmonyCue.pitchClasses.contains(note % 12),
+              let frequency = frequency(forMIDINote: note),
+              frequency * 2 < Double(sampleRate) / 2 else { return nil }
+        let lead = frames(leadSilenceDuration), count = frames(resonanceNoteDuration)
+        let frameCount = lead + count + frames(tailSilenceDuration)
+        guard count > 1, frameCount < frames(maximumDuration) else { return nil }
+        var samples = [Int16](repeating: 0, count: frameCount)
+        for frame in 0..<count {
+            let time = Double(frame) / Double(sampleRate)
+            let value = maximumAmplitude * envelope(frame: frame, count: count)
+                * warmWave(time: time, frequency: frequency)
+            guard value.isFinite, abs(value) <= maximumAmplitude else { return nil }
+            samples[lead + frame] = Int16((value * Double(Int16.max)).rounded())
+        }
         return encodeWAV(samples)
     }
 

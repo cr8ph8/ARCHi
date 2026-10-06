@@ -2,14 +2,18 @@ import Foundation
 import CryptoKit
 import Darwin
 
-/// A portable checkpoint of the existing two owners, not another state model.
+/// A portable checkpoint of existing companion and document owners.
 /// Call while the app has stopped its writers. The journal must be resolved
 /// before admitting either owner at startup. Other processes are not locked.
 @MainActor
 enum DesktopProfileBackup {
     enum ProfileKind: String, Codable, Sendable { case review, preview, custom }
     static let journalFilename = ".archi-desktop-profile-restore.json"
-    static let maximumArchiveBytes = 160 * 1024
+    // Entries preserve exact bytes as base64. Permit every owner at its bound,
+    // plus bounded entry/digest/date metadata, without truncating a large library.
+    static var maximumArchiveBytes: Int {
+        4_096 + Slot.allCases.reduce(0) { $0 + (($1.limit + 2) / 3) * 4 }
+    }
 
     struct ArchiveSummary: Equatable, Sendable {
         let profile: ProfileKind
@@ -18,8 +22,15 @@ enum DesktopProfileBackup {
         let evolutionPresent: Bool
         let lessonCount: Int
         let hasKIN: Bool
+        let companionName: String?
         let bodyLabel: String?
         let byteCount: Int
+        let includesDocumentWork: Bool
+        let documentRecordCount: Int
+        let procedureCount: Int
+        let readingSourceCount: Int
+        let knowledgePageVersionCount: Int
+        let knowledgeLinkVersionCount: Int
     }
     struct RestorePreview: Sendable {
         let summary: ArchiveSummary
@@ -49,6 +60,7 @@ enum DesktopProfileBackup {
     enum Failure: LocalizedError {
         case invalidLocation, oversized, invalidArchive, invalidSavedState, profileMismatch
         case stalePreview, recoveryRequired, existingArtifact, io, rolledBack(URL)
+        case legacyWorkConflict
         var rollbackArchiveURL: URL? { if case .rolledBack(let url) = self { return url }; return nil }
         var errorDescription: String? {
             switch self {
@@ -61,12 +73,13 @@ enum DesktopProfileBackup {
             case .recoveryRequired: "An unfinished restore needs recovery before the profile can be used or saved."
             case .existingArtifact: "That backup filename already exists. Choose a new filename."
             case .io: "A local backup or recovery operation could not complete."
+            case .legacyWorkConflict: "This older backup excludes document work. Restore it into an empty profile; this profile’s reviewed work and reading copies must stay together."
             case .rolledBack: "Restore failed. The earlier saved pair was restored and its rollback archive was retained."
             }
         }
     }
     /// Synchronous fault seam for synthetic partial-write/crash recovery tests.
-    enum Checkpoint { case journalPrepared, firstFileInstalled, pairInstalled }
+    enum Checkpoint { case journalPrepared, firstFileInstalled, documentWorkInstalled, pairInstalled }
     struct Interrupted: Error {}
 
     static func hasPendingJournal(preferenceURL: URL) -> Bool {
@@ -91,7 +104,7 @@ enum DesktopProfileBackup {
                 .appendingPathComponent(url.lastPathComponent).standardizedFileURL.path
         }
         let outputPath = resolvedDestination(archiveURL)
-        guard ![preferenceURL, evolutionURL(preferenceURL), journalURL(preferenceURL)]
+        guard !(Slot.allCases.map { $0.url(preferenceURL) } + [journalURL(preferenceURL)])
             .map(resolvedDestination)
             .contains(where: { $0.caseInsensitiveCompare(outputPath) == .orderedSame }) else { throw Failure.invalidLocation }
         let pair = try readPair(preferenceURL)
@@ -111,7 +124,8 @@ enum DesktopProfileBackup {
         // A rollback can be deliberately restored later only if its raw prior
         // state also passes the normal owners. Invalid rollback bytes remain recovery-only.
         let summary = try validateOwners(archive)
-        let expected = try readPair(preferenceURL) // Preserve invalid prior bytes as rollback, never repair them.
+        try requireCompatibleDestination(archive, preferenceURL: preferenceURL)
+        let expected = try readPair(preferenceURL, includingWork: archive.pair.includesDocumentWork)
         return RestorePreview(summary: summary, destinationPreferencesPresent: expected.preferences.data != nil,
             destinationEvolutionPresent: expected.evolution.data != nil,
             archive: archive, expected: expected, preferenceURL: preferenceURL)
@@ -122,7 +136,8 @@ enum DesktopProfileBackup {
         let preferenceURL = preview.preferenceURL
         try requireNoJournal(preferenceURL)
         _ = try validateOwners(preview.archive)
-        guard try readPair(preferenceURL) == preview.expected else { throw Failure.stalePreview }
+        try requireCompatibleDestination(preview.archive, preferenceURL: preferenceURL)
+        guard try readPair(preferenceURL, includingWork: preview.expected.includesDocumentWork) == preview.expected else { throw Failure.stalePreview }
         try makePrivateDirectory(rollbackDirectory)
         let before = Archive(profile: preview.archive.profile, createdAt: Date(), purpose: .rollback, pair: preview.expected)
         let beforeData = try encode(before), targetData = try encode(preview.archive)
@@ -143,19 +158,21 @@ enum DesktopProfileBackup {
         let journalData = try encode(journal)
         // A second check follows all staging IO. An exclusive journal admits at
         // most one restoring process, although ordinary profile writers do not share that lock.
-        guard try readPair(preferenceURL) == preview.expected else { throw Failure.stalePreview }
+        try requireCompatibleDestination(preview.archive, preferenceURL: preferenceURL)
+        guard try readPair(preferenceURL, includingWork: preview.expected.includesDocumentWork) == preview.expected else { throw Failure.stalePreview }
         try writeNew(journalData, to: journalURL(preferenceURL))
         do {
             try checkpoint(.journalPrepared)
             var expected = preview.expected
-            try replacePairSlot(.preferences, with: preview.archive.pair.preferences, expected: expected,
-                preferenceURL: preferenceURL)
-            expected.preferences = preview.archive.pair.preferences
-            try checkpoint(.firstFileInstalled)
-            try replacePairSlot(.evolution, with: preview.archive.pair.evolution, expected: expected,
-                preferenceURL: preferenceURL)
+            for slot in expected.slots {
+                try replacePairSlot(slot, with: preview.archive.pair[slot], expected: expected, preferenceURL: preferenceURL)
+                expected[slot] = preview.archive.pair[slot]
+                if slot == .preferences { try checkpoint(.firstFileInstalled) }
+                if slot == .documentWork { try checkpoint(.documentWorkInstalled) }
+            }
             try checkpoint(.pairInstalled)
-            guard try readPair(preferenceURL) == preview.archive.pair else { throw Failure.stalePreview }
+            try requireCompatibleDestination(preview.archive, preferenceURL: preferenceURL)
+            guard try readPair(preferenceURL, includingWork: expected.includesDocumentWork) == preview.archive.pair else { throw Failure.stalePreview }
             try removeJournal(preferenceURL, expected: journalData)
             return RestoreReport(summary: preview.summary, rollbackArchiveURL: rollbackURL,
                 preferenceURL: preferenceURL, journalData: journalData, restoredPair: preview.archive.pair)
@@ -173,7 +190,7 @@ enum DesktopProfileBackup {
     /// to the captured prior bytes, provided nobody has changed the installed pair.
     static func undoRestore(_ report: RestoreReport) throws -> URL {
         try requireNoJournal(report.preferenceURL)
-        guard try readPair(report.preferenceURL) == report.restoredPair else { throw Failure.stalePreview }
+        guard try readPair(report.preferenceURL, includingWork: report.restoredPair.includesDocumentWork) == report.restoredPair else { throw Failure.stalePreview }
         try writeNew(report.journalData, to: journalURL(report.preferenceURL))
         guard let pending = try pendingRecovery(profile: report.summary.profile, preferenceURL: report.preferenceURL)
         else { throw Failure.recoveryRequired }
@@ -198,7 +215,8 @@ enum DesktopProfileBackup {
               digest(oldData) == journal.beforeHash, digest(targetData) == journal.targetHash else { throw Failure.invalidArchive }
         let old = try decodeArchive(oldData), target = try decodeArchive(targetData)
         guard old.profile == profile, target.profile == profile, old.purpose == .rollback else { throw Failure.invalidArchive }
-        let expected = try readPair(preferenceURL)
+        guard old.pair.includesDocumentWork == target.pair.includesDocumentWork else { throw Failure.invalidArchive }
+        let expected = try readPair(preferenceURL, includingWork: old.pair.includesDocumentWork)
         guard expected.isKnownMixture(old: old.pair, target: target.pair) else { throw Failure.stalePreview }
         return RecoveryPreview(profile: profile, rollbackArchiveURL: beforeURL, preferenceURL: preferenceURL,
             journalData: journalData, journal: journal, old: old.pair, target: target.pair, expected: expected)
@@ -231,21 +249,49 @@ enum DesktopProfileBackup {
     fileprivate struct Pair: Codable, Equatable, Sendable {
         var preferences: Entry
         var evolution: Entry
+        // Missing keys identify the legacy two-file archive. V2 always encodes
+        // all three entries, including explicit absence. No paths come from JSON.
+        var documentWork: Entry? = nil
+        var documentProcedures: Entry? = nil
+        var readingSources: Entry? = nil
+        var includesDocumentWork: Bool { documentWork != nil && documentProcedures != nil && readingSources != nil }
+        var slots: [Slot] { includesDocumentWork ? Slot.allCases : [.preferences, .evolution] }
+        subscript(slot: Slot) -> Entry {
+            get {
+                switch slot {
+                case .preferences: preferences
+                case .evolution: evolution
+                case .documentWork: documentWork ?? Entry(nil)
+                case .documentProcedures: documentProcedures ?? Entry(nil)
+                case .readingSources: readingSources ?? Entry(nil)
+                }
+            }
+            set {
+                switch slot {
+                case .preferences: preferences = newValue
+                case .evolution: evolution = newValue
+                case .documentWork: documentWork = newValue
+                case .documentProcedures: documentProcedures = newValue
+                case .readingSources: readingSources = newValue
+                }
+            }
+        }
         func isKnownMixture(old: Pair, target: Pair) -> Bool {
-            (preferences == old.preferences || preferences == target.preferences)
-                && (evolution == old.evolution || evolution == target.evolution)
+            slots == old.slots && slots == target.slots
+                && slots.allSatisfy { self[$0] == old[$0] || self[$0] == target[$0] }
         }
     }
     fileprivate struct Archive: Codable, Equatable, Sendable {
         enum Purpose: String, Codable, Sendable { case checkpoint, rollback }
-        static let schemaName = "archi-desktop-profile-backup/v1"
+        static let schemaName = "archi-desktop-profile-backup/v2"
+        static let legacySchemaName = "archi-desktop-profile-backup/v1"
         let schema: String
         let profile: ProfileKind
         let createdAt: Date
         let purpose: Purpose
         let pair: Pair
         init(profile: ProfileKind, createdAt: Date, purpose: Purpose, pair: Pair) {
-            schema = Self.schemaName; self.profile = profile
+            schema = pair.includesDocumentWork ? Self.schemaName : Self.legacySchemaName; self.profile = profile
             self.createdAt = Date(timeIntervalSince1970: (createdAt.timeIntervalSince1970 * 1000).rounded(.down) / 1000)
             self.purpose = purpose; self.pair = pair
         }
@@ -259,9 +305,29 @@ enum DesktopProfileBackup {
         let beforeHash: String
         let targetHash: String
     }
-    private enum Slot { case preferences, evolution }
-    private static func evolutionURL(_ preferenceURL: URL) -> URL {
-        preferenceURL.deletingPathExtension().appendingPathExtension("evolution.json")
+    fileprivate enum Slot: CaseIterable {
+        case preferences, evolution, documentWork, documentProcedures, readingSources
+        @MainActor var limit: Int {
+            switch self {
+            case .preferences: NativePreferenceDocument.maximumBytes
+            case .evolution: EvolutionStore.maximumSaveBytes
+            case .documentWork: 1_048_576
+            case .documentProcedures: 512 * 1_024
+            // Source copies and page history are one ReadingSourceLibrary archive.
+            case .readingSources: 8 * 1_024 * 1_024
+            }
+        }
+        func url(_ preferenceURL: URL) -> URL {
+            let suffix: String
+            switch self {
+            case .preferences: return preferenceURL
+            case .evolution: suffix = "evolution.json"
+            case .documentWork: suffix = "document-work.json"
+            case .documentProcedures: suffix = "document-procedures.json"
+            case .readingSources: suffix = "reading-sources.json"
+            }
+            return preferenceURL.deletingPathExtension().appendingPathExtension(suffix)
+        }
     }
     private static func journalURL(_ preferenceURL: URL) -> URL {
         preferenceURL.deletingLastPathComponent().appendingPathComponent(journalFilename)
@@ -270,9 +336,19 @@ enum DesktopProfileBackup {
         guard preferenceURL.isFileURL else { throw Failure.invalidLocation }
         guard !hasPendingJournal(preferenceURL: preferenceURL) else { throw Failure.recoveryRequired }
     }
-    private static func readPair(_ preferenceURL: URL) throws -> Pair {
-        Pair(preferences: Entry(try read(preferenceURL, limit: NativePreferenceDocument.maximumBytes)),
-             evolution: Entry(try read(evolutionURL(preferenceURL), limit: EvolutionStore.maximumSaveBytes)))
+    private static func readPair(_ preferenceURL: URL, includingWork: Bool = true) throws -> Pair {
+        var pair = Pair(preferences: Entry(nil), evolution: Entry(nil))
+        for slot in includingWork ? Slot.allCases : [.preferences, .evolution] {
+            pair[slot] = Entry(try read(slot.url(preferenceURL), limit: slot.limit))
+        }
+        return pair
+    }
+    private static func requireCompatibleDestination(_ archive: Archive, preferenceURL: URL) throws {
+        if !archive.pair.includesDocumentWork {
+            for slot in [Slot.documentWork, .documentProcedures, .readingSources] {
+                if try read(slot.url(preferenceURL), limit: slot.limit) != nil { throw Failure.legacyWorkConflict }
+            }
+        }
     }
     private static func readArchive(_ url: URL) throws -> Archive {
         guard let data = try read(url, limit: maximumArchiveBytes) else { throw Failure.invalidArchive }
@@ -281,10 +357,12 @@ enum DesktopProfileBackup {
     private static func decodeArchive(_ data: Data) throws -> Archive {
         guard data.count <= maximumArchiveBytes else { throw Failure.oversized }
         let archive: Archive = try decodeCanonical(data)
-        guard archive.schema == Archive.schemaName, archive.createdAt.timeIntervalSince1970.isFinite,
+        let validShape = archive.schema == Archive.schemaName ? archive.pair.includesDocumentWork
+            : archive.schema == Archive.legacySchemaName && archive.pair.documentWork == nil
+                && archive.pair.documentProcedures == nil && archive.pair.readingSources == nil
+        guard validShape, archive.createdAt.timeIntervalSince1970.isFinite,
               archive.createdAt.timeIntervalSince1970 >= 0,
-              archive.pair.preferences.valid(limit: NativePreferenceDocument.maximumBytes),
-              archive.pair.evolution.valid(limit: EvolutionStore.maximumSaveBytes) else { throw Failure.invalidArchive }
+              archive.pair.slots.allSatisfy({ archive.pair[$0].valid(limit: $0.limit) }) else { throw Failure.invalidArchive }
         return archive
     }
     private static func validateOwners(_ archive: Archive) throws -> ArchiveSummary {
@@ -302,40 +380,56 @@ enum DesktopProfileBackup {
             try writeNew(bytes, to: url)
             guard evolution.load() else { throw Failure.invalidSavedState }
         }
+        let temporaryPreferences = directory.appendingPathComponent("preferences.json")
+        for slot in [Slot.documentWork, .documentProcedures, .readingSources] {
+            if let bytes = archive.pair[slot].data { try writeNew(bytes, to: slot.url(temporaryPreferences)) }
+        }
+        let work = DocumentWorkJournal(url: Slot.documentWork.url(temporaryPreferences))
+        let methods = DocumentProcedureLibrary(url: Slot.documentProcedures.url(temporaryPreferences))
+        let sources = ReadingSourceLibrary(url: Slot.readingSources.url(temporaryPreferences))
+        guard work.loadError == nil, methods.loadError == nil, sources.loadError == nil else { throw Failure.invalidSavedState }
         let body: String?
         if let kin = document.qiMon {
-            if let growth = evolution.kinGrowthRecord, growth.originDigest != kin.originDigest { body = nil }
+            if kin.character == .hampton { body = kin.stageTitle }
+            else if let growth = evolution.kinGrowthRecord, growth.originDigest != kin.originDigest { body = nil }
             else { body = evolution.kinGrowthRecord?.active == true ? "First Light" : "Core Seed" }
         } else { body = evolution.activeFamily?.title }
         return ArchiveSummary(profile: archive.profile, createdAt: archive.createdAt,
             preferencesPresent: archive.pair.preferences.present, evolutionPresent: archive.pair.evolution.present,
-            lessonCount: document.lessons.count, hasKIN: document.qiMon != nil, bodyLabel: body,
-            byteCount: archive.pair.preferences.byteCount + archive.pair.evolution.byteCount)
+            lessonCount: document.lessons.count, hasKIN: document.qiMon?.character == .kin,
+            companionName: document.qiMon?.name, bodyLabel: body,
+            byteCount: archive.pair.slots.reduce(0) { $0 + archive.pair[$1].byteCount },
+            includesDocumentWork: archive.pair.includesDocumentWork,
+            documentRecordCount: work.records.count, procedureCount: methods.procedures.count,
+            readingSourceCount: sources.sources.count,
+            knowledgePageVersionCount: sources.knowledgePages.count,
+            knowledgeLinkVersionCount: sources.knowledgeLinks.count)
     }
     private static func replacePairSlot(_ slot: Slot, with entry: Entry, expected: Pair, preferenceURL: URL) throws {
-        guard try readPair(preferenceURL) == expected else { throw Failure.stalePreview }
-        let url = slot == .preferences ? preferenceURL : evolutionURL(preferenceURL)
-        let old = slot == .preferences ? expected.preferences : expected.evolution
+        guard try readPair(preferenceURL, includingWork: expected.includesDocumentWork) == expected else { throw Failure.stalePreview }
+        let url = slot.url(preferenceURL)
+        let old = expected[slot]
         if entry == old { return }
         if let bytes = entry.data {
             let staged = url.deletingLastPathComponent().appendingPathComponent(".archi-profile-stage-\(UUID())")
             try writeNew(bytes, to: staged)
             defer { try? FileManager.default.removeItem(at: staged) }
-            guard try readPair(preferenceURL) == expected else { throw Failure.stalePreview }
+            guard try readPair(preferenceURL, includingWork: expected.includesDocumentWork) == expected else { throw Failure.stalePreview }
             guard staged.path.withCString({ source in url.path.withCString { Darwin.rename(source, $0) } }) == 0 else { throw Failure.io }
         } else {
-            guard try readPair(preferenceURL) == expected else { throw Failure.stalePreview }
+            guard try readPair(preferenceURL, includingWork: expected.includesDocumentWork) == expected else { throw Failure.stalePreview }
             guard url.path.withCString({ unlink($0) }) == 0 else { throw Failure.io }
         }
         try syncDirectory(url.deletingLastPathComponent())
     }
     private static func rollback(old: Pair, target: Pair, preferenceURL: URL) throws {
-        var current = try readPair(preferenceURL)
+        var current = try readPair(preferenceURL, includingWork: old.includesDocumentWork)
         guard current.isKnownMixture(old: old, target: target) else { throw Failure.stalePreview }
-        try replacePairSlot(.preferences, with: old.preferences, expected: current, preferenceURL: preferenceURL)
-        current.preferences = old.preferences
-        try replacePairSlot(.evolution, with: old.evolution, expected: current, preferenceURL: preferenceURL)
-        guard try readPair(preferenceURL) == old else { throw Failure.stalePreview }
+        for slot in old.slots {
+            try replacePairSlot(slot, with: old[slot], expected: current, preferenceURL: preferenceURL)
+            current[slot] = old[slot]
+        }
+        guard try readPair(preferenceURL, includingWork: old.includesDocumentWork) == old else { throw Failure.stalePreview }
     }
     private static func removeJournal(_ preferenceURL: URL, expected: Data) throws {
         let url = journalURL(preferenceURL)

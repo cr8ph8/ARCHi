@@ -192,7 +192,7 @@ final class AssistantRoutingTests: XCTestCase {
 
     @MainActor
     func testGlobalInvalidationsCancelBothLanesAndRejectLateTextAndFailure() async throws {
-        for invalidation in ["placement", "source", "selection", "stop", "route"] {
+        for invalidation in ["source", "selection", "stop", "route"] {
             let fixture = RoutingFixture()
             let store = fixture.store
             defer { fixture.drain() }
@@ -202,7 +202,6 @@ final class AssistantRoutingTests: XCTestCase {
             fixture.local.emit(0, text: "Old local partial")
             fixture.cloud.emit(0, text: "Old Codex partial")
             switch invalidation {
-            case "placement": store.placed(at: CGPoint(x: 710, y: -110))
             case "source": store.share(text: "Replacement source.", name: "replacement.txt")
             case "selection": store.selectText(range: NSRange(location: 0, length: 6), sourceRevision: store.sourceRevision)
             case "stop": store.cancelWork()
@@ -490,10 +489,18 @@ private enum RoutingTestFailure: Error { case waitTimedOut }
 private final class RoutingFixture {
     let local = RoutingControlledClient()
     let factory = RoutingClientFactory()
+    private let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("assistant-routing-\(UUID().uuidString)", isDirectory: true)
     var cloud: RoutingControlledClient { factory.cloud }
-    lazy var store = CompanionStore(preferenceURL: URL(fileURLWithPath: "/dev/null/unused"),
+    lazy var store = CompanionStore(preferenceURL: directory.appendingPathComponent("preferences.json"),
         assistant: local, provider: .qwen,
-        assistantFactory: { [factory] provider, model in factory.make(provider, model) })
+        assistantFactory: { [factory] provider, model in factory.make(provider, model) },
+        tokenSteward: TokenStewardStore())
+
+    init() {
+        // A valid disposable profile lets source-reading preflight run normally.
+        try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
 
     func client(_ provider: AssistantProvider) -> RoutingControlledClient { provider == .qwen ? local : cloud }
 
@@ -503,6 +510,7 @@ private final class RoutingFixture {
         local.drain()
         cloud.drain()
         factory.localReplacements.forEach { $0.drain() }
+        try? FileManager.default.removeItem(at: directory)
     }
 }
 

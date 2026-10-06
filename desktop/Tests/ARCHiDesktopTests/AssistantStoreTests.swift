@@ -49,7 +49,7 @@ final class AssistantStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testMovingCompanionCancelsReplyAndRejectsLateTextAndFailure() async throws {
+    func testMovingCompanionKeepsOrdinaryReplyAndConnectionCurrent() async throws {
         let client = ControlledAssistantClient()
         let store = makeStore(client)
         defer { store.disconnectAssistant(); client.resumeAllPending() }
@@ -60,22 +60,21 @@ final class AssistantStoreTests: XCTestCase {
         client.emit(0, text: "A partial observation")
 
         let destination = CGPoint(x: -160, y: 510)
+        let ticket = store.contextTicket()
         store.placed(at: destination)
-        let stoppedReply = store.reply
-        let stoppedStatus = store.status
-        XCTAssertFalse(store.isWorking)
-        XCTAssertEqual(store.connectionState, .disconnected)
-        XCTAssertNotEqual(stoppedReply, "A partial observation")
-        XCTAssertGreaterThan(client.disconnectCount, 0)
+        XCTAssertTrue(store.isWorking)
+        XCTAssertEqual(store.connectionState, .ready)
+        XCTAssertEqual(store.reply, "A partial observation")
+        XCTAssertTrue(store.isCurrentContent(ticket))
+        XCTAssertFalse(store.isCurrent(ticket, requireVisible: false))
 
-        client.emit(0, text: "Late text about the old location")
-        client.resolveReply(0, result: .failure(AssistantFailure.turnFailed))
-        try await waitUntil("The cancelled reply continuation should drain") { client.finishedReplies.contains(0) }
+        client.emit(0, text: "A completed content-only answer")
+        client.resolveReply(0)
+        try await waitUntil("The reply continuation should complete") { client.finishedReplies.contains(0) && !store.isWorking }
         await Task.yield()
         XCTAssertEqual(store.position, destination)
-        XCTAssertEqual(store.reply, stoppedReply)
-        XCTAssertEqual(store.status, stoppedStatus)
-        XCTAssertEqual(store.connectionState, .disconnected)
+        XCTAssertEqual(store.reply, "A completed content-only answer")
+        XCTAssertEqual(store.connectionState, .ready)
     }
 
     @MainActor
@@ -305,7 +304,8 @@ final class AssistantStoreTests: XCTestCase {
         store.selectText(range: NSRange(location: NSNotFound, length: 3), sourceRevision: store.sourceRevision)
         XCTAssertEqual(store.textSelection, current)
         store.placed(at: CGPoint(x: 90, y: 70))
-        XCTAssertNil(store.textSelection)
+        XCTAssertEqual(store.textSelection, current)
+        XCTAssertTrue(store.isCurrentContent(ticket))
         XCTAssertEqual(store.sharedText, "New source")
         XCTAssertTrue(client.replies.isEmpty)
     }
@@ -334,7 +334,8 @@ final class AssistantStoreTests: XCTestCase {
 
     @MainActor
     private func makeStore(_ client: ControlledAssistantClient) -> CompanionStore {
-        CompanionStore(preferenceURL: URL(fileURLWithPath: "/dev/null/unused"), assistant: client, provider: .codex)
+        CompanionStore(preferenceURL: URL(fileURLWithPath: "/dev/null/unused"), assistant: client, provider: .codex,
+            tokenSteward: TokenStewardStore())
     }
 
     @MainActor

@@ -1,0 +1,58 @@
+{
+  "schema": "archi-task-reader-result/v1",
+  "recordedAt": "2026-09-27T05:40:18.485144+00:00",
+  "status": "limited-synthetic-pass",
+  "modelName": "qwen3.5:9b",
+  "modelDigest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+  "modelBlobDigest": "dec52a44569a2a25341c4e4d3fee25846eed4f6f0b936278e3a3c900bb99d37c",
+  "backendRevision": "llama.cpp:161755f29+archi-qwen35-text-v1",
+  "layer": "l_out-31",
+  "tokenRule": "prompt-last",
+  "measurementScope": "synthetic-record-field-support/prompt-final/ridge-v1",
+  "fitExamples": 96,
+  "calibrationCorrect": 24,
+  "calibrationExamples": 24,
+  "holdoutCorrect": 24,
+  "holdoutExamples": 24,
+  "minimumRequiredMargin": 0.1,
+  "calibrationMinimumMargin": 0.3491684356494539,
+  "holdoutMinimumMargin": 0.22823451953688118,
+  "calibrationSeparation": 11.499748931341399,
+  "selectedStrength": 0.1,
+  "trainingCV": [
+    {
+      "strength": 0.01,
+      "errors": 1,
+      "examples": 96
+    },
+    {
+      "strength": 0.1,
+      "errors": 1,
+      "examples": 96
+    },
+    {
+      "strength": 1.0,
+      "errors": 2,
+      "examples": 96
+    },
+    {
+      "strength": 10.0,
+      "errors": 2,
+      "examples": 96
+    }
+  ],
+  "inputTokens": 20004,
+  "generatedTokens": 0,
+  "paidAPIRequests": 0,
+  "acquisitionSeconds": 395.79987758299103,
+  "qualifiedReaderSHA256": "b699deda8bc7bdd99b5e362c88d16accdd66c163222e89647086b44a680a7ac0",
+  "reviewSHA256": "4c78fce1410f6bfe920f06faaf0a4514130482295fe3c6a7fab46937562a4949",
+  "planSHA256": "8db6b8144b00b856e3084335393394484c790124c5bb731f91de84e7a75de3bc",
+  "nativeInferenceEnabled": false,
+  "qualificationScope": "New synthetic record IDs from same generator; calibration and heldout each require every signed margin >= 0.1. Not ordinary chat, generated answers, truth, steering or authority.",
+  "limits": [
+    "Existing failed readers remain failed. Changed model-layer/corpus/fitting choices prevent claiming a controlled improvement over those attempts.",
+    "No new native task measurement consumer or population reliability guarantee.",
+    "Raw activations and fitted weights remain local; this public result does not independently reproduce them."
+  ]
+}

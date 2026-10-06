@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-02",
+  "scope": "Authored/source-publication reconciliation; no application installation",
+  "before": {
+    "sharedEqual": 583,
+    "sharedDifferent": 55,
+    "mainOnly": 122,
+    "publicationOnly": 9,
+    "inventoryScope": "native/script/iOS/retained-source/Unity executable text; generated iOS Play excluded"
+  },
+  "merges": {
+    "publicationChangesMergedIntoMain": 34,
+    "resolvedConflicts": [
+      "ARCHiDesktopApp.swift",
+      "LiminalKnowledgeBindings.swift",
+      "LiminalKnowledgeBindingsTests.swift"
+    ],
+    "exactMethodReferenceDigestFixed": true,
+    "graphOwnershipAndEvidenceBothPreserved": true
+  },
+  "verification": {
+    "nativeCasesPassed": 55,
+    "nativeCasesSkipped": 1,
+    "skippedScope": "explicit live GPU/package qualification",
+    "updaterStagingCasesPassed": 13,
+    "parityCasesPassed": 12,
+    "retainedFieldPortraitRelayCasesPassed": 77,
+    "authoredAndPublicationNativeBuilds": true,
+    "publicationProductionWarningsAfterCleanup": 0,
+    "retainedPublicBuildWithoutPhoneArt": true,
+    "portraitBytesPreservedInAuthoredBuild": true,
+    "assetMetadataExactComparisons": 17,
+    "newModelCalls": 0,
+    "puzzleRuns": 0,
+    "unityCompileOrPlayModeRun": false,
+    "phoneInstall": false,
+    "desktopInstall": false
+  },
+  "cleanup": {
+    "r1": {
+      "entryCount": 18412,
+      "allBytesTargetsModesAndGitStateMatch": true,
+      "head": "3e6470787abda2897dbb07ccf41bffa08b5eed3a",
+      "branch": "codex/unify-desktop-r1-marketplace-ui",
+      "oldPathAbsent": true,
+      "archive": "ARCHi Recovery/retired-worktrees/2026-10-02/ARCHi Desktop R1"
+    },
+    "staleTemporaryWorktreeRegistrationRemoved": true,
+    "staleBranchCommitPreserved": "2dd31667260f9b9f59e1333c3f598a599410527a",
+    "generatedCacheAllocatedBytesRemoved": 705204224,
+    "uniqueSourceOrBranchesDeleted": false
+  },
+  "github": {
+    "pullRequest": "https://github.com/cr8ph8/ARCHi/pull/1",
+    "privateVulnerabilityReportingEnabledAndReadBack": true,
+    "newSourceCommit": "See the enclosing Git commit and PR; no self-referential commit hash is embedded."
+  },
+  "localEvidence": "output/source-reconciliation-2026-10-02",
+  "remaining": [
+    "Installed native/Unity walkthrough and rendering performance after source reconciliation",
+    "iPhone and original-art publication review remains separate",
+    "SigGraph and retired R1 contain preserved donor work, not wholesale imported product code",
+    "Broader recovery/accessibility/distribution and rights gates remain open"
+  ],
+  "sourceParity": {
+    "compared": 995,
+    "byteIdentical": 991,
+    "reviewedAssetPinPairs": 4,
+    "unapprovedDifferences": 0
+  }
+}

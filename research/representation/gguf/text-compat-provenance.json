@@ -1,0 +1,64 @@
+{
+  "schema": "archi-official-compatibility-provenance/v1",
+  "upstream": "ollama/ollama",
+  "tag": "v0.34.4",
+  "revision": "b2da9e468af2479058ae18c6d908ed29de410684",
+  "sources": [
+    {
+      "path": "create/qwen35.go",
+      "url": "https://github.com/ollama/ollama/blob/b2da9e468af2479058ae18c6d908ed29de410684/create/qwen35.go",
+      "sha256": "7b9114154e048de8038b503f93f956815e975ea7e952225aa809ce81b6a923d5",
+      "gitBlobSHA1": "a109ceb169b6c9f5d42df59f1c1cc1c52180a13d",
+      "matchesOfficialTree": true
+    },
+    {
+      "path": "llama/compat/001-llama-cpp-hooks.patch",
+      "url": "https://github.com/ollama/ollama/blob/b2da9e468af2479058ae18c6d908ed29de410684/llama/compat/001-llama-cpp-hooks.patch",
+      "sha256": "de62fe6dd48c1b19082ae234e0b21fbc3da326dc18d6c971b93953886bf3ebf7",
+      "gitBlobSHA1": "6610052094be088cc8f2452b4dc7960be7e1f42f",
+      "matchesOfficialTree": true
+    },
+    {
+      "path": "llama/compat/llama-ollama-compat.cpp",
+      "url": "https://github.com/ollama/ollama/blob/b2da9e468af2479058ae18c6d908ed29de410684/llama/compat/llama-ollama-compat.cpp",
+      "sha256": "0cafe4da3f806281d6ba8a6ed9c429e4d09003c4c2f541ed4d4f24cd769de04e",
+      "gitBlobSHA1": "17db74547f2ec41a0dd8f6bb55023a058276b19a",
+      "matchesOfficialTree": true
+    },
+    {
+      "path": "llama/compat/llama-ollama-compat-util.cpp",
+      "url": "https://github.com/ollama/ollama/blob/b2da9e468af2479058ae18c6d908ed29de410684/llama/compat/llama-ollama-compat-util.cpp",
+      "sha256": "9dbf99715d8d9ca5d4417a0374ea7f31fb1541b9c233f507fd19efaae0bbbddc",
+      "gitBlobSHA1": "7520608aa7dcb32d5ffd75bc9b5b53f426c5bede",
+      "matchesOfficialTree": true
+    },
+    {
+      "path": "llama/compat/llama-ollama-compat-util.h",
+      "url": "https://github.com/ollama/ollama/blob/b2da9e468af2479058ae18c6d908ed29de410684/llama/compat/llama-ollama-compat-util.h",
+      "sha256": "88936749149a3f9378858918e738af7f631ea096366ee3dae83cad5057a880d0",
+      "gitBlobSHA1": "1cfcc710948b79a0a59b5f18d0c7e56d696298b3",
+      "matchesOfficialTree": true
+    },
+    {
+      "path": "llama/compat/README.md",
+      "url": "https://github.com/ollama/ollama/blob/b2da9e468af2479058ae18c6d908ed29de410684/llama/compat/README.md",
+      "sha256": "8c0c8f054af671b4a0750d67959d707f8a8ac12b0de970ed9ea9a21db7a46039",
+      "gitBlobSHA1": "52a9bb905ec0c052226cc8b73a72dbf20eeabaf9",
+      "matchesOfficialTree": true
+    },
+    {
+      "path": "LICENSE",
+      "url": "https://github.com/ollama/ollama/blob/b2da9e468af2479058ae18c6d908ed29de410684/LICENSE",
+      "sha256": "5934ed2ce0d15154bcdb9c85203210abac0da4314af34081e36df4599f90b226",
+      "gitBlobSHA1": "8e3dc978a7ca8c53f56bbedc5b558116140fc02e",
+      "matchesOfficialTree": true
+    }
+  ],
+  "semanticReferences": {
+    "dtBiasAlias": "llama-ollama-compat.cpp:521-524 and 881-883",
+    "kvHeadCollapse": "llama-ollama-compat.cpp:861-867",
+    "ropePadding": "llama-ollama-compat.cpp:869-879",
+    "textAuxiliaryExclusion": "llama-ollama-compat.cpp:890-894",
+    "basePassExcludesMTP": "pinned llama.cpp src/models/qwen35.cpp:157-158"
+  }
+}

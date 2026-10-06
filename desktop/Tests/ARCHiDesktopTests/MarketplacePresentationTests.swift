@@ -65,8 +65,8 @@ final class MarketplacePresentationTests: XCTestCase {
             throw XCTSkip("The hidden panel exposes AppKit children but no SwiftUI accessibility proxies. Native visible-window accessibility acceptance remains unverified.")
         }
         let labels = nodes.compactMap(\.label)
-        XCTAssertTrue(labels.contains(where: { $0.contains("MARKETPLACE · LOCAL ALPHA") }))
-        XCTAssertTrue(labels.contains(where: { $0.contains("No checkout or wallet") }))
+        XCTAssertTrue(labels.contains(where: { $0.contains("MARKETPLACE") }))
+        XCTAssertTrue(labels.contains(where: { $0.contains("Free recipe access") }))
         XCTAssertTrue(nodes.contains(where: { $0.id == "marketplace.sections" }))
         for item in CompanionItemCatalog.designs {
             XCTAssertTrue(labels.contains(where: { $0.contains(item.title) }), item.title)

@@ -1,0 +1,120 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "R27-DOCUMENT-REVIEW-QUEUE-2026-09-27",
+  "milestoneId": "R27-DOCUMENT-REVIEW-QUEUE",
+  "asOf": "2026-09-27",
+  "recordedAt": "2026-09-27T07:06:00.362283+00:00",
+  "evidenceClass": "installed-applied-outcome-review-discovery",
+  "authority": "project-evidence-only",
+  "result": "PASS",
+  "resultScope": "Read-only discovery and explicit historical review through existing owners; populated disposable checks and installed empty owner queue.",
+  "sealed": true,
+  "draft": false,
+  "source": {
+    "branch": "codex/archi-encounter-composition-v1",
+    "baseCommit": "15544acf37152a400045e627a7def753e272c4ad",
+    "dirty": true,
+    "checkpointCommit": null,
+    "checkpointTree": null,
+    "cleanSource": false,
+    "sourceSurfaceDigest": "sha256:84f000d70e45a8199bb0c1cbd2ec9913e08ac490d2434f072edfa1d7a8eecee6",
+    "inventory": "output/review-queue-2026-09-27/source-inventory.json",
+    "inventorySHA256": "sha256:e6b6b9b86fc129260446378709f7c8692918181cf2daa494a60f6429880fb504",
+    "scope": "Native pending-review projection, historical review UI, existing owner integration, focused checks and guide; primary authored checkout remains dirty."
+  },
+  "checks": [
+    {
+      "id": "projection-and-owner",
+      "command": "swift test --filter DocumentReviewQueueTests|pendingReviewQueue (7 XCTest + 3 Swift Testing)",
+      "result": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "installed-app",
+      "command": "guarded build/install, strict signature, native empty queue observation and profile/resource hash comparison",
+      "result": "PASS",
+      "exitCode": 0
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "R27-DOCUMENT-REVIEW-QUEUE-ARTIFACT-1",
+      "path": "output/review-queue-2026-09-27/source-inventory.json",
+      "digest": "sha256:e6b6b9b86fc129260446378709f7c8692918181cf2daa494a60f6429880fb504",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-DOCUMENT-REVIEW-QUEUE-ARTIFACT-2",
+      "path": "output/review-queue-2026-09-27/RESULT.md",
+      "digest": "sha256:5b28b203738b5b78e01c17c048504ace763b6fe34c5aa75abba533f630ff5983",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-DOCUMENT-REVIEW-QUEUE-ARTIFACT-3",
+      "path": "output/review-queue-2026-09-27/installation.json",
+      "digest": "sha256:9fb6037901be26f787f9fe80000d5332d60b2134aa913e558ffdb2a84bd2e2f6",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-DOCUMENT-REVIEW-QUEUE-ARTIFACT-4",
+      "path": "output/review-queue-2026-09-27/profiles-before.json",
+      "digest": "sha256:428715483ced6c473421da05a0bd37d49a7f7169f3eee6950269f41c8d094cc4",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-DOCUMENT-REVIEW-QUEUE-ARTIFACT-5",
+      "path": "output/review-queue-2026-09-27/profiles-after-native.json",
+      "digest": "sha256:df648c3b9fa61c3731bb9a1dd4b147d581a5437e53e65448424372026c9aac53",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-DOCUMENT-REVIEW-QUEUE-ARTIFACT-6",
+      "path": "output/review-queue-2026-09-27/installed-before.json",
+      "digest": "sha256:edb3d5bd6b2a3163fcb65d24e9556b606af524d244611b476479329cd59efd98",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-DOCUMENT-REVIEW-QUEUE-ARTIFACT-7",
+      "path": "output/review-queue-2026-09-27/focused-checks.log",
+      "digest": "sha256:a027af181b05af4521671596e9c721cc0d57cd62acbd0e70a420a2be134a651b",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-DOCUMENT-REVIEW-QUEUE-ARTIFACT-8",
+      "path": "output/review-queue-2026-09-27/install.log",
+      "digest": "sha256:63ed7c5133052b1a5f395b2eadf66d9551fe77a5073a8fdbc71a1294c199a33d",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    }
+  ],
+  "limitations": [
+    "Populated historical review and explicit Keep used disposable production owners. Installed native observation covered the empty owner queue only.",
+    "The journal retains metadata, not source/reply prose. Opening history cannot restore an edit or establish its usefulness.",
+    "No model calls, automatic feedback, applied personal edits, retained learning, training or ARC puzzles in this increment.",
+    "Historical R18 receipt mismatch remains failed and unrecovered. Whole-stack efficacy and beta readiness remain unestablished."
+  ],
+  "nextPromotionCondition": "Use the connected method and review flow for owner-authored work, then inspect attributable outcomes and later reuse without substituting automatic Helpful ratings."
+}

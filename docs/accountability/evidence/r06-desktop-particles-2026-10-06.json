@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-06",
+  "scope": "Shared native memory-particle dynamics and explicit desktop area attention",
+  "status": "SOURCE_TESTED_INSTALLED_FINAL_WALKTHROUGH_PENDING",
+  "tests": {
+    "xctestPassed": 104,
+    "swiftTestingPassed": 9,
+    "failures": 0,
+    "skips": 0,
+    "modelCalls": 0,
+    "actualNativeMetalCompletionAndPicking": true,
+    "scope": "Focused mechanism, fixture and native rendering checks, not full installed acceptance."
+  },
+  "install": {
+    "version": "0.7.0",
+    "build": "356.80.17",
+    "strictInstalledSignaturePassed": true,
+    "strictRollbackSignaturePassed": true,
+    "profileFilesUnchanged": 33,
+    "authenticatedAssetFilesUnchanged": 86,
+    "cameraPurposePresent": false
+  },
+  "installedAcceptance": {
+    "finalCandidate": "Pending: Mac locked before walkthrough.",
+    "earlierFailures": "Immediate attraction cancellation and repeated graph work reproduced; fixes independently reviewed and regression tested."
+  },
+  "boundaries": [
+    "Explicit metadata-only window/area selection; no automatic semantic recognition.",
+    "Presentation cache bounded at two seconds; exact record actions and context validation remain current.",
+    "Camera code preserved outside compiled source; mobile/Unity deferred.",
+    "Graphics never grant memory, learning credit, state or permissions.",
+    "Sustained complete rendering FPS and dense accessibility are unqualified."
+  ],
+  "publicationBoundary": {
+    "delivery": "Reviewed source cohort to existing draft only; not a new release.",
+    "genericFreshExport": "Blocked; no release review. Fresh-export allowlist and manifest scope differ from existing curated publication.",
+    "boundedScan": "25 findings in two unchanged, already tracked PNGs; none in this changed source cohort. Existing image metadata needs review before release."
+  }
+}

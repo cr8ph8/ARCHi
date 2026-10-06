@@ -165,6 +165,8 @@ final class LessonStoreTests: XCTestCase {
         store.submit()
         try await waitUntil { !store.isWorking }
         XCTAssertEqual(store.compareResults[.qwen]?.state, .complete)
+        XCTAssertNil(store.stewardMessage, fixture.diagnostics)
+        XCTAssertEqual(store.tokenSteward.tasks.last?.lanes.first?.state, "complete")
         XCTAssertTrue(store.keptLessons.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.url.path))
         store.beginLessonCorrection(for: .qwen)
@@ -182,7 +184,7 @@ final class LessonStoreTests: XCTestCase {
         try await connect(store)
         store.submit()
         try await waitUntil { !store.isWorking }
-        let cloudRequest = try XCTUnwrap(fixture.cloud.requests.last)
+        let cloudRequest = try XCTUnwrap(fixture.cloud.requests.last, fixture.diagnostics)
         let local = try XCTUnwrap(store.compareResults[.qwen]?.receipt)
         let cloud = try XCTUnwrap(store.compareResults[.codex]?.receipt)
         XCTAssertTrue(cloudRequest.localLessons.isEmpty)
@@ -206,7 +208,7 @@ final class LessonStoreTests: XCTestCase {
         try await checkPendingMutation(.revise)
     }
 
-    @MainActor func testFailedWritePreservesExistingBytesDraftContextAndBothPendingLanes() async throws {
+    @MainActor func testFailedWritePreservesStateButExternalChangeRevokesLateLocalAnswer() async throws {
         try await checkPendingMutation(.failWrite)
     }
 
@@ -257,8 +259,15 @@ final class LessonStoreTests: XCTestCase {
         defer { fixture.cleanUp() }
         let store = fixture.store
         XCTAssertTrue(store.keepLesson(try review(store)))
-        store.share(text: String(repeating: "Large source. ", count: 4000), name: "synthetic-large.txt")
-        store.prompt = "Prepare the launch review."
+        // Document reading now selects bounded passages, so a large shared file
+        // does not force the mandatory model envelope over budget. Escaping this
+        // valid-size question does, without depending on passage selection.
+        store.prompt = "Prepare the launch review. " + String(repeating: "\"", count: 11_000)
+        XCTAssertLessThanOrEqual(store.prompt.utf8.count, 16_000)
+        let input = AssistantRequest(prompt: store.prompt, sourceName: nil, sourceText: "",
+            sourceRevision: store.sourceRevision, placementRevision: 0, settings: store.nextReplySettings,
+            localLessons: store.nextReplyLessons)
+        XCTAssertFalse(HamptonReasonsAssistant.fitsMandatoryReasoningInput(input))
         try await connect(store)
         store.submit()
         try await waitUntil { !store.isWorking }
@@ -268,6 +277,8 @@ final class LessonStoreTests: XCTestCase {
         XCTAssertEqual(receipt.localInvocations, [])
         XCTAssertTrue(receipt.lessonDeliveryDescription(for: lesson).hasPrefix("Prepared"))
         XCTAssertTrue(receipt.usedLessonIDs.isEmpty)
+        XCTAssertTrue(fixture.rig.reasoner.requests.isEmpty)
+        XCTAssertTrue(fixture.rig.selector.requests.isEmpty)
     }
 
     private enum Mutation { case withdraw, revise, failWrite, newKeep }
@@ -286,12 +297,16 @@ final class LessonStoreTests: XCTestCase {
         store.submit()
         try await waitUntil { !store.isWorking }
         XCTAssertFalse(store.hamptonSnapshot.records.isEmpty)
+        XCTAssertNil(store.stewardMessage, fixture.diagnostics)
+        XCTAssertEqual(store.tokenSteward.tasks.last?.lanes.first?.state, "complete")
         store.setAssistantRoute(.compare)
         try await connect(store)
         fixture.rig.reasoner.hold = true; fixture.cloud.hold = true
         store.prompt = "Prepare the launch review."
         store.submit()
-        try await waitUntil { !fixture.rig.reasoner.pendingIndices.isEmpty && fixture.cloud.isPending }
+        try await waitUntil(diagnostics: { fixture.diagnostics }) {
+            !fixture.rig.reasoner.pendingIndices.isEmpty && fixture.cloud.isPending
+        }
         let pending = try XCTUnwrap(fixture.rig.reasoner.pendingIndices.first)
         let oldCallback = try XCTUnwrap(fixture.rig.assistant.onSnapshot)
         let before = store.hamptonSnapshot, revision = store.lessonRevision
@@ -358,6 +373,20 @@ final class LessonStoreTests: XCTestCase {
             XCTAssertNil(store.compareResults[.qwen])
             XCTAssertTrue(store.hamptonSnapshot.records.isEmpty)
             XCTAssertNil(store.hamptonSnapshot.proposal)
+        } else if mutation == .failWrite {
+            // The failed save itself preserves the draft, bytes and pending
+            // context above. Its external-writer conflict separately makes the
+            // captured local memory stale when the delayed answer arrives.
+            XCTAssertEqual(store.compareResults[.qwen]?.state, .cancelled)
+            XCTAssertEqual(store.compareResults[.qwen]?.text, "")
+            XCTAssertNotEqual(store.reply, "Local fixture answer")
+            oldCallback(before)
+            XCTAssertTrue(store.hamptonSnapshot.records.isEmpty)
+            XCTAssertNil(store.hamptonSnapshot.proposal)
+            XCTAssertEqual(store.keptLessons, [original])
+            XCTAssertEqual(store.lessonRevision, revision)
+            XCTAssertEqual(store.lessonDraft?.text, "This revision cannot be saved.")
+            XCTAssertEqual(store.compareResults[.qwen]?.receipt?.localLessons, [LessonSnapshot(lesson: original)])
         } else {
             XCTAssertEqual(store.compareResults[.qwen]?.state, .complete)
             XCTAssertEqual(store.compareResults[.qwen]?.receipt?.localLessons, [LessonSnapshot(lesson: original)])
@@ -380,12 +409,13 @@ final class LessonStoreTests: XCTestCase {
 
     @MainActor
     private func waitUntil(file: StaticString = #filePath, line: UInt = #line,
+                           diagnostics: @MainActor () -> String = { "" },
                            _ condition: @MainActor () -> Bool) async throws {
         for _ in 0..<500 {
             if condition() { return }
             try await Task.sleep(for: .milliseconds(2))
         }
-        XCTFail("The deterministic fixture did not finish", file: file, line: line)
+        XCTFail("The deterministic fixture did not finish. \(diagnostics())", file: file, line: line)
         throw LessonStoreTestFailure.waitTimedOut
     }
 }
@@ -404,6 +434,12 @@ private enum LessonStoreTestFailure: Error { case waitTimedOut }
     let cloud = LessonStoreClient()
     lazy var store = CompanionStore(preferenceURL: url, assistant: rig.assistant,
         assistantFactory: { [cloud] _, _ in cloud }, wallClock: { [clock] in clock.now })
+    var diagnostics: String {
+        "route=\(store.route.rawValue); status=\(store.status); blocked=\(store.nextAssistantBlockedReason ?? "none"); "
+            + "usage=\(store.stewardMessage ?? "none"); local=\(String(describing: store.compareResults[.qwen]?.state)); "
+            + "codex=\(String(describing: store.compareResults[.codex]?.state)); "
+            + "reasonerRequests=\(rig.reasoner.requests.count); cloudRequests=\(cloud.requests.count)"
+    }
     func cleanUp() {
         store.disconnectAssistant(); rig.drain(); cloud.drain()
         try? FileManager.default.removeItem(at: directory)
@@ -475,7 +511,9 @@ private enum LessonStoreTestFailure: Error { case waitTimedOut }
         let text = String(decoding: try JSONEncoder().encode(JSONValue.object(payload)), as: UTF8.self)
         return LocalRoleResult(requestID: request.id, role: request.role, text: text,
             model: QwenModelMetadata(name: "lesson-store-fixture", family: "qwen", parameterSize: "fixture",
-                quantization: "fixture", digest: "fixture-only"), elapsedMilliseconds: 0)
+                // Synthetic artifact identity must obey the same hash contract
+                // as real metadata or usage cannot close before the next send.
+                quantization: "fixture", digest: String(repeating: "f", count: 64)), elapsedMilliseconds: 0)
     }
     func resolve(_ index: Int) { pending.removeValue(forKey: index)?.resume() }
     func drain() {

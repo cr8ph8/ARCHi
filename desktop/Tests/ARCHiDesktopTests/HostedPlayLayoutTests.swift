@@ -7,16 +7,23 @@ import XCTest
 final class HostedPlayLayoutTests: XCTestCase {
     @MainActor
     func testHabitatUsesTheNativePresenceArtworkForEveryStartingForm() throws {
-        var images = Set<Data>()
+        var formsByImage: [Data: Set<CompanionForm>] = [:]
         for form in CompanionForm.allCases {
             let data = try XCTUnwrap(CompanionPresenceArt.png(form: form, family: nil))
             let image = try XCTUnwrap(NSBitmapImageRep(data: data))
             XCTAssertEqual(image.pixelsWide, 512)
             XCTAssertEqual(image.pixelsHigh, 512)
             XCTAssertLessThan(data.count, 1_400_000)
-            images.insert(data)
+            formsByImage[data, default: []].insert(form)
         }
-        XCTAssertEqual(images.count, CompanionForm.allCases.count, "Each current form must survive native-to-Habitat drawing")
+        // The selectable Particle Seed look and the personal KIN Seed deliberately
+        // share the same portrait. Every other form keeps its own native drawing.
+        let sharedImages = formsByImage.values.filter { $0.count > 1 }
+        XCTAssertEqual(sharedImages, [Set([CompanionForm.kinSeed, .particleSeed])],
+                       "Only the explicit Particle Seed alias may reuse a form's Habitat artwork")
+        XCTAssertEqual(formsByImage.count, CompanionForm.allCases.count - 1)
+        XCTAssertEqual(CompanionSeedAppearance.archiLight.starterForm, .corePearl)
+        XCTAssertEqual(CompanionSeedAppearance.kinParticles.starterForm, .particleSeed)
     }
 
     @MainActor
@@ -157,14 +164,14 @@ final class HostedPlayLayoutTests: XCTestCase {
         var renderedEquipment: [CompanionEquipment] = []
         let equipped = CompanionEquipment(hand: .focusStaff)
         let host = HostedPlayHost(profile: .acceptance, assetDirectory: URL(fileURLWithPath: assets),
-            appearanceRenderer: { form, family, treatment, recipe, natural, equipment in
+            appearanceRenderer: { form, family, treatment, recipe, natural, equipment, seedColor in
                 rendered.append(form)
                 renderedEquipment.append(equipment)
                 // Only the native image availability is controlled. The actual
                 // bundled page, readiness projection, PNG decode and storage run.
                 if rendered.count <= 2 { return nil }
                 return CompanionPresenceArt.png(form: form, family: family, treatment: treatment,
-                    recipe: recipe, naturalVariation: natural, equipment: equipment)
+                    recipe: recipe, naturalVariation: natural, equipment: equipment, seedColor: seedColor)
             })
         host.updateAppearance(form: .light, family: nil, reduceMotion: true)
         host.updateAppearance(form: .companion, family: nil, reduceMotion: true, equipment: equipped)

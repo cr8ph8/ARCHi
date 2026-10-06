@@ -1,4 +1,6 @@
 import "./styles.css";
+import { isPortraitChoice, liminalPortraitLight, LIMINAL_LIGHT_STYLE, portraitLabel,
+  visibleLiminalPortrait, type PortraitChoice, type LiminalPortraitChoice } from "./liminal-portrait";
 import {
   AURAS,
   CARE_ACTIONS,
@@ -106,9 +108,19 @@ import {
   type BattleState,
   type BattleTeamId,
   type BattleTeamSetup,
+  type QiMonCard,
 } from "./battle-engine";
 import { compareBattleChoices, listBattleChoices, describeBattleAction, displayedBattleRound } from "./battle-presentation";
 import { buildBattleReadback } from "./battle-readback";
+import {
+  bondQiMonPair, createQiMonRoster, discoverQiMon, inspectQiMonRoster, inviteQiMon,
+  projectQiMonRoster, revisionForQiMonRoster, selectQiMonTeam, serializeQiMonRoster,
+  trainQiMon, type QiMonRoster, type QiMonRosterProjection,
+} from "./qimon-roster";
+import {
+  availableRelayTargets, createRelayBattle, createRelayCommand, resolveRelayRound,
+  type RelayBattleState,
+} from "./qimon-relay";
 
 declare global {
   interface Window {
@@ -205,6 +217,23 @@ const ui = {
   install: element<HTMLButtonElement>("install-button"),
   continuityButton: element<HTMLButtonElement>("continuity-button"),
   battleButton: element<HTMLButtonElement>("battle-button"),
+  rosterEntry: element<HTMLButtonElement>("roster-entry"),
+  rosterPanel: element<HTMLElement>("qimon-roster-panel"),
+  rosterClose: element<HTMLButtonElement>("qimon-roster-close"),
+  rosterStatus: element<HTMLElement>("qimon-roster-status"),
+  rosterOffers: element<HTMLElement>("qimon-offers"),
+  rosterMembers: element<HTMLElement>("qimon-members"),
+  rosterTeamControls: element<HTMLElement>("qimon-team-controls"),
+  rosterTraining: element<HTMLElement>("qimon-training"),
+  rosterRelay: element<HTMLElement>("qimon-relay"),
+  rosterReview: element<HTMLButtonElement>("qimon-roster-review"),
+  rosterFile: element<HTMLInputElement>("qimon-roster-file"),
+  rosterImportPreview: element<HTMLElement>("qimon-roster-import-preview"),
+  rosterImportTitle: element<HTMLElement>("qimon-roster-import-title"),
+  rosterImportDetail: element<HTMLElement>("qimon-roster-import-detail"),
+  rosterImportCancel: element<HTMLButtonElement>("qimon-roster-import-cancel"),
+  rosterImportConfirm: element<HTMLButtonElement>("qimon-roster-import-confirm"),
+  battleRosterReturn: element<HTMLButtonElement>("battle-roster-return"),
   battleOpponentMode: element<HTMLSelectElement>("battle-opponent-mode"),
   battleCommandHelp: element<HTMLElement>("battle-command-help"),
   battlePartnerNote: element<HTMLElement>("battle-partner-note"),
@@ -316,6 +345,28 @@ const ui = {
 const presentationFormButtons = [
   ...document.querySelectorAll<HTMLButtonElement>("[data-presentation-form]"),
 ];
+const liminalPortraitButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-liminal-portrait]")];
+let portraitChoice: PortraitChoice = "presence";
+// Public source may omit this artwork. Only these exact authored assets qualify;
+// absent files leave the existing presence renderer available.
+const liminalPortraitSources = import.meta.glob<string>([
+  "../ios/ARCHi/Assets.xcassets/LiminalGarnet.imageset/hampton-liminal-garnet-v1.png",
+  "../ios/ARCHi/Assets.xcassets/LiminalCurled.imageset/curled-rest.png",
+  "../ios/ARCHi/Assets.xcassets/LiminalStanding.imageset/standing-rest.png",
+], { eager: true, query: "?inline", import: "default" });
+const liminalPortraits = Object.fromEntries(Object.entries({
+  seed: liminalPortraitSources["../ios/ARCHi/Assets.xcassets/LiminalGarnet.imageset/hampton-liminal-garnet-v1.png"],
+  ball: liminalPortraitSources["../ios/ARCHi/Assets.xcassets/LiminalCurled.imageset/curled-rest.png"],
+  beast: liminalPortraitSources["../ios/ARCHi/Assets.xcassets/LiminalStanding.imageset/standing-rest.png"],
+}).flatMap(([key, source]) => {
+    if (!source) return [];
+    const image = new Image(); image.src = source;
+    return [[key, image]];
+  })) as Partial<Record<LiminalPortraitChoice, HTMLImageElement>>;
+function currentLiminalPortrait(): LiminalPortraitChoice | null {
+  return visibleLiminalPortrait(portraitChoice, Boolean(desktopHost),
+    portraitChoice !== "presence" && Boolean(liminalPortraits[portraitChoice]));
+}
 const presentationViewButtons = [
   ...document.querySelectorAll<HTMLButtonElement>("[data-presentation-view]"),
 ];
@@ -394,6 +445,9 @@ const STORAGE_KEY = "archi.journey.v3";
 const V2_STORAGE_KEY = "archi.journey.v2";
 const V1_STORAGE_KEY = "archi.journey.v1";
 const JOURNEY_LOCK_NAME = "archi.journey.commit";
+const ROSTER_STORAGE_KEY = "archi.qimon.roster.v1";
+const ROSTER_LOCK_NAME = "archi.qimon.roster.commit";
+const ROSTER_BACKUP_PREFIX = "archi.qimon.roster.backup.";
 const LEDGER_TAIL_LIMIT = 12;
 const query = new URLSearchParams(window.location.search);
 const qaMode = query.get("qa") === "golden";
@@ -403,6 +457,11 @@ let presentationState: PresentationState = DEFAULT_PRESENTATION_STATE;
 let presenceSequence: PresenceSequenceState = createPresenceSequence(DEFAULT_PRESENTATION_STATE.form);
 let presentationPulse = 0;
 let battleState: BattleState | null = null;
+let battleOwnedCards: readonly QiMonCard[] | null = null;
+let relayBattle: RelayBattleState | null = null;
+let relayBattleMessage = "Choose a team with an earned pair bond to begin a Relay practice.";
+let rosterTeamDraft: string[] = [];
+let rosterReturnFocus: HTMLElement | null = null;
 let battleOpponentMode: "companion" | "local" = "companion";
 let battleLockedCommands: Partial<Record<BattleTeamId, BattleCommand>> = {};
 // A transient rehearsal belongs to this view of the existing match. It never
@@ -630,6 +689,124 @@ async function bootstrapJourney(): Promise<Journey> {
 }
 
 let journey = await bootstrapJourney();
+let roster: QiMonRoster | null = null;
+let rosterStorageBaseline: string | null = null;
+let rosterIssue: string | null = null;
+let rosterProjectionIssue = false;
+let rosterStatusMessage = "Field traces can become invitations after you explicitly keep and review them.";
+let pendingRosterImport: {
+  generation: number;
+  candidate: QiMonRoster;
+  baseline: string | null;
+  journeyRevision: string;
+} | null = null;
+let rosterImportGeneration = 0;
+
+async function bootstrapQiMonRoster(): Promise<void> {
+  if (qaMode) { roster = createQiMonRoster(journey); return; }
+  if (!storageWriteAvailable || !navigator.locks) {
+    rosterIssue = "The local save or write lock is unavailable. Your QiMon roster is paused so progress cannot be lost.";
+    return;
+  }
+  try {
+    await navigator.locks.request(JOURNEY_LOCK_NAME, () => navigator.locks.request(ROSTER_LOCK_NAME, () => {
+      const stored = window.localStorage.getItem(ROSTER_STORAGE_KEY);
+      if (stored !== null) {
+        const inspected = inspectQiMonRoster(stored, journey);
+        if (inspected.status !== "valid") {
+          rosterIssue = `Saved roster needs review: ${inspected.message} Its bytes were kept.`;
+          rosterStorageBaseline = stored;
+          return;
+        }
+        roster = inspected.roster;
+        rosterStorageBaseline = stored;
+        return;
+      }
+      const created = createQiMonRoster(journey);
+      const archive = serializeQiMonRoster(created, journey);
+      window.localStorage.setItem(ROSTER_STORAGE_KEY, archive);
+      if (window.localStorage.getItem(ROSTER_STORAGE_KEY) !== archive) {
+        rosterIssue = "Roster readback failed. The Field Journey is unchanged.";
+        return;
+      }
+      roster = created;
+      rosterStorageBaseline = archive;
+    }));
+  } catch (error) {
+    rosterIssue = error instanceof Error ? error.message : "Roster storage is unavailable.";
+  }
+}
+
+await bootstrapQiMonRoster();
+
+function currentQiMonRoster(): QiMonRosterProjection | null {
+  if (!roster) return null;
+  try {
+    const projection = projectQiMonRoster(journey, roster);
+    if (rosterProjectionIssue) { rosterIssue = null; rosterProjectionIssue = false; }
+    return projection;
+  }
+  catch (error) {
+    rosterIssue = error instanceof Error ? error.message : "The roster no longer matches this Journey.";
+    rosterProjectionIssue = true;
+    return null;
+  }
+}
+
+async function commitQiMonRoster(
+  change: (current: QiMonRoster, rosterRevision: string, journeyRevision: string) => QiMonRoster,
+  success: string,
+): Promise<void> {
+  const current = roster;
+  if (!current || rosterIssue || journeyInputInterlocked || commitInFlight) return;
+  const expectedJourneyRevision = revisionForJourney(journey);
+  const expectedRosterRevision = revisionForQiMonRoster(current);
+  const baseline = rosterStorageBaseline;
+  commitInFlight = true;
+  try {
+    const underLock = (): void => {
+      if (roster !== current || revisionForJourney(journey) !== expectedJourneyRevision ||
+          revisionForQiMonRoster(current) !== expectedRosterRevision) {
+        throw new Error("The Journey or roster changed. Reopen the QiMon roster before trying again.");
+      }
+      if (!qaMode) {
+        const saved = readStoredJourney();
+        if (!storageWriteAvailable || saved?.status !== "valid" ||
+            revisionForJourney(saved.journey) !== expectedJourneyRevision ||
+            window.localStorage.getItem(ROSTER_STORAGE_KEY) !== baseline) {
+          throw new Error("Saved Journey or roster changed. No QiMon action was kept.");
+        }
+      }
+      const candidate = change(current, expectedRosterRevision, expectedJourneyRevision);
+      const archive = serializeQiMonRoster(candidate, journey);
+      if (!qaMode) {
+        try {
+          window.localStorage.setItem(ROSTER_STORAGE_KEY, archive);
+          if (window.localStorage.getItem(ROSTER_STORAGE_KEY) !== archive) throw new Error("Roster readback failed.");
+        } catch (error) {
+          try {
+            if (baseline === null) window.localStorage.removeItem(ROSTER_STORAGE_KEY);
+            else window.localStorage.setItem(ROSTER_STORAGE_KEY, baseline);
+          } catch { /* Keep the visible error; do not claim a saved action. */ }
+          throw error;
+        }
+      }
+      roster = candidate;
+      rosterStorageBaseline = qaMode ? baseline : archive;
+      rosterStatusMessage = success;
+    };
+    if (!qaMode && navigator.locks) {
+      await navigator.locks.request(JOURNEY_LOCK_NAME, () => navigator.locks.request(ROSTER_LOCK_NAME, underLock));
+    }
+    else if (qaMode) underLock();
+    else throw new Error("Roster write lock unavailable. No QiMon action was kept.");
+  } catch (error) {
+    rosterStatusMessage = error instanceof Error ? error.message : "This QiMon action was not kept.";
+  } finally {
+    commitInFlight = false;
+    renderQiMonRoster();
+  }
+}
 let session: PlaySession | null = null;
 let relayAttempt: RelayAttempt | null = null;
 let relaySequence = 0;
@@ -742,7 +919,10 @@ function updatePresentationInterface(): void {
   const visibleState = { ...presentationState, form: sequenceMix.phase } satisfies PresentationState;
   const startPhase = presencePhaseForPosition(presenceSequence.startPosition);
   const targetPhase = presencePhaseForPosition(presenceSequence.targetPosition);
-  const stateLabel = presenceSequence.direction === "settled"
+  const selectedPortrait = currentLiminalPortrait();
+  const stateLabel = selectedPortrait
+    ? `${portraitLabel(selectedPortrait)} · ${Math.round(presentationState.scale * 100)}%`
+    : presenceSequence.direction === "settled"
     ? presentationLabel(visibleState)
     : `${presenceSequence.direction === "reveal" ? "Unfolding" : "Returning"} · ${
         startPhase[0].toUpperCase()
@@ -761,6 +941,19 @@ function updatePresentationInterface(): void {
   ui.presenceConsole.dataset.direction = presenceSequence.direction;
   ui.presenceConsole.dataset.view = presentationState.view;
   ui.presenceConsole.dataset.motion = presentationState.motion;
+  ui.presenceConsole.dataset.portrait = selectedPortrait ?? "presence";
+  for (const button of liminalPortraitButtons) {
+    const active = button.dataset.liminalPortrait === (selectedPortrait ?? "presence");
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+    const choice = button.dataset.liminalPortrait;
+    const missing = isPortraitChoice(choice) && choice !== "presence" && !liminalPortraits[choice];
+    button.disabled = Boolean(desktopHost) || missing;
+    if (missing) button.textContent = `${portraitLabel(choice)} · Source unavailable`;
+  }
+  // A single captured view does not pretend to rotate or unfold like the live rig.
+  for (const button of [...presentationFormButtons, ...presentationViewButtons, ...presentationMotionButtons,
+    ui.presenceUnfold, ui.presenceReturn]) button.disabled = selectedPortrait !== null;
 
   for (const button of presentationFormButtons) {
     const active = button.dataset.presentationForm === sequenceMix.phase;
@@ -860,12 +1053,19 @@ function battleSize(teamId: BattleTeamId): number {
 }
 
 function updateBattleBuilder(teamId: BattleTeamId): void {
-  const size = battleSize(teamId);
+  const size = teamId === "one" && battleOwnedCards ? battleOwnedCards.length : battleSize(teamId);
   battleRosterSlots[teamId].forEach((slot, index) => {
     const visible = index < size;
     slot.hidden = !visible;
-    battleRosterRoleSelects[teamId][index].disabled = !visible;
+    battleRosterRoleSelects[teamId][index].disabled = !visible || (teamId === "one" && !!battleOwnedCards);
+    const caption = slot.querySelector("span");
+    if (caption) caption.textContent = teamId === "one" && battleOwnedCards?.[index]
+      ? battleOwnedCards[index].name : `QiMon ${index + 1}`;
   });
+  if (teamId === "one") {
+    ui.battleOneSize.disabled = !!battleOwnedCards;
+    ui.battleOneBond.disabled = !!battleOwnedCards;
+  }
   const integrity = BATTLE_LIMITS.teamIntegrity / size;
   const resonance = BATTLE_LIMITS.teamResonance / size;
   const concentration = BATTLE_LIMITS.maximumRoster - size;
@@ -908,7 +1108,8 @@ function updateBattleOpponentMode(): void {
   for (const teamId of BATTLE_TEAM_IDS) {
     const name = battlePlayerName(teamId);
     const builder = document.querySelector(`[data-battle-builder="${teamId}"] > legend`);
-    if (builder) builder.textContent = teamId === "one" && battleOpponentMode === "companion" ? "Your formation" : name;
+    if (builder) builder.textContent = teamId === "one" && battleOwnedCards
+      ? "Your invited QiMon" : teamId === "one" && battleOpponentMode === "companion" ? "Your formation" : name;
     const heading = document.querySelector(`#battle-${teamId}-hud .battle-team-hud__heading > div > span`);
     if (heading) heading.textContent = name;
     const commandLegend = document.querySelector(`#battle-${teamId}-command-fieldset > legend`);
@@ -925,6 +1126,10 @@ function preparePracticePartner(): void {
 }
 
 function readBattleTeamSetup(teamId: BattleTeamId): BattleTeamSetup {
+  if (teamId === "one" && battleOwnedCards?.length) {
+    return { id: "one", label: "You", bondRole: battleOwnedCards[0].role,
+      roster: battleOwnedCards.map((card) => ({ ...card })) };
+  }
   const size = battleSize(teamId);
   const label = battlePlayerName(teamId);
   const bond = teamId === "one" ? ui.battleOneBond.value : ui.battleTwoBond.value;
@@ -971,6 +1176,7 @@ function openBattleLab(): void {
   battleFocusReturnTarget = document.activeElement instanceof HTMLElement
     ? document.activeElement
     : ui.battleButton;
+  battleOwnedCards = null;
   setMode("battle");
   updateBattleOpponentMode();
   updateBattleInterface();
@@ -1180,6 +1386,7 @@ function leaveBattleLab(): void {
   const returnTarget = battleFocusReturnTarget?.isConnected ? battleFocusReturnTarget : ui.battleButton;
   battleFocusReturnTarget = null;
   battleState = null;
+  battleOwnedCards = null;
   battleLockedCommands = {};
   battleLastResult = "Choose both commands";
   setMode("habitat");
@@ -1651,7 +1858,9 @@ function updateBattleInterface(): void {
   ui.battleSetup.hidden = active;
   ui.battleCombat.hidden = !active;
   if (!battleState) {
-    ui.battleStatus.textContent = "Choose a formation. Discover how your QiMon work together.";
+    ui.battleStatus.textContent = battleOwnedCards
+      ? "Your invited QiMon are ready. This is a rules v1 practice; Keep the result before claiming training or a pair bond."
+      : "Choose a formation. Discover how your QiMon work together.";
     updateBattleBuilder("one");
     updateBattleBuilder("two");
     if (mode === "battle") updateHeader();
@@ -2326,6 +2535,490 @@ function closeContinuity(): void {
   publishDesktopJourney();
 }
 
+function rosterCard(title: string, detail: string, action?: { label: string; run: () => void }, role?: RoleId): HTMLElement {
+  const card = document.createElement("div");
+  card.className = "qimon-roster-card";
+  if (role) {
+    const sigil = document.createElement("span");
+    sigil.className = "qimon-roster-card__sigil";
+    sigil.textContent = ROLES[role].glyph;
+    sigil.style.setProperty("--qimon-sigil", ROLES[role].hue);
+    sigil.setAttribute("aria-hidden", "true");
+    card.append(sigil);
+  }
+  const copy = document.createElement("div");
+  copy.className = "qimon-roster-card__text";
+  const heading = document.createElement("strong");
+  heading.textContent = title;
+  const subline = document.createElement("small");
+  subline.textContent = detail;
+  copy.append(heading, subline);
+  card.append(copy);
+  if (action) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = action.label;
+    button.addEventListener("click", action.run);
+    card.append(button);
+  }
+  return card;
+}
+
+function rosterAction(label: string, run: () => void, disabled = false): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  button.disabled = disabled;
+  button.addEventListener("click", run);
+  return button;
+}
+
+function startOwnedPractice(cards: readonly QiMonCard[]): void {
+  if (journeyInputInterlocked || !cards.length || cards.length > 3 || !currentQiMonRoster()) return;
+  closeQiMonRoster();
+  battleFocusReturnTarget = ui.rosterEntry;
+  battleOwnedCards = cards.map((card) => ({ ...card }));
+  battleOpponentMode = "companion";
+  ui.battleOpponentMode.value = "companion";
+  ui.battleOneSize.value = String(cards.length);
+  ui.battleOneBond.value = cards[0].role;
+  cards.forEach((card, index) => { battleRosterRoleSelects.one[index].value = card.role; });
+  setMode("battle");
+  updateBattleOpponentMode();
+  updateBattleInterface();
+  ui.battleStart.focus({ preventScroll: true });
+}
+
+function startOwnedRelay(projection: QiMonRosterProjection): void {
+  if (projection.team.length < 2 || projection.team.length > 3 || !roster) return;
+  const selectedIds = projection.team.map((card) => card.id);
+  const edges = projection.bonds.filter((bond) => bond.memberIds.every((id) => selectedIds.includes(id)))
+    .map((bond) => ({ id: bond.bondEventId, members: bond.memberIds, sourceEventId: bond.sourceEventId }));
+  if (!edges.length) return;
+  try {
+    relayBattle = createRelayBattle(crypto.randomUUID(), {
+      formation: { id: "one", label: "Your QiMon", bondRole: projection.team[0].role,
+        roster: projection.team.map((card) => ({ ...card })) },
+      eligibility: { source: "owned", originDigest: journeyOriginSha256(journey),
+        rosterRevision: projection.revision, selectedMemberIds: selectedIds, pairEdges: edges },
+    }, {
+      formation: { id: "two", label: "Practice partner", bondRole: "guardian",
+        roster: [{ id: "two-practice-1", name: "Guardian echo", role: "guardian" }] },
+      eligibility: { source: "practice", originDigest: null, rosterRevision: null,
+        selectedMemberIds: ["two-practice-1"], pairEdges: [] },
+    });
+    relayBattleMessage = "Relay practice started. The partner follows a public Pulse/Guard rhythm; choose each of your moves.";
+  } catch (error) {
+    relayBattleMessage = error instanceof Error ? error.message : "Relay practice could not start.";
+  }
+  renderQiMonRoster();
+}
+
+function playOwnedRelay(action: Parameters<typeof createRelayCommand>[2], target?: string): void {
+  if (!relayBattle || relayBattle.status !== "active") return;
+  try {
+    const first = createRelayCommand(relayBattle, "one", action, target);
+    const partnerAction = relayBattle.round % 3 === 0 ? "guard" : "pulse";
+    const second = createRelayCommand(relayBattle, "two", partnerAction);
+    const result = resolveRelayRound(relayBattle, first, second);
+    if (!result.accepted) relayBattleMessage = result.reason;
+    else {
+      relayBattle = result.state;
+      const effect = result.event.outcomes[0];
+      relayBattleMessage = action === "relay"
+        ? `Relay spent one Spark and passed ${effect.chargeGranted} temporary Charge. The incoming QiMon took the simultaneous opposing move.`
+        : `${action[0].toUpperCase()}${action.slice(1)} resolved. ${effect.damageDealt} damage dealt, ${effect.damageTaken} taken${effect.chargeConsumed ? `, ${effect.chargeConsumed} Charge used` : ""}.`;
+      if (result.state.status === "complete") {
+        relayBattleMessage += ` Practice complete: ${result.state.winner === "one" ? "your team prevailed" : result.state.winner === "two" ? "the practice partner prevailed" : "draw"}. No Journey reward is kept from this v2 match.`;
+      }
+    }
+  } catch (error) {
+    relayBattleMessage = error instanceof Error ? error.message : "That Relay move was unavailable.";
+  }
+  renderQiMonRoster();
+}
+
+function renderQiMonRoster(): void {
+  for (const node of [ui.rosterOffers, ui.rosterMembers, ui.rosterTeamControls, ui.rosterTraining, ui.rosterRelay]) {
+    node.replaceChildren();
+  }
+  const projection = currentQiMonRoster();
+  ui.rosterStatus.textContent = rosterIssue ?? rosterStatusMessage;
+  ui.rosterStatus.classList.toggle("is-error", !!rosterIssue);
+  if (!roster || !projection || rosterIssue) {
+    ui.rosterOffers.append(rosterCard("Roster paused", "The saved roster remains untouched. Download it before reviewing a new Journey or roster source."));
+    ui.rosterTeamControls.append(rosterAction("Download saved bytes", downloadQiMonRoster, !rosterStorageBaseline));
+    ui.rosterTeamControls.append(rosterAction("Archive old roster and start fresh", () => void startNewQiMonRoster(),
+      !storageWriteAvailable || !navigator.locks || !rosterStorageBaseline));
+    appendArchivedRosterCopies();
+    return;
+  }
+  const found = new Set(roster.events.flatMap((event) => event.action.kind === "discover"
+    ? [event.action.sourceEventId] : []));
+  const plays = journey.events.slice(roster.baseEventCount)
+    .filter((event) => event.kind === "play-commit" && event.choice !== "hold" && !found.has(event.eventId));
+  for (const offer of projection.offers) {
+    ui.rosterOffers.append(rosterCard(offer.card.name, `Invitation from kept trace ${offer.sourceEventId.slice(0, 24)}…`, {
+      label: "Invite",
+      run: () => void commitQiMonRoster((current, r, j) => inviteQiMon(journey, current, offer.id, r, j),
+        `${offer.card.name} joined your local roster.`),
+    }, offer.card.role));
+  }
+  for (const event of plays.slice(-4).reverse()) {
+    if (event.kind !== "play-commit") continue;
+    ui.rosterOffers.append(rosterCard(event.fieldName, `Kept Field trace · ${event.committedAt.slice(0, 10)} · ${event.choice}`, {
+      label: "Find",
+      run: () => void commitQiMonRoster((current, r, j) => discoverQiMon(journey, current, event.eventId, r, j),
+        "A source-bound QiMon invitation is ready for your review."),
+    }));
+  }
+  if (!projection.offers.length && !plays.length) {
+    ui.rosterOffers.append(rosterCard("Your next discovery is ahead", "Explore a Field, choose an expression and Keep the trace. Then return to invite a QiMon."));
+  }
+
+  const memberIds = new Set(projection.members.map((member) => member.id));
+  rosterTeamDraft = rosterTeamDraft.filter((id) => memberIds.has(id));
+  if (!rosterTeamDraft.length && projection.team.length) rosterTeamDraft = projection.team.map((card) => card.id);
+  for (const member of projection.members) {
+    const card = rosterCard(member.card.name,
+      `Training tier ${member.trainingTier}/3 · invited from ${member.sourceEventId.slice(0, 24)}…`, {
+        label: "Train solo", run: () => startOwnedPractice([member.card]),
+      }, member.card.role);
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = rosterTeamDraft.includes(member.id);
+    checkbox.setAttribute("aria-label", `Select ${member.card.name} for your team`);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked && rosterTeamDraft.length < 3) rosterTeamDraft.push(member.id);
+      else if (!checkbox.checked) rosterTeamDraft = rosterTeamDraft.filter((id) => id !== member.id);
+      else checkbox.checked = false;
+      renderQiMonRoster();
+    });
+    card.prepend(checkbox);
+    ui.rosterMembers.append(card);
+  }
+  if (!projection.members.length) ui.rosterMembers.append(rosterCard("No QiMon invited yet", "Find a kept Field trace above and explicitly invite its QiMon."));
+
+  const chosen = rosterTeamDraft.map((id) => projection.members.find((member) => member.id === id)!.card);
+  const changedTeam = JSON.stringify(chosen.map((card) => card.id)) !== JSON.stringify(projection.team.map((card) => card.id));
+  ui.rosterTeamControls.append(rosterAction("Keep formation", () => {
+    void commitQiMonRoster((current, r, j) => selectQiMonTeam(journey, current, chosen.map((card) => card.id), r, j),
+      "Your formation was kept in the local QiMon roster.");
+  }, !chosen.length || !changedTeam));
+  ui.rosterTeamControls.append(rosterAction("Practice selected", () => startOwnedPractice(chosen), !chosen.length));
+  ui.rosterTeamControls.append(rosterAction("Download roster copy", downloadQiMonRoster));
+  appendArchivedRosterCopies();
+
+  const credited = new Set(roster.events.flatMap((record) =>
+    record.action.kind === "train" || record.action.kind === "bond" ? [record.action.sourceEventId] : []));
+  let candidates = 0;
+  for (const event of journey.events.slice(roster.baseEventCount)) {
+    if (event.kind !== "practice-complete" || credited.has(event.eventId)) continue;
+    const cards = event.replay.teams[0].roster;
+    const recruited = cards.map((card) => projection.members.find((member) => member.id === card.id &&
+      member.card.name === card.name && member.card.role === card.role));
+    if (recruited.some((member) => !member)) continue;
+    const members = recruited as typeof projection.members[number][];
+    const invitedBeforePractice = members.every((member) => {
+      const invitation = roster!.events.find((record) => record.eventId === member.invitationEventId);
+      return invitation && event.sequence > invitation.journeyEventCount;
+    });
+    if (!invitedBeforePractice) continue;
+    if (cards.length === 1 && members[0].trainingTier < 3) {
+      candidates += 1;
+      ui.rosterTraining.append(rosterCard(`${members[0].card.name} · solo practice`,
+        `Kept battle ${event.replay.battleId.slice(0, 13)}… · exact replay available`, {
+          label: "Keep training",
+          run: () => void commitQiMonRoster((current, r, j) => trainQiMon(journey, current, members[0].id, event.eventId, r, j),
+            `${members[0].card.name} earned one training tier.`),
+        }));
+    } else if (cards.length === 2 && !projection.bonds.some((bond) =>
+      bond.memberIds.includes(members[0].id) && bond.memberIds.includes(members[1].id))) {
+      const actors = new Set(event.replay.commands.map((round) => round[0].activeQiMonId));
+      candidates += 1;
+      ui.rosterTraining.append(rosterCard(`${members[0].card.name} + ${members[1].card.name}`,
+        actors.has(members[0].id) && actors.has(members[1].id)
+          ? "Both acted in a kept two-member practice. Review and keep their pair bond."
+          : "Both QiMon need to act; try a Swap and move with each member in another practice.",
+        actors.has(members[0].id) && actors.has(members[1].id) ? {
+          label: "Keep pair bond",
+          run: () => void commitQiMonRoster((current, r, j) => bondQiMonPair(journey, current,
+            members[0].id, members[1].id, event.eventId, r, j), "An earned pair bond was kept."),
+        } : undefined));
+    }
+  }
+  if (!candidates) ui.rosterTraining.append(rosterCard("Practice creates the next node", "Keep a solo match to train one recruit, or keep a two-member match where both acted to form a pair."));
+  renderQiMonRelay(projection);
+}
+
+function renderQiMonRelay(projection: QiMonRosterProjection): void {
+  if (relayBattle) {
+    const one = relayBattle.teams[0], two = relayBattle.teams[1];
+    const active = one.roster.find((member) => member.id === one.activeQiMonId);
+    const opposing = two.roster.find((member) => member.id === two.activeQiMonId);
+    ui.rosterRelay.append(rosterCard(`Round ${relayBattle.round} · ${active?.name ?? "QiMon"}`,
+      `Your Integrity ${active?.integrity ?? 0} · Spark ${one.spark} · Charge ${active?.charge ?? 0} | Partner Integrity ${opposing?.integrity ?? 0}`));
+    const message = document.createElement("p");
+    message.className = "qimon-relay-readout";
+    message.textContent = relayBattleMessage;
+    ui.rosterRelay.append(message);
+    const actions = document.createElement("div");
+    actions.className = "qimon-relay-actions";
+    if (relayBattle.status === "active") {
+      for (const action of ["pulse", "guard", "signature"] as const) {
+        actions.append(rosterAction(action[0].toUpperCase() + action.slice(1), () => playOwnedRelay(action)));
+      }
+      for (const target of one.roster.filter((member) => member.id !== one.activeQiMonId && member.integrity > 0)) {
+        actions.append(rosterAction(`Swap → ${target.name}`, () => playOwnedRelay("swap", target.id)));
+      }
+      for (const target of availableRelayTargets(relayBattle, "one")) {
+        const name = one.roster.find((member) => member.id === target.targetQiMonId)?.name ?? "QiMon";
+        actions.append(rosterAction(`Relay → ${name}`, () => playOwnedRelay("relay", target.targetQiMonId)));
+      }
+      actions.append(rosterAction("End practice", () => playOwnedRelay("surrender")));
+    } else actions.append(rosterAction("Close result", () => { relayBattle = null; renderQiMonRoster(); }));
+    ui.rosterRelay.append(actions);
+    return;
+  }
+  const selectedIds = projection.team.map((card) => card.id);
+  const paired = projection.bonds.some((bond) => bond.memberIds.every((id) => selectedIds.includes(id)));
+  ui.rosterRelay.append(rosterCard(paired ? "An earned pair is ready" : "Build an earned pair",
+    paired ? "Relay transfers temporary Charge and spends one shared Spark. This v2 practice is session only."
+      : "Keep a two-member match in which both QiMon act, then keep the pair bond and formation."));
+  ui.rosterRelay.append(rosterAction("Start Relay practice", () => startOwnedRelay(projection), !paired));
+}
+
+function archivedRosterKeys(): string[] {
+  try {
+    return Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index))
+      .filter((key): key is string => Boolean(key?.startsWith(ROSTER_BACKUP_PREFIX)))
+      .sort();
+  } catch { return []; }
+}
+
+function appendArchivedRosterCopies(): void {
+  for (const key of archivedRosterKeys()) {
+    ui.rosterTeamControls.append(rosterAction(`Download archived copy ${key.slice(-8)}`, () => {
+      try {
+        const saved = window.localStorage.getItem(key);
+        if (!saved) throw new Error("This archived copy is unavailable.");
+        downloadRawQiMonRoster(saved, `archi-qimon-archived-${key.slice(-12)}.json`);
+      } catch (error) {
+        rosterStatusMessage = error instanceof Error ? error.message : "The archived copy could not be read.";
+      }
+      renderQiMonRoster();
+    }));
+  }
+}
+
+async function startNewQiMonRoster(): Promise<void> {
+  if (!rosterIssue || !rosterStorageBaseline || commitInFlight || journeyInputInterlocked ||
+      !storageWriteAvailable || !navigator.locks) return;
+  const baseline = rosterStorageBaseline;
+  const expectedJourneyRevision = revisionForJourney(journey);
+  commitInFlight = true;
+  try {
+    await navigator.locks.request(JOURNEY_LOCK_NAME, () => navigator.locks.request(ROSTER_LOCK_NAME, () => {
+      const saved = readStoredJourney();
+      if (saved?.status !== "valid" || revisionForJourney(saved.journey) !== expectedJourneyRevision ||
+          window.localStorage.getItem(ROSTER_STORAGE_KEY) !== baseline) {
+        throw new Error("The saved Journey or roster changed. Nothing was replaced.");
+      }
+      const backupKey = `${ROSTER_BACKUP_PREFIX}${sha256String(baseline)}`;
+      const previousBackup = window.localStorage.getItem(backupKey);
+      if (previousBackup !== null && previousBackup !== baseline) {
+        throw new Error("The archived roster key contains different data. Nothing was replaced.");
+      }
+      if (previousBackup === null) window.localStorage.setItem(backupKey, baseline);
+      if (window.localStorage.getItem(backupKey) !== baseline) {
+        throw new Error("The old roster could not be archived. Nothing was replaced.");
+      }
+      const fresh = createQiMonRoster(journey);
+      const archive = serializeQiMonRoster(fresh, journey);
+      try {
+        window.localStorage.setItem(ROSTER_STORAGE_KEY, archive);
+        if (window.localStorage.getItem(ROSTER_STORAGE_KEY) !== archive) throw new Error("New roster readback failed.");
+      } catch (error) {
+        try { window.localStorage.setItem(ROSTER_STORAGE_KEY, baseline); } catch { /* Report failure below. */ }
+        throw error;
+      }
+      roster = fresh;
+      rosterStorageBaseline = archive;
+      rosterIssue = null;
+      rosterProjectionIssue = false;
+      rosterTeamDraft = [];
+      rosterStatusMessage = "A new roster was saved for this Journey. The previous roster remains in a separate downloadable local archive.";
+    }));
+  } catch (error) {
+    rosterStatusMessage = error instanceof Error ? error.message : "The new roster could not be saved.";
+  } finally {
+    commitInFlight = false;
+    renderQiMonRoster();
+  }
+}
+
+function downloadRawQiMonRoster(archive: string, filename: string): void {
+  const url = URL.createObjectURL(new Blob([archive], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  rosterStatusMessage = "A separate QiMon roster copy was prepared. Your Journey archive remains separate.";
+}
+
+function downloadQiMonRoster(): void {
+  try {
+    const archive = rosterIssue ? rosterStorageBaseline : roster ? serializeQiMonRoster(roster, journey) : rosterStorageBaseline;
+    if (!archive) throw new Error("No roster copy is available on this device.");
+    downloadRawQiMonRoster(archive, `archi-qimon-roster-${new Date().toISOString().slice(0, 10)}.json`);
+  } catch (error) {
+    rosterStatusMessage = error instanceof Error ? error.message : "Roster copy was unavailable.";
+  }
+  renderQiMonRoster();
+}
+
+function cancelQiMonRosterImport(): void {
+  pendingRosterImport = null;
+  rosterImportGeneration += 1;
+  ui.rosterImportPreview.hidden = true;
+  ui.rosterFile.value = "";
+}
+
+async function reviewQiMonRosterFile(file: File): Promise<void> {
+  cancelQiMonRosterImport();
+  const generation = rosterImportGeneration;
+  if (file.size > 256 * 1024) {
+    rosterStatusMessage = "That roster copy exceeds the local size limit. Nothing changed.";
+    renderQiMonRoster();
+    return;
+  }
+  try {
+    const contents = await file.text();
+    if (generation !== rosterImportGeneration || ui.rosterPanel.hidden) return;
+    const inspected = inspectQiMonRoster(contents, journey);
+    if (inspected.status !== "valid") {
+      rosterStatusMessage = `Roster file rejected: ${inspected.message} Nothing changed.`;
+      renderQiMonRoster();
+      return;
+    }
+    pendingRosterImport = { generation, candidate: inspected.roster,
+      baseline: rosterStorageBaseline, journeyRevision: revisionForJourney(journey) };
+    ui.rosterImportTitle.textContent = `${inspected.projection.members.length} invited QiMon · ${inspected.roster.events.length} roster events`;
+    ui.rosterImportDetail.textContent = `Origin ${inspected.roster.originDigest.slice(0, 18)}… · created ${inspected.roster.createdAt.slice(0, 10)}. Current roster: ${roster?.events.length ?? "unavailable"} events. This replaces the entire QiMon roster if you choose it.`;
+    ui.rosterImportPreview.hidden = false;
+    ui.rosterImportCancel.focus();
+    rosterStatusMessage = "Review the exact roster copy below before replacing anything.";
+    renderQiMonRoster();
+  } catch (error) {
+    rosterStatusMessage = error instanceof Error ? error.message : "That roster copy could not be read.";
+    renderQiMonRoster();
+  }
+}
+
+async function confirmQiMonRosterImport(): Promise<void> {
+  const pending = pendingRosterImport;
+  if (!pending || commitInFlight || journeyInputInterlocked || ui.rosterImportPreview.hidden) return;
+  commitInFlight = true;
+  try {
+    const replace = (): void => {
+      if (pendingRosterImport !== pending || pending.generation !== rosterImportGeneration ||
+          revisionForJourney(journey) !== pending.journeyRevision ||
+          (!qaMode && window.localStorage.getItem(ROSTER_STORAGE_KEY) !== pending.baseline)) {
+        throw new Error("The Journey or saved roster changed while you reviewed the file. Nothing was replaced.");
+      }
+      if (!qaMode) {
+        const saved = readStoredJourney();
+        if (!storageWriteAvailable || saved?.status !== "valid" ||
+            revisionForJourney(saved.journey) !== pending.journeyRevision) {
+          throw new Error("The saved Journey changed. This roster file was not installed.");
+        }
+      }
+      const archive = serializeQiMonRoster(pending.candidate, journey);
+      if (!qaMode) {
+        try {
+          window.localStorage.setItem(ROSTER_STORAGE_KEY, archive);
+          if (window.localStorage.getItem(ROSTER_STORAGE_KEY) !== archive) throw new Error("Roster readback failed.");
+        } catch (error) {
+          try {
+            if (pending.baseline === null) window.localStorage.removeItem(ROSTER_STORAGE_KEY);
+            else window.localStorage.setItem(ROSTER_STORAGE_KEY, pending.baseline);
+          } catch { /* Report the failed replacement without claiming recovery. */ }
+          throw error;
+        }
+      }
+      roster = pending.candidate;
+      rosterStorageBaseline = qaMode ? pending.baseline : archive;
+      rosterIssue = null;
+      rosterProjectionIssue = false;
+      rosterTeamDraft = [];
+      rosterStatusMessage = "Reviewed QiMon roster replaced locally. The Journey and phone History were unchanged.";
+      cancelQiMonRosterImport();
+    };
+    if (!qaMode && navigator.locks) {
+      await navigator.locks.request(JOURNEY_LOCK_NAME, () => navigator.locks.request(ROSTER_LOCK_NAME, replace));
+    }
+    else if (qaMode) replace();
+    else throw new Error("The roster write lock is unavailable. Nothing was replaced.");
+  } catch (error) {
+    rosterStatusMessage = error instanceof Error ? error.message : "Roster replacement failed. The current roster was kept.";
+    cancelQiMonRosterImport();
+  } finally {
+    commitInFlight = false;
+    renderQiMonRoster();
+  }
+}
+
+function openQiMonRoster(): void {
+  if (mode === "battle") leaveBattleLab();
+  if (ui.continuity.classList.contains("is-open")) closeContinuity();
+  rosterReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : ui.rosterEntry;
+  relayBattle = null;
+  renderQiMonRoster();
+  ui.rosterPanel.hidden = false;
+  ui.rosterPanel.inert = false;
+  ui.rosterPanel.setAttribute("aria-hidden", "false");
+  for (const region of [canvas, ui.topbar, ui.presenceConsole, ui.experience, ui.battlePanel, ui.relayPanel, ui.fieldRail, ui.navigator]) {
+    region.inert = true;
+  }
+  keys.clear();
+  player.vx = 0;
+  player.vy = 0;
+  ui.rosterClose.focus();
+}
+
+function closeQiMonRoster(): void {
+  if (ui.rosterPanel.hidden) return;
+  relayBattle = null;
+  cancelQiMonRosterImport();
+  ui.rosterPanel.hidden = true;
+  ui.rosterPanel.inert = true;
+  ui.rosterPanel.setAttribute("aria-hidden", "true");
+  for (const region of [canvas, ui.topbar, ui.experience, ui.fieldRail]) region.inert = false;
+  ui.presenceConsole.inert = mode !== "habitat";
+  ui.battlePanel.inert = mode !== "battle";
+  ui.relayPanel.inert = mode !== "relay";
+  ui.navigator.inert = mode !== "field";
+  const returnFocus = rosterReturnFocus?.isConnected ? rosterReturnFocus : ui.rosterEntry;
+  rosterReturnFocus = null;
+  returnFocus.focus({ preventScroll: true });
+}
+
+function trapQiMonRosterFocus(event: KeyboardEvent): void {
+  const focusable = [...ui.rosterPanel.querySelectorAll<HTMLElement>("button:not([disabled]), [href], input:not([disabled])")]
+    .filter((node) => !node.hidden && node.getClientRects().length > 0);
+  if (!focusable.length) return;
+  if (event.shiftKey && document.activeElement === focusable[0]) {
+    event.preventDefault();
+    focusable[focusable.length - 1].focus();
+  } else if (!event.shiftKey && document.activeElement === focusable[focusable.length - 1]) {
+    event.preventDefault();
+    focusable[0].focus();
+  }
+}
+
 function continuityIsOpen(): boolean {
   return ui.continuity.classList.contains("is-open");
 }
@@ -2823,13 +3516,57 @@ function update(delta: number): void {
   particles = particles.filter((particle) => particle.life > 0).slice(-420);
 }
 
-// The world and body share the native companion's pearl, lilac and warm ink.
 // These drawing helpers borrow existing positions; they own no play state.
+// The iPhone's bundled portrait has a distinct Qi atmosphere; the Mac and
+// browser retain their authored palette and companion appearance.
+function isIOSFieldArt(): boolean {
+  return desktopAppearanceID?.startsWith("ios-portrait:") ?? false;
+}
+
 function pearlAccent(rgb: readonly number[], alpha: number): string {
   return `rgba(${Math.round(rgb[0] * 0.42 + 54 * 0.58)},${Math.round(rgb[1] * 0.42 + 35 * 0.58)},${Math.round(rgb[2] * 0.42 + 79 * 0.58)},${alpha})`;
 }
 
 function drawPearlLandscape(arena: boolean): void {
+  if (isIOSFieldArt()) {
+    const sky = context.createLinearGradient(0, 0, width * 0.3, height);
+    sky.addColorStop(0, "#071619");
+    sky.addColorStop(0.58, arena ? "#10363b" : "#0e3035");
+    sky.addColorStop(1, "#081c21");
+    context.fillStyle = sky;
+    context.fillRect(0, 0, width, height);
+
+    const light = context.createRadialGradient(width * 0.68, height * 0.19, 0,
+      width * 0.68, height * 0.19, width * 0.76);
+    light.addColorStop(0, "rgba(230,173,80,0.19)");
+    light.addColorStop(0.38, "rgba(78,190,198,0.08)");
+    light.addColorStop(1, "transparent");
+    context.fillStyle = light;
+    context.fillRect(0, 0, width, height);
+
+    for (let layer = 0; layer < 3; layer += 1) {
+      const ridgeY = height * (0.48 + layer * 0.12);
+      context.fillStyle = ["rgba(48,115,123,0.13)", "rgba(16,68,76,0.34)",
+        "rgba(4,35,43,0.5)"][layer];
+      context.beginPath();
+      context.moveTo(0, ridgeY + height * 0.07);
+      context.bezierCurveTo(width * 0.14, ridgeY - height * 0.12, width * 0.22,
+        ridgeY + height * 0.06, width * 0.4, ridgeY);
+      context.bezierCurveTo(width * 0.62, ridgeY - height * 0.17, width * 0.75,
+        ridgeY + height * 0.06, width, ridgeY - height * 0.04);
+      context.lineTo(width, height); context.lineTo(0, height); context.closePath();
+      context.fill();
+    }
+    for (const [index, star] of stars.entries()) {
+      if (index % 3 !== 0) continue;
+      const alpha = 0.13 + (Math.sin(animationTime() * 0.3 + star.phase) + 1) * 0.06;
+      context.fillStyle = star.warmth > 0.7 ? `rgba(229,177,91,${alpha})` : `rgba(130,216,220,${alpha})`;
+      context.beginPath();
+      context.arc(star.x * width, star.y * height, star.size * 0.72, 0, Math.PI * 2);
+      context.fill();
+    }
+    return;
+  }
   const sky = context.createLinearGradient(0, 0, width * 0.25, height);
   sky.addColorStop(0, "#fffbf3");
   sky.addColorStop(0.42, "#f1eaf5");
@@ -2870,18 +3607,21 @@ function drawPearlLandscape(arena: boolean): void {
 }
 
 function drawPearlIsland(x: number, y: number, radiusX: number, radiusY: number, accent: string, planted = false): void {
+  const qi = isIOSFieldArt();
   context.save();
   context.translate(x, y);
   const shadow = context.createRadialGradient(0, radiusY * 1.3, 0, 0, radiusY * 1.3, radiusX * 1.2);
-  shadow.addColorStop(0, "rgba(80,62,119,0.20)");
-  shadow.addColorStop(1, "rgba(80,62,119,0)");
+  shadow.addColorStop(0, qi ? "rgba(1,11,16,0.48)" : "rgba(80,62,119,0.20)");
+  shadow.addColorStop(1, qi ? "rgba(1,11,16,0)" : "rgba(80,62,119,0)");
   context.save(); context.scale(1, 0.38);
   context.fillStyle = shadow;
   context.beginPath(); context.arc(0, radiusY * 2.8, radiusX * 1.2, 0, Math.PI * 2); context.fill();
   context.restore();
 
   const depth = context.createLinearGradient(0, -radiusY * 0.2, 0, radiusY * 2.2);
-  depth.addColorStop(0, "#c5b9d9"); depth.addColorStop(0.48, "#ac9bc7"); depth.addColorStop(1, "#8977a8");
+  depth.addColorStop(0, qi ? "#28585f" : "#c5b9d9");
+  depth.addColorStop(0.48, qi ? "#164149" : "#ac9bc7");
+  depth.addColorStop(1, qi ? "#09282f" : "#8977a8");
   context.fillStyle = depth;
   context.beginPath();
   context.moveTo(-radiusX, 0);
@@ -2890,12 +3630,16 @@ function drawPearlIsland(x: number, y: number, radiusX: number, radiusY: number,
   context.closePath(); context.fill();
 
   const surface = context.createLinearGradient(-radiusX * 0.45, -radiusY, radiusX * 0.35, radiusY * 1.5);
-  surface.addColorStop(0, "#fffdf7"); surface.addColorStop(0.46, "#eee7f3"); surface.addColorStop(1, "#d2c6e2");
-  context.fillStyle = surface; context.strokeStyle = "rgba(255,255,255,0.88)"; context.lineWidth = 1.4;
+  surface.addColorStop(0, qi ? "#3b7980" : "#fffdf7");
+  surface.addColorStop(0.46, qi ? "#24575f" : "#eee7f3");
+  surface.addColorStop(1, qi ? "#123b43" : "#d2c6e2");
+  context.fillStyle = surface;
+  context.strokeStyle = qi ? "rgba(152,231,221,0.65)" : "rgba(255,255,255,0.88)";
+  context.lineWidth = 1.4;
   context.beginPath(); context.ellipse(0, 0, radiusX, radiusY, 0, 0, Math.PI * 2); context.fill(); context.stroke();
   context.strokeStyle = accent; context.lineWidth = 1;
   context.beginPath(); context.ellipse(0, 0, radiusX * 0.83, radiusY * 0.73, 0, 0.04, Math.PI * 1.96); context.stroke();
-  context.strokeStyle = "rgba(255,255,255,0.26)";
+  context.strokeStyle = qi ? "rgba(235,184,95,0.28)" : "rgba(255,255,255,0.26)";
   context.beginPath(); context.ellipse(0, radiusY * 0.8, radiusX * 0.85, radiusY * 0.85, 0, 0.04, Math.PI - 0.04); context.stroke();
 
   if (planted) {
@@ -2907,12 +3651,15 @@ function drawPearlIsland(x: number, y: number, radiusX: number, radiusY: number,
         context.rotate(side * (leaf - 1) * 0.5);
         const length = 23 + leaf * 6;
         const petal = context.createLinearGradient(0, 0, 0, -length);
-        petal.addColorStop(0, "#8a799f"); petal.addColorStop(1, leaf === 1 ? "#ded4e9" : "#b3a1cb");
+        petal.addColorStop(0, qi ? "#2e7173" : "#8a799f");
+        petal.addColorStop(1, qi ? (leaf === 1 ? "#8ad3cf" : "#5b9f9f")
+          : (leaf === 1 ? "#ded4e9" : "#b3a1cb"));
         context.fillStyle = petal;
         context.beginPath(); context.moveTo(0, 0);
         context.bezierCurveTo(-13, -length * 0.48, -8, -length, 0, -length);
         context.bezierCurveTo(9, -length, 12, -length * 0.38, 0, 0); context.fill();
-        context.strokeStyle = "rgba(255,255,255,0.5)"; context.lineWidth = 0.7;
+        context.strokeStyle = qi ? "rgba(234,190,109,0.5)" : "rgba(255,255,255,0.5)";
+        context.lineWidth = 0.7;
         context.beginPath(); context.moveTo(0, -3); context.lineTo(0, -length + 4); context.stroke();
         context.restore();
       }
@@ -2926,10 +3673,12 @@ function drawBackground(): void {
   const companion = currentCompanionPosition();
   if (mode === "field") {
     // Field terrain stays fixed while the existing player moves across it.
-    drawPearlIsland(width * 0.5, height * 0.59, width * 0.46, height * 0.24, "rgba(119,98,159,0.16)");
+    drawPearlIsland(width * 0.5, height * 0.59, width * 0.46, height * 0.24,
+      isIOSFieldArt() ? "rgba(226,177,88,0.2)" : "rgba(119,98,159,0.16)");
   } else {
     const radius = clamp(Math.min(width, height) * 0.24, 88, 186);
-    drawPearlIsland(companion.x, companion.y + clamp(height * 0.09, 42, 72), radius, radius * 0.24, "rgba(119,98,159,0.23)", true);
+    drawPearlIsland(companion.x, companion.y + clamp(height * 0.09, 42, 72), radius, radius * 0.24,
+      isIOSFieldArt() ? "rgba(226,177,88,0.3)" : "rgba(119,98,159,0.23)", true);
   }
 }
 
@@ -3025,7 +3774,8 @@ function drawFieldEntities(): void {
   for (const spark of session.sparks) {
     if (collectedSparks.has(spark.id)) continue;
     const alpha = 0.24 + (Math.sin(animationTime() * 1.1 + spark.phase) + 1) * 0.18;
-    context.fillStyle = `rgba(109, 81, 147, ${alpha})`;
+    context.fillStyle = isIOSFieldArt() ? `rgba(230, 184, 102, ${alpha})`
+      : `rgba(109, 81, 147, ${alpha})`;
     context.beginPath();
     context.arc(spark.x * width, spark.y * height, 1.2, 0, Math.PI * 2);
     context.fill();
@@ -3035,7 +3785,7 @@ function drawFieldEntities(): void {
 
   if (Math.hypot(target.x - player.x, target.y - player.y) > 14) {
     context.save();
-    context.strokeStyle = "rgba(100, 72, 144, 0.46)";
+    context.strokeStyle = isIOSFieldArt() ? "rgba(115,217,217,0.52)" : "rgba(100, 72, 144, 0.46)";
     context.setLineDash([2, 7]);
     context.beginPath();
     context.arc(target.x, target.y, 11 + Math.sin(animationTime() * 4) * 2, 0, Math.PI * 2);
@@ -3065,6 +3815,7 @@ function drawLeafEar(
   time: number,
 ): void {
   if (!appendage.visible) return;
+  const qi = isIOSFieldArt();
   const side = appendage.side === "left" ? -1 : 1;
   const geometry = profile.geometry;
   const movement = profile.movement;
@@ -3076,9 +3827,9 @@ function drawLeafEar(
   context.rotate(appendage.rotation + earSway);
   context.scale(appendage.scaleX, appendage.scaleY);
   const gradient = context.createLinearGradient(0, 22, side * 12, geometry.earTipY);
-  gradient.addColorStop(0, "#a996cc");
-  gradient.addColorStop(0.64, "#e0d6f0");
-  gradient.addColorStop(1, "#fffaf5");
+  gradient.addColorStop(0, qi ? "#245f68" : "#a996cc");
+  gradient.addColorStop(0.64, qi ? "#6bb6b7" : "#e0d6f0");
+  gradient.addColorStop(1, qi ? "#e9bd77" : "#fffaf5");
   context.fillStyle = gradient;
   context.strokeStyle = accent;
   context.lineWidth = 1.3;
@@ -3096,7 +3847,7 @@ function drawLeafEar(
   context.closePath();
   context.fill();
   context.stroke();
-  context.strokeStyle = "rgba(255, 255, 255, 0.72)";
+  context.strokeStyle = qi ? "rgba(247,212,150,0.72)" : "rgba(255, 255, 255, 0.72)";
   context.beginPath();
   context.moveTo(0, 15);
   context.quadraticCurveTo(side * 12, -16, side * 10, geometry.earTipY + 7);
@@ -3113,6 +3864,7 @@ function drawRigArm(
   motionAmplitude: number,
 ): void {
   if (!appendage.visible) return;
+  const qi = isIOSFieldArt();
   const sign = appendage.side === "left" ? -1 : 1;
   const armOpen = motion === "play" ? 1.32 : motion === "focus" ? 0.62 : 1;
   context.save();
@@ -3124,7 +3876,9 @@ function drawRigArm(
   );
   context.scale(appendage.scaleX, appendage.scaleY);
   const shell = context.createLinearGradient(-8, -20, 10, 24);
-  shell.addColorStop(0, "#f8f1fb"); shell.addColorStop(0.5, "#d5c6e9"); shell.addColorStop(1, "#9f8bbc");
+  shell.addColorStop(0, qi ? "#c6e8dd" : "#f8f1fb");
+  shell.addColorStop(0.5, qi ? "#5ca5a4" : "#d5c6e9");
+  shell.addColorStop(1, qi ? "#275e6b" : "#9f8bbc");
   context.fillStyle = shell;
   context.strokeStyle = rgba(ROLES[roleId].rgb, 0.28);
   context.lineWidth = 1.2;
@@ -3137,15 +3891,17 @@ function drawRigArm(
 
 function drawRigFoot(appendage: ProtoRigAppendage, profile: GrowthVisualProfile): void {
   if (!appendage.visible) return;
+  const qi = isIOSFieldArt();
   context.save();
   context.globalAlpha *= appendage.opacity;
   context.translate(appendage.x, appendage.y);
   context.rotate(appendage.rotation);
   context.scale(appendage.scaleX, appendage.scaleY);
   const shell = context.createLinearGradient(0, -10, 0, 11);
-  shell.addColorStop(0, "#e4d8f2"); shell.addColorStop(1, "#9a85b7");
+  shell.addColorStop(0, qi ? "#80c2bb" : "#e4d8f2");
+  shell.addColorStop(1, qi ? "#234d5a" : "#9a85b7");
   context.fillStyle = shell;
-  context.strokeStyle = "rgba(248, 237, 255, 0.8)";
+  context.strokeStyle = qi ? "rgba(191,234,220,0.8)" : "rgba(248, 237, 255, 0.8)";
   context.lineWidth = 1.2;
   context.beginPath();
   context.ellipse(0, 0, profile.geometry.footRadiusX, profile.geometry.footRadiusY, 0, 0, Math.PI * 2);
@@ -3275,6 +4031,7 @@ function drawProtoArchi(x: number, y: number, alpha = 1, drawSpec?: QiMonDrawSpe
   const activeMotion = drawSpec?.motion ?? (presentationActive ? presentationState.motion : "idle");
   const visualRig = protoVisualRigForView(activeView, visualProfile);
   const corePearl = visualRig.core.visual;
+  const qi = isIOSFieldArt();
   const rearView = visualRig.silhouette === "face-free-back";
   const motionAmplitude = activeMotion === "focus" ? 0.28 : activeMotion === "play" ? 1.35 : 1;
   const compactHabitat = mode !== "field" && width <= 800 && height <= 680;
@@ -3312,8 +4069,8 @@ function drawProtoArchi(x: number, y: number, alpha = 1, drawSpec?: QiMonDrawSpe
 
   context.save();
   const contact = context.createRadialGradient(0, 0, 0, 0, 0, 61);
-  contact.addColorStop(0, "rgba(70,48,106,0.28)");
-  contact.addColorStop(1, "rgba(70,48,106,0)");
+  contact.addColorStop(0, qi ? "rgba(1,23,28,0.48)" : "rgba(70,48,106,0.28)");
+  contact.addColorStop(1, qi ? "rgba(1,23,28,0)" : "rgba(70,48,106,0)");
   context.translate(0, 53 - bob); context.scale(1, 0.25);
   context.fillStyle = contact;
   context.beginPath(); context.arc(0, 0, 61, 0, Math.PI * 2); context.fill();
@@ -3417,12 +4174,13 @@ function drawProtoArchi(x: number, y: number, alpha = 1, drawSpec?: QiMonDrawSpe
     visualRig.body.y,
     Math.max(visualRig.body.radiusX, visualRig.body.radiusY) + 11,
   );
-  bodyGradient.addColorStop(0, rearView ? "#efe7f6" : "#fffdf7");
-  bodyGradient.addColorStop(0.25, "#eadff4");
-  bodyGradient.addColorStop(0.72, "#c4b2dc");
-  bodyGradient.addColorStop(1, "#8d76ad");
+  bodyGradient.addColorStop(0, qi ? (rearView ? "#8ac6bd" : "#e1f1df")
+    : (rearView ? "#efe7f6" : "#fffdf7"));
+  bodyGradient.addColorStop(0.25, qi ? "#91cfc5" : "#eadff4");
+  bodyGradient.addColorStop(0.72, qi ? "#478d91" : "#c4b2dc");
+  bodyGradient.addColorStop(1, qi ? "#1b5360" : "#8d76ad");
   context.fillStyle = bodyGradient;
-  context.strokeStyle = "rgba(255, 250, 255, 0.86)";
+  context.strokeStyle = qi ? "rgba(188,235,220,0.82)" : "rgba(255, 250, 255, 0.86)";
   context.lineWidth = 1.5;
   context.beginPath();
   context.ellipse(
@@ -3494,12 +4252,13 @@ function drawProtoArchi(x: number, y: number, alpha = 1, drawSpec?: QiMonDrawSpe
     visualRig.head.y + 3,
     Math.max(visualRig.head.radiusX, visualRig.head.radiusY) + 12,
   );
-  headGradient.addColorStop(0, rearView ? "#f6eef9" : "#fffdf8");
-  headGradient.addColorStop(0.26, "#f0e7fa");
-  headGradient.addColorStop(0.78, "#c6b4e2");
-  headGradient.addColorStop(1, "#9a7fbd");
+  headGradient.addColorStop(0, qi ? (rearView ? "#9ad4c8" : "#f2f5dc")
+    : (rearView ? "#f6eef9" : "#fffdf8"));
+  headGradient.addColorStop(0.26, qi ? "#ade0cf" : "#f0e7fa");
+  headGradient.addColorStop(0.78, qi ? "#5baba9" : "#c6b4e2");
+  headGradient.addColorStop(1, qi ? "#2a6971" : "#9a7fbd");
   context.fillStyle = headGradient;
-  context.strokeStyle = "rgba(255, 250, 255, 0.94)";
+  context.strokeStyle = qi ? "rgba(210,244,225,0.9)" : "rgba(255, 250, 255, 0.94)";
   context.beginPath();
   context.ellipse(
     visualRig.head.x,
@@ -3606,10 +4365,10 @@ function drawProtoArchi(x: number, y: number, alpha = 1, drawSpec?: QiMonDrawSpe
     context.fill();
     if (!blink) {
       const iris = context.createRadialGradient(eyeX + lookX, eyeY + 1 + lookY, 1, eyeX + lookX, eyeY + 1 + lookY, 10);
-      iris.addColorStop(0, "#151333");
-      iris.addColorStop(0.45, "#392d85");
-      iris.addColorStop(0.75, "#7167d7");
-      iris.addColorStop(1, "#11182d");
+      iris.addColorStop(0, qi ? "#092a35" : "#151333");
+      iris.addColorStop(0.45, qi ? "#246b77" : "#392d85");
+      iris.addColorStop(0.75, qi ? "#67c4be" : "#7167d7");
+      iris.addColorStop(1, qi ? "#071f2b" : "#11182d");
       context.fillStyle = iris;
       context.beginPath();
       context.ellipse(eyeX + lookX, eyeY + 1 + lookY, 8.5 * eye.scaleX, 12.5, 0, 0, Math.PI * 2);
@@ -4135,6 +4894,8 @@ function drawPresentationForm(form: PresentationForm, x: number, y: number, alph
 
 function drawArchi(x: number, y: number): void {
   if (desktopHost) { drawNativePresence(x, y); return; }
+  const portrait = currentLiminalPortrait();
+  if (portrait) { drawLiminalPortrait(portrait, x, y); return; }
   if (mode !== "habitat") {
     drawProtoArchi(x, y);
     return;
@@ -4146,15 +4907,71 @@ function drawArchi(x: number, y: number): void {
   }
 }
 
-/** Reuses the app's current body. The arena owns only placement and action cues. */
+function drawLiminalPortrait(portrait: LiminalPortraitChoice, x: number, y: number): void {
+  const image = liminalPortraits[portrait];
+  if (!image || !image.complete || image.naturalWidth === 0) return;
+  const quiet = reducedMotion || document.visibilityState !== "visible";
+  const light = liminalPortraitLight(animationTime(), quiet);
+  const dimension = clamp(Math.min(width, height) * (mode === "habitat" ? 0.5 : 0.28), 100, 400)
+    * presentationState.scale * light.scale;
+  context.save();
+  context.translate(x, y);
+  context.shadowColor = `rgba(239,186,95,${light.haloAlpha})`;
+  context.shadowBlur = 12;
+  context.drawImage(image, -dimension / 2, -dimension / 2, dimension, dimension);
+  context.restore();
+}
+
+function drawIOSStageHalo(dimension: number, profile: GrowthVisualProfile, time: number): void {
+  const detail = profile.auraGeometry;
+  const reach = dimension * (0.5 + (detail.radius - 104) / 520);
+  context.save();
+  context.globalCompositeOperation = "lighter";
+  const glow = context.createRadialGradient(0, 0, dimension * 0.06, 0, 0, reach * 1.45);
+  glow.addColorStop(0, `rgba(231,174,85,${detail.baseStrength * 0.66})`);
+  glow.addColorStop(0.45, `rgba(71,191,204,${detail.baseStrength * 0.34})`);
+  glow.addColorStop(1, "transparent");
+  context.fillStyle = glow;
+  context.beginPath(); context.arc(0, 0, reach * 1.45, 0, Math.PI * 2); context.fill();
+
+  const ringCount = detail.outerGroundRing ? 2 : 1;
+  for (let ring = 0; ring < ringCount; ring += 1) {
+    context.save();
+    context.rotate(time * (ring === 0 ? 0.025 : -0.019));
+    context.strokeStyle = ring === 0 ? "rgba(239,186,95,0.38)" : "rgba(122,218,223,0.3)";
+    context.lineWidth = ring === 0 ? 1.3 : 0.9;
+    context.beginPath();
+    context.ellipse(0, 0, reach * (1 + ring * 0.15), reach * (0.68 + ring * 0.08),
+      -0.2, 0, Math.PI * 2);
+    context.stroke();
+    context.restore();
+  }
+  for (let mote = 0; mote < detail.orbitMotes; mote += 1) {
+    const angle = (mote / detail.orbitMotes) * Math.PI * 2 + time * 0.11;
+    context.fillStyle = mote % 2 === 0 ? "rgba(246,203,129,0.78)" : "rgba(151,234,231,0.7)";
+    context.beginPath();
+    context.arc(Math.cos(angle) * reach, Math.sin(angle) * reach * 0.7,
+      1.4 + (mote % 3) * 0.35, 0, Math.PI * 2);
+    context.fill();
+  }
+  context.restore();
+}
+
+/** Reuses the selected portrait. Stage effects are display-only and leave its Core Pearl untouched. */
 function drawNativePresence(x: number, y: number, alpha = 1, spec?: QiMonDrawSpec): void {
   if (!desktopAppearanceImage) return;
-  const dimension = clamp(Math.min(width, height) * (mode === "habitat" ? 0.38 : mode === "field" ? 0.22 : 0.30), 90, 310) * (spec?.scale ?? 1);
+  const iosVisual = isIOSFieldArt();
+  const stageVisual = iosVisual
+    ? visualProfileForStage(spec?.stageName ?? stageForJourney(journey).name) : null;
+  const stageScale = stageVisual ? 0.9 + (stageVisual.auraGeometry.radius - 104) / 360 : 1;
+  const dimension = clamp(Math.min(width, height) * (mode === "habitat" ? 0.38 : mode === "field" ? 0.22 : 0.30), 90, 310)
+    * (spec?.scale ?? 1) * stageScale;
   const bob = reducedMotion ? 0 : Math.sin(animationTime() * 1.5) * dimension * 0.016;
   const actionLift = spec?.motion === "play" && !reducedMotion ? Math.sin(battleImpactPulse * Math.PI) * -12 : 0;
   context.save();
   context.globalAlpha = alpha;
   context.translate(x, y + bob + actionLift);
+  if (stageVisual) drawIOSStageHalo(dimension, stageVisual, reducedMotion ? 0 : animationTime());
   if (spec) {
     context.strokeStyle = pearlAccent(ROLES[spec.role].rgb, 0.7);
     context.lineWidth = 1.5;
@@ -4177,15 +4994,18 @@ function currentBattleEncounterComposition() {
 
 function drawBattleBackground(): void {
   drawPearlLandscape(true);
+  const qi = isIOSFieldArt();
   const composition = currentBattleEncounterComposition();
   const center = composition.fieldCenter;
   const radiusX = Math.max(80, Math.abs(composition.teams.two.active.x - composition.teams.one.active.x) * 0.68);
   const radiusY = clamp(height * 0.095, 28, 70);
-  drawPearlIsland(center.x, center.y + radiusY * 0.45, radiusX, radiusY, "rgba(125,98,159,0.3)");
+  drawPearlIsland(center.x, center.y + radiusY * 0.45, radiusX, radiusY,
+    qi ? "rgba(230,185,96,0.34)" : "rgba(125,98,159,0.3)");
 
   context.save();
   context.translate(center.x, center.y + radiusY * 0.45);
-  context.strokeStyle = "rgba(138,112,172,0.28)"; context.lineWidth = 1;
+  context.strokeStyle = qi ? "rgba(133,220,214,0.32)" : "rgba(138,112,172,0.28)";
+  context.lineWidth = 1;
   for (let ring = 0; ring < 3; ring += 1) {
     context.beginPath();
     context.ellipse(0, 0, radiusX * (0.27 + ring * 0.17), radiusY * (0.27 + ring * 0.17), 0, 0, Math.PI * 2);
@@ -4199,7 +5019,7 @@ function drawBattleBackground(): void {
     context.lineTo(Math.cos(angle) * radiusX * 0.76, Math.sin(angle) * radiusY * 0.76);
     context.stroke();
   }
-  context.fillStyle = "#fff9ea"; context.strokeStyle = "#b698cb";
+  context.fillStyle = "#fff9ea"; context.strokeStyle = qi ? "#e8b976" : "#b698cb";
   context.beginPath(); context.ellipse(0, 0, 7, 4, 0, 0, Math.PI * 2); context.fill(); context.stroke();
   context.restore();
 }
@@ -4259,7 +5079,7 @@ function drawBattleReserveProjections(
     drawProtoArchi(placement.x, placement.y, card.integrity > 0 ? placement.opacity : 0.2, {
       nativeBody: false,
       role: card.role,
-      seed: `${battleState?.battleId ?? "battle"}:${card.id}:reserve`,
+      seed: card.id,
       view: "three-quarter",
       motion: "idle",
       scale: placement.drawScale,
@@ -4361,9 +5181,9 @@ function drawBattleArena(): void {
     drawBattleFormationField(teamId, teamComposition);
     drawBattleReserveProjections(teamId, teamComposition, currentStage);
     drawProtoArchi(position.x, position.y, card.integrity > 0 ? 1 : 0.35, {
-      nativeBody: teamId === "one",
+      nativeBody: false,
       role: card.role,
-      seed: `${battleState.battleId}:${card.id}`,
+      seed: card.id,
       view: "three-quarter",
       motion,
       scale: teamComposition.active.drawScale * concentrationScale,
@@ -4512,6 +5332,11 @@ canvas.addEventListener("pointerdown", (event) => {
 
 window.addEventListener("keydown", (event) => {
   if (desktopHost && !desktopHost.visible) return;
+  if (!ui.rosterPanel.hidden) {
+    if (event.key === "Escape") { event.preventDefault(); closeQiMonRoster(); }
+    else if (event.key === "Tab") trapQiMonRosterFocus(event);
+    return;
+  }
   if (continuityIsOpen()) {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -4571,6 +5396,15 @@ document.addEventListener("visibilitychange", () => {
   render();
 });
 
+for (const button of liminalPortraitButtons) {
+  button.addEventListener("click", () => {
+    const value = button.dataset.liminalPortrait;
+    if (desktopHost || !isPortraitChoice(value) || (value !== "presence" && !liminalPortraits[value])) return;
+    portraitChoice = value;
+    updatePresentationInterface();
+    render();
+  });
+}
 for (const button of presentationFormButtons) {
   button.addEventListener("click", () => {
     const value = button.dataset.presentationForm;
@@ -4604,6 +5438,16 @@ ui.battleTwoSize.addEventListener("change", () => { updateBattleBuilder("two"); 
 ui.battleOpponentMode.addEventListener("change", () => { updateBattleOpponentMode(); publishDesktopJourney(); });
 for (const select of document.querySelectorAll("[data-battle-role-select]")) select.addEventListener("change", publishDesktopJourney);
 ui.battleButton.addEventListener("click", openBattleLab);
+ui.rosterEntry.addEventListener("click", openQiMonRoster);
+ui.rosterClose.addEventListener("click", closeQiMonRoster);
+ui.battleRosterReturn.addEventListener("click", openQiMonRoster);
+ui.rosterReview.addEventListener("click", () => { cancelQiMonRosterImport(); ui.rosterFile.click(); });
+ui.rosterFile.addEventListener("change", () => {
+  const file = ui.rosterFile.files?.[0];
+  if (file) void reviewQiMonRosterFile(file);
+});
+ui.rosterImportCancel.addEventListener("click", () => { cancelQiMonRosterImport(); ui.rosterReview.focus(); });
+ui.rosterImportConfirm.addEventListener("click", () => void confirmQiMonRosterImport());
 ui.battleReturn.addEventListener("click", leaveBattleLab);
 ui.relayEntry.addEventListener("click", openRelay);
 ui.relayReturn.addEventListener("click", leaveRelay);
@@ -4779,6 +5623,71 @@ window.render_game_to_text = () => {
   );
   const currentHeadId = ledgerHead?.eventId ?? null;
   const currentRevision = revisionForJourney(journey);
+  const qimonRosterReadback = (() => {
+    const schema = "archi-qimon-roster-readback/v1";
+    const journeySaved = readPrimaryStorageSnapshot();
+    const journeyBytesMatchMemory = !qaMode && journeySaved.status === "present"
+      && journeySaved.digest === sha256String(serializeJourney(journey));
+    let savedRoster: string | null = null;
+    let rosterReadable = true;
+    if (!qaMode) {
+      try { savedRoster = window.localStorage.getItem(ROSTER_STORAGE_KEY); }
+      catch { rosterReadable = false; }
+    }
+    const rosterBytesMatchBaseline = !qaMode && rosterReadable && savedRoster !== null
+      && rosterStorageBaseline !== null && savedRoster === rosterStorageBaseline;
+    const basePersistence = {
+      journeyBytesMatchMemory,
+      rosterBytesMatchBaseline,
+      readbackVerified: false,
+    };
+    const unavailable = (issue: string | null) => ({
+      schema, availability: issue ? "paused" : "absent", issue,
+      originDigest: null, revision: null, eventCount: null, head: null,
+      persistence: { ...basePersistence, status: qaMode ? "qa-ephemeral"
+        : !rosterReadable ? "unreadable" : savedRoster === null ? "missing" : "unvalidated" },
+      members: [], pairs: [], selectedTeamMemberIds: [],
+    });
+    if (!roster) return unavailable(rosterIssue);
+    let projection: QiMonRosterProjection;
+    try { projection = projectQiMonRoster(journey, roster); }
+    catch (error) {
+      return unavailable(error instanceof Error ? error.message : "The QiMon roster did not replay against this Journey.");
+    }
+    let archiveReplays = false;
+    if (rosterBytesMatchBaseline && savedRoster !== null) {
+      const inspected = inspectQiMonRoster(savedRoster, journey);
+      archiveReplays = inspected.status === "valid"
+        && JSON.stringify(inspected.roster) === JSON.stringify(roster);
+    }
+    const readbackVerified = journeyBytesMatchMemory && rosterBytesMatchBaseline && archiveReplays;
+    const persistence = {
+      journeyBytesMatchMemory, rosterBytesMatchBaseline, readbackVerified,
+      status: qaMode ? "qa-ephemeral" : !rosterReadable ? "unreadable"
+        : savedRoster === null ? "missing" : !rosterBytesMatchBaseline ? "changed"
+          : !archiveReplays ? "invalid" : !journeyBytesMatchMemory ? "journey-not-current" : "verified",
+    };
+    const head = roster.events.at(-1);
+    return {
+      schema,
+      availability: rosterIssue || (!qaMode && !readbackVerified) ? "paused" : "available",
+      issue: rosterIssue ?? (!qaMode && !readbackVerified ? "Saved Journey or QiMon roster needs review." : null),
+      originDigest: roster.originDigest,
+      revision: projection.revision,
+      eventCount: roster.events.length,
+      head: head ? { sequence: head.sequence, eventId: head.eventId,
+        previousEventId: head.previousEventId, recordedAt: head.recordedAt,
+        journeyEventCount: head.journeyEventCount, journeyHeadEventId: head.journeyHeadEventId,
+        actionKind: head.action.kind } : null,
+      persistence,
+      members: projection.members.map((member) => ({ id: member.id, role: member.card.role,
+        sourceEventId: member.sourceEventId, invitationEventId: member.invitationEventId,
+        trainingTier: member.trainingTier, trainingEventIds: [...member.trainingEventIds] })),
+      pairs: projection.bonds.map((pair) => ({ memberIds: [...pair.memberIds],
+        sourceEventId: pair.sourceEventId, bondEventId: pair.bondEventId })),
+      selectedTeamMemberIds: projection.team.map((member) => member.id),
+    };
+  })();
   const persistedHeadIsAncestor =
     persistedEventCount !== null &&
     (persistedEventCount === 0
@@ -4822,12 +5731,16 @@ window.render_game_to_text = () => {
   const battleComposition = mode === "battle" ? currentBattleEncounterComposition() : null;
   const diagnosticBattleId = battleState?.battleId;
   const battlePracticeReceipt = diagnosticBattleId ? savedPracticeSummaries().find((entry) => entry.battleId === diagnosticBattleId) ?? null : null;
+  const selectedPortrait = currentLiminalPortrait();
   return JSON.stringify({
     coordinateSystem: "CSS pixels; origin top-left; +x right; +y down",
     viewport: { width: Math.round(width), height: Math.round(height) },
     mode,
     presentation: {
       owner: desktopHost ? "native-companion" : "presentation-study",
+      portrait: selectedPortrait,
+      portraitStyle: selectedPortrait ? LIMINAL_LIGHT_STYLE : null,
+      portraitReady: selectedPortrait !== null && (liminalPortraits[selectedPortrait]?.naturalWidth ?? 0) > 0,
       ...presentationState,
       form: presentationMix.phase,
       targetForm: presentationState.form,
@@ -4910,9 +5823,9 @@ window.render_game_to_text = () => {
           visualRig: {
             schemaVersion: protoVisualRigForView("three-quarter", visualProfile).schemaVersion,
             view: "three-quarter",
-            renderer: desktopHost ? "native-player-one-and-role-art" : "shared-drawProtoArchi",
+            renderer: "shared-drawProtoArchi",
             rendererByPlacement: {
-              playerOneActive: desktopHost ? "native-CompanionPresenceArt" : "shared-drawProtoArchi",
+              playerOneActive: "shared-drawProtoArchi",
               opponentActive: "shared-drawProtoArchi",
               reserves: "shared-drawProtoArchi",
             },
@@ -4955,6 +5868,7 @@ window.render_game_to_text = () => {
     journey: {
       version: journey.version,
       revision: currentRevision,
+      originDigest: journeyOriginSha256(journey),
       id: journey.id,
       play: journey.plays + 1,
       completedPlays: journey.plays,
@@ -5010,6 +5924,7 @@ window.render_game_to_text = () => {
       core: { identity: journey.core.identity, authority: journey.core.authority },
       storage: qaMode ? "qa-ephemeral" : storageWriteAvailable ? "local-browser" : "session-only",
     },
+    qimonRoster: qimonRosterReadback,
     companion: {
       nativeAppearance: desktopHost ? { id: desktopAppearanceID, ready: desktopAppearanceImage !== null, renderer: "CompanionPresenceArt" } : null,
       ...currentCompanionPosition(),

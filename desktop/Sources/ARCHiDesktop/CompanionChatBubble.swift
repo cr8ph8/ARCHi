@@ -17,7 +17,7 @@ struct CompanionChatLayout: Equatable, Sendable {
 }
 
 /// Places only the bubble. If no readable bubble fits without covering ARCHi,
-/// the caller opens the existing full Assistant instead of moving the character.
+/// the caller opens the existing Ask ARCHi workspace instead of moving the character.
 enum CompanionChatPlacement {
     static let preferredSize = CGSize(width: 390, height: 530)
     static let minimumSize = CGSize(width: 300, height: 500)
@@ -101,7 +101,7 @@ final class CompanionChatBubbleController {
         let panel = CompanionChatPanel(contentRect: CGRect(origin: .zero, size: CompanionChatPlacement.preferredSize),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         window = panel
-        panel.title = "Chat with ARCHi"
+        panel.title = AskARCHiBrand.title
         panel.identifier = NSUserInterfaceItemIdentifier("archi.companionChat")
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -179,7 +179,7 @@ final class CompanionChatBubbleController {
     }
 }
 
-/// Question/command text uses the exact same request path as the full Assistant.
+/// Question/command text uses the exact same request path as the Ask ARCHi workspace.
 /// Voice enters only the shared draft; this view never interprets commands.
 @MainActor
 struct CompanionChatBubble: View {
@@ -195,13 +195,17 @@ struct CompanionChatBubble: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 8) {
                 Image(systemName: "bubble.left.and.bubble.right").foregroundStyle(ArchiPalette.violet)
-                Text(store.activeQiMon == nil ? "ARCHi" : "KIN · ARCHi")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(AskARCHiBrand.title)
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    Text(AskARCHiBrand.companionLine(name: store.activeQiMon?.name))
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
                 Spacer(minLength: 0)
                 AssistantTaskCue(activity: store.assistantActivity, quiet: store.preferences.quiet,
                                  reduceMotion: store.preferences.reduceMotion)
                 Button(action: dismiss) { Image(systemName: "xmark") }
-                    .buttonStyle(.borderless).accessibilityLabel("Close chat bubble")
+                    .buttonStyle(.borderless).accessibilityLabel("Close \(AskARCHiBrand.title) bubble")
                     .accessibilityIdentifier("companion-chat.close")
             }
             ScrollViewReader { scroll in
@@ -216,20 +220,24 @@ struct CompanionChatBubble: View {
                     Text(sharedContextDisclosure).font(.system(size: 11)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("companion-chat.shared-context")
-                    Text("Next reply · " + store.nextReplySettings.summary)
-                        .font(.system(size: 10)).foregroundStyle(.secondary)
-                    Button(store.route == .codex ? "Kept lessons · local Qwen only"
-                        : store.nextReplyLessons.isEmpty ? "Kept lessons · none for this reply"
-                        : "Kept lessons · \(store.nextReplyLessons.count) for local Qwen", action: openLessons)
-                        .buttonStyle(.borderless).font(.system(size: 10))
-                        .disabled(store.isShuttingDown)
-                        .accessibilityIdentifier("companion-chat.lessons")
-                        .help("Inspect, correct or withdraw lessons in What I remember. Topic phrases: "
-                            + store.nextReplyLessons.map(\.topic).joined(separator: ", ")
-                            + ". Kept lessons stay on this Mac; opening them makes no model call.")
-                    Text(store.nextCallBudget).font(.system(size: 10)).foregroundStyle(.secondary)
+                    DisclosureGroup("Reply options") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Next reply · " + store.nextReplySettings.summary)
+                                .font(.system(size: 10)).foregroundStyle(.secondary)
+                            Button(store.route == .codex ? "Kept lessons · local Qwen only"
+                                : store.nextReplyLessons.isEmpty ? "Kept lessons · none for this reply"
+                                : "Kept lessons · \(store.nextReplyLessons.count) for local Qwen", action: openLessons)
+                                .buttonStyle(.borderless).font(.system(size: 10))
+                                .disabled(store.isShuttingDown)
+                                .accessibilityIdentifier("companion-chat.lessons")
+                                .help("Inspect, correct or withdraw lessons in What I remember. Matched lessons: "
+                                    + store.nextReplyLessons.map(\.topic).joined(separator: ", ")
+                                    + ". Kept lessons stay on this Mac; opening them makes no model call.")
+                            Text(store.nextCallBudget).font(.system(size: 10)).foregroundStyle(.secondary)
+                        }.padding(.top, 4)
+                    }.font(.system(size: 11))
                     if store.requestsRevision {
-                        Label("Revision mode · review and apply in the full Assistant", systemImage: "pencil")
+                        Label("Revision mode · review and apply in \(AskARCHiBrand.title)", systemImage: "pencil")
                             .font(.system(size: 11)).foregroundStyle(ArchiPalette.violet)
                     }
                     Divider()
@@ -243,7 +251,10 @@ struct CompanionChatBubble: View {
             }
             .frame(minHeight: 65, maxHeight: .infinity)
             Divider()
-            AssistantComposerConnections(store: store)
+            HStack {
+                AssistantComposerConnections(store: store)
+                ARCActiveAssistantActions(store: store)
+            }
             TextField("Ask a question or describe a task…", text: $store.prompt, axis: .vertical)
                 .font(.system(size: 13)).textFieldStyle(.plain).lineLimit(2...3)
                 .focused($composerFocused)
@@ -257,7 +268,7 @@ struct CompanionChatBubble: View {
                 .lineLimit(2).help(store.status)
                 .accessibilityIdentifier("companion-chat.submission-status")
             HStack(alignment: .center, spacing: 8) {
-                Button("Full Assistant", systemImage: "arrow.up.left.and.arrow.down.right", action: openAssistant)
+                Button("Open \(AskARCHiBrand.title)", systemImage: "arrow.up.left.and.arrow.down.right", action: openAssistant)
                     .buttonStyle(.borderless).font(.system(size: 11))
                     .accessibilityIdentifier("companion-chat.full-assistant")
                 Spacer(minLength: 0)
@@ -268,8 +279,7 @@ struct CompanionChatBubble: View {
                 } else {
                     Button("Send", systemImage: "arrow.up") { store.submit() }
                         .buttonStyle(.borderedProminent)
-                        .disabled(!store.canBeginReply || store.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            || (store.requestsRevision && store.textSelection == nil))
+                        .disabled(!AssistantComposerState(store: store).canSend)
                         .keyboardShortcut(.return, modifiers: .command)
                         .accessibilityIdentifier("companion-chat.send")
                 }
@@ -290,10 +300,13 @@ struct CompanionChatBubble: View {
             composerFocused = true
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("ARCHi attached chat")
+        .accessibilityLabel("\(AskARCHiBrand.title) attached chat")
     }
 
     private var sharedContextDisclosure: String {
+        if !store.selectedKnowledgePages.isEmpty {
+            return "Selected knowledge pages and passages stay with local Qwen. Your shared document is not sent."
+        }
         if let name = store.sourceName {
             return "Includes the full shared copy: \(name)." + (store.textSelection == nil ? "" : " A selected passage is also marked.")
         }
@@ -301,7 +314,17 @@ struct CompanionChatBubble: View {
     }
 
     @ViewBuilder private var replies: some View {
-        if store.route == .compare {
+        if store.showsARC3Reply {
+                        ARC3AssistantReply(store: store, session: store.arc3)
+                    } else if store.activeARCAnswer != nil {
+            ARCActiveAssistantReply(store: store)
+        } else if store.compareResults.values.contains(where: { $0.revision != nil }) {
+            ForEach(AssistantProvider.allCases) { provider in
+                if let result = store.compareResults[provider] {
+                    WorkTogetherReplyLane(store: store, provider: provider, result: result)
+                }
+            }
+        } else if store.route == .compare {
             ComparisonReplyPanels(store: store, compact: true)
         } else if let result = store.compareResults[store.assistantProvider] {
             VStack(alignment: .leading, spacing: 8) {
@@ -311,8 +334,9 @@ struct CompanionChatBubble: View {
                     .accessibilityIdentifier("companion-chat.reply")
                 if store.assistantProvider == .qwen { HamptonReplyReferences(snapshot: store.hamptonSnapshot) }
                 if result.revision != nil {
-                    Button("Review revision in Assistant", action: openAssistant).buttonStyle(.borderless)
+                    Button("Review in \(AskARCHiBrand.title)", action: openAssistant).buttonStyle(.borderless)
                 }
+                DocumentReadingFeedback(store: store, provider: store.assistantProvider)
                 LessonReplyControls(store: store, provider: store.assistantProvider)
                 if let receipt = result.receipt {
                     DisclosureGroup("Reply details") { AssistantReceiptDetails(receipt: receipt, onOpenGraph: { store.open(.nodeLab) }) }

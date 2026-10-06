@@ -84,6 +84,30 @@ struct AssistantReplyStreamTests {
         #expect(stream.finalText == "Prefix suffix")
     }
 
+    @Test func delayedPhaseMetadataCannotLeaveCommentaryEligibleAsFinalAnswer() throws {
+        for method in ["item/started", "item/completed"] {
+            var stream = AssistantReplyStream()
+            _ = try stream.consume(method: "item/completed", params: item("A", "Checking…"))
+            #expect(stream.finalText == "Checking…")
+            let text = method == "item/started" ? "" : "Checking…"
+            #expect(try stream.consume(method: method, params: item("A", text, phase: "commentary")) == nil)
+            #expect(stream.finalText == nil)
+        }
+    }
+
+    @Test func delayedFinalPhaseRetainsPriorityAndRejectsContradictoryMetadata() throws {
+        for method in ["item/started", "item/completed"] {
+            var stream = AssistantReplyStream()
+            _ = try stream.consume(method: "item/completed", params: item("A", "Final"))
+            let text = method == "item/started" ? "" : "Final"
+            _ = try stream.consume(method: method, params: item("A", text, phase: "final_answer"))
+            #expect(try stream.consume(method: "item/completed", params: item("B", "Later legacy text")) == nil)
+            #expect(stream.finalText == "Final")
+            #expect(rejects(&stream, method: method, params: item("A", text, phase: "commentary")))
+            #expect(stream.finalText == "Final")
+        }
+    }
+
     @Test func rejectsMalformedMessageData() {
         var stream = AssistantReplyStream()
         #expect(rejects(&stream, method: "item/agentMessage/delta", params: .object(["itemId": .string(""), "delta": .string("x")])))

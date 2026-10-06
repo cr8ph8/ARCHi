@@ -86,7 +86,7 @@ extension CompanionStore {
             return report
         } catch {
             do {
-                try DesktopProfileBackup.undoRestore(report)
+                _ = try DesktopProfileBackup.undoRestore(report)
                 try admitRestoredProfile()
             } catch {
                 blockProfileForRecovery("Profile recovery needs review before saving. The before-restore backup has been retained.")
@@ -101,8 +101,8 @@ extension CompanionStore {
             throw DesktopRecoveryError.blocked("Review replacing your temporary appearance and Evolution choices before recovery.")
         }
         if !discardVisitChoices, let reason = recoveryRestoreBlockReason { throw DesktopRecoveryError.blocked(reason) }
-        guard lessonDraft == nil, focusGestureDraft == nil, voiceInput.phase != .review else {
-            throw DesktopRecoveryError.blocked("Keep or discard your lesson, gesture or voice draft before loading recovered choices.")
+        guard lessonDraft == nil, !hasOpenKnowledgeDraft, focusGestureDraft == nil, voiceInput.phase != .review else {
+            throw DesktopRecoveryError.blocked("Keep or discard your lesson, knowledge page or connection, gesture or voice draft before loading recovered choices.")
         }
         if let reason = DesktopRecoveryStartup.recoverIfNeeded(at: recoveryPreferenceURL) {
             blockProfileForRecovery(reason)

@@ -1,0 +1,143 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "R27-ARENA-PRACTICE-REPORT-2026-09-27",
+  "milestoneId": "R27-ARENA-PRACTICE-REPORT",
+  "asOf": "2026-09-27",
+  "recordedAt": "2026-09-27T07:25:45.584478+00:00",
+  "evidenceClass": "installed-arena-report-with-ui-acceptance-gap",
+  "authority": "project-evidence-only",
+  "result": "PENDING",
+  "resultScope": "Eight focused cases and two actual solo inputs; populated native UI and Save-panel pending.",
+  "sealed": true,
+  "draft": false,
+  "source": {
+    "branch": "codex/archi-encounter-composition-v1",
+    "baseCommit": "15544acf37152a400045e627a7def753e272c4ad",
+    "dirty": true,
+    "checkpointCommit": null,
+    "checkpointTree": null,
+    "cleanSource": false,
+    "sourceSurfaceDigest": "sha256:caaac9fe665475ba4d86148b8ef31281bdca91b4b881c37a20d25b94c5a7340a",
+    "inventory": "output/arena-report-2026-09-27/source-inventory.json",
+    "inventorySHA256": "sha256:36f79496d15b52946f81ee8c3ee535a035b041ac25490a12bc956de4ff2dc9e7",
+    "scope": "Native Arena report/export, bounded checks, developer/investor guides; primary authored checkout remains dirty."
+  },
+  "checks": [
+    {
+      "id": "report-and-owner",
+      "command": "swift test --filter ArenaPracticeReportTests|UnityPresentationTests.testWorldOutcomesRequireSeparateCapabilityAndClearWithSession",
+      "result": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "install-preservation",
+      "command": "guarded build/install, strict signature, 23 profile and 12 resource hashes",
+      "result": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "native-solo-inputs",
+      "command": "CUA Pulse and Guard; inspect resulting session-bound producer records",
+      "result": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "native-populated-report-save-panel",
+      "command": "CUA return from included Unity player",
+      "result": "PENDING",
+      "exitCode": null,
+      "detail": "ScreenCaptureKit -3812 prevents native window capture after handoff."
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "R27-ARENA-PRACTICE-REPORT-ARTIFACT-1",
+      "path": "output/arena-report-2026-09-27/source-inventory.json",
+      "digest": "sha256:36f79496d15b52946f81ee8c3ee535a035b041ac25490a12bc956de4ff2dc9e7",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-PRACTICE-REPORT-ARTIFACT-2",
+      "path": "output/arena-report-2026-09-27/RESULT.md",
+      "digest": "sha256:09b2791827108ff6dd8b898b7ae72192b443b605d1785c45a9a31be3a562fcb3",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-PRACTICE-REPORT-ARTIFACT-3",
+      "path": "output/arena-report-2026-09-27/installation.json",
+      "digest": "sha256:fbef5b19b07365fa6d1b3b4420bf402ca1a2461eb1e6e84b422efce49a951edd",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-PRACTICE-REPORT-ARTIFACT-4",
+      "path": "output/arena-report-2026-09-27/native-input-observation.json",
+      "digest": "sha256:8450738d8a879d4eef5472a4c4ba591476fa73c7eada7853d819ce153a36f07a",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-PRACTICE-REPORT-ARTIFACT-5",
+      "path": "output/arena-report-2026-09-27/profiles-before.json",
+      "digest": "sha256:5289a10186fe5c9ccd30b9b3776dd5c0a0ef714d8aa7fb86b62979029800edcf",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-PRACTICE-REPORT-ARTIFACT-6",
+      "path": "output/arena-report-2026-09-27/profiles-after-native.json",
+      "digest": "sha256:00f320ae6158cfd9a7fe58b2ff2b6a1b38432e42f6e2cd4f640ada5e21bf6243",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-PRACTICE-REPORT-ARTIFACT-7",
+      "path": "output/arena-report-2026-09-27/installed-before.json",
+      "digest": "sha256:83216fdb997709dc828fe8e306a314c1dbb61fa6302bcac2221256907c7190d1",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-PRACTICE-REPORT-ARTIFACT-8",
+      "path": "output/arena-report-2026-09-27/focused-checks.log",
+      "digest": "sha256:ae7a8558e67b28b1169f43834a48996da3811d2ccdfd6b6155a11c188b93c020",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-PRACTICE-REPORT-ARTIFACT-9",
+      "path": "output/arena-report-2026-09-27/install.log",
+      "digest": "sha256:dfdefb339e6a044e111e5c59e6069822271d1e4601b512e63b04288b4882a5f5",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    }
+  ],
+  "limitations": [
+    "Populated native report and Save-panel walkthrough remain unverified after ScreenCaptureKit -3812; eight scoped code/owner cases passed.",
+    "All report metrics cover retained solo rule outcomes, not a full session, physics, paired play, native-Q2E actions or learned behavior.",
+    "No model calls, paid requests, ARC puzzles, automatic feedback or canonical growth in this increment.",
+    "Whole-stack efficacy, cost per owner-accepted task, remote participation and beta readiness remain unestablished.",
+    "Historical R18 receipt mismatch remains open and unchanged."
+  ],
+  "nextPromotionCondition": "Finish populated native report/export walkthrough, then retain useful owner-authored method Apply/review/reuse outcomes and connect bounded native decisions to world-action receipts separately."
+}

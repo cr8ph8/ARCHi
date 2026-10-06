@@ -1,0 +1,24 @@
+* text=auto
+*.swift text eol=lf
+*.py text eol=lf
+*.sh text eol=lf
+*.ts text eol=lf
+*.cs text eol=lf
+*.shader text eol=lf
+*.md text eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.icns binary
+*.fbx binary
+*.blend binary
+
+# Unity's serializer writes empty YAML fields with trailing spaces. Keep its
+# bytes stable; whitespace checks remain active for handwritten source.
+*.meta whitespace=-blank-at-eol
+*.asset whitespace=-blank-at-eol
+*.mat whitespace=-blank-at-eol
+*.unity whitespace=-blank-at-eol
+*.prefab whitespace=-blank-at-eol
+# Preserve bundled upstream source formatting instead of rewriting its bytes.
+unity/ARCHi/Packages/com.coplaydev.unity-mcp/** -whitespace

@@ -5,11 +5,13 @@ struct PlayWorkspace: View {
     @ObservedObject var store: CompanionStore
     @ObservedObject var host: HostedPlayHost
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.liminalPointStructure) private var pointStructure
+    @Environment(\.companionParticleScene) private var particleScene
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Text("Assistant").font(.system(size: 10)).foregroundStyle(.secondary)
+                Text("ARCHi").font(.system(size: 10)).foregroundStyle(.secondary)
                 AssistantTaskCue(activity: store.assistantActivity, quiet: store.preferences.quiet, reduceMotion: store.preferences.reduceMotion)
                 Spacer(minLength: 0)
             }
@@ -65,15 +67,23 @@ struct PlayWorkspace: View {
         .onChange(of: store.evolution.revision) { _, _ in updateAppearance() }
         .onChange(of: store.reactor.frameRevision) { _, _ in updateAppearance() }
         .onChange(of: systemReduceMotion) { _, _ in updateAppearance() }
+        .onChange(of: pointStructure) { _, _ in updateAppearance() }
+        .onChange(of: particleScene?.digest) { _, _ in updateAppearance() }
     }
 
     private func updateAppearance() {
+        let memoryApplies = CompanionMemoryParticles.applies(form: store.presentationForm,
+            family: store.presentationFamily, treatment: store.preferences.visualTreatment)
+            && !(store.presentationForm == .hamptonSeed && store.presentationFamily == nil
+                && store.preferences.visualTreatment == .liminalV008)
         host.updateAppearance(form: store.presentationForm, family: store.presentationFamily,
             reduceMotion: store.preferences.reduceMotion || store.preferences.quiet || systemReduceMotion,
             treatment: store.preferences.visualTreatment,
-            expressionPNG: store.reactorReferenceMatchesCurrentAppearance ? store.reactor.framePNG : nil,
+            expressionPNG: !store.hasPersonalQiMon && store.reactorReferenceMatchesCurrentAppearance ? store.reactor.framePNG : nil,
             expressionRevision: store.reactor.frameRevision,
             recipe: store.presentationRecipe, naturalVariation: store.presentationNaturalVariation,
-            equipment: store.preferences.equipment)
+            equipment: store.preferences.equipment, seedColor: store.preferences.seedColor,
+            pointProgress: store.preferences.liminalPointProgress, pointStructure: pointStructure,
+            particleScene: memoryApplies ? store.companionParticleScene() : nil)
     }
 }

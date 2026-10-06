@@ -5,6 +5,19 @@ import XCTest
 
 final class PointAndExplainTests: XCTestCase {
     @MainActor
+    func testCommandDraftDoesNotGrantPointingReadiness() async throws {
+        let f = PointHelpFixture(); defer { f.cleanup() }
+        f.store.prompt = "/arc solve"
+        XCTAssertTrue(f.store.canBeginReply, "The explicit native command needs no model connection.")
+        XCTAssertFalse(f.store.canPointAndExplainSelection, "Pointing is a separate assistant request.")
+        try await f.connect(.local)
+        XCTAssertTrue(f.store.canPointAndExplainSelection)
+        f.store.selectedReadingSourceIDs = [UUID().uuidString]
+        XCTAssertFalse(f.store.canPointAndExplainSelection, "Kept-source restrictions apply to pointing.")
+        XCTAssertTrue(f.local.replies.isEmpty)
+        XCTAssertTrue(f.cloud.replies.isEmpty)
+    }
+    @MainActor
     func testUnavailableBusyHiddenAndOffscreenTargetsSendNothing() async throws {
         let changes: [(PointHelpFixture) -> Void] = [
             { $0.store.preferences.equipment = .empty },
@@ -111,6 +124,9 @@ final class PointAndExplainTests: XCTestCase {
         let draft = FocusGestureConfiguration(pace: .unhurried, sparkle: .bright, hold: .lingering)
         f.store.focusGestureDraft = draft
         f.store.section = .context
+        // The lesson editor leaves Work together, retiring its spatial scope.
+        // Re-select the current passage as a native user must on return.
+        f.store.selectText(range: f.geometry.selection.range, sourceRevision: f.store.sourceRevision)
         f.store.preferences.tone = "Warm"
         f.store.preferences.replyLength = 0.8
         f.store.evolution.confirmRole(.muse)

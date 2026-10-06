@@ -1,8 +1,45 @@
 import Foundation
+import Combine
 import XCTest
+import ARCHiSpatial
 @testable import ARCHiDesktop
 
 final class DesktopInterestSessionTests: XCTestCase {
+    @MainActor
+    func testUnchangedGeometryDoesNotContinuouslyInvalidateTheCompanion() throws {
+        let reader = InterestSessionReader(), session = DesktopInterestSession(reader: reader)
+        defer { session.cancel() }
+        chooseTarget(session)
+        XCTAssertTrue(session.beginMarkingArea())
+        let marking = try XCTUnwrap(session.areaMarking)
+        let region = try XCTUnwrap(ImageRegionRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5))
+        XCTAssertTrue(session.completeMarkingArea(region, markingID: marking.id))
+        var changes = 0
+        let observation = session.objectWillChange.sink { changes += 1 }
+        defer { observation.cancel() }
+        for step in 0..<20 {
+            let old = reader.offeredTarget
+            reader.offeredTarget = .init(windowID: old.windowID, processID: old.processID,
+                appName: old.appName, title: old.title, frame: old.frame, observedAt: Date(timeIntervalSince1970: Double(step)))
+            session.refreshBoundary()
+        }
+        XCTAssertEqual(changes, 0, "Unchanged metadata must not invalidate every source-backed view.")
+        XCTAssertTrue(session.startAttraction())
+        changes = 0
+        for step in 20..<40 {
+            let old = reader.offeredTarget
+            reader.offeredTarget = .init(windowID: old.windowID, processID: old.processID,
+                appName: old.appName, title: old.title, frame: old.frame, observedAt: Date(timeIntervalSince1970: Double(step)))
+            XCTAssertTrue(session.refreshAttraction())
+        }
+        XCTAssertEqual(changes, 0)
+        reader.offeredTarget = interestTarget(frame: CGRect(x: 200, y: 100, width: 400, height: 300))
+        XCTAssertTrue(session.refreshAttraction())
+        XCTAssertEqual(changes, 1, "Real geometry changes still publish.")
+        XCTAssertEqual(session.attractionTarget, reader.offeredTarget)
+        XCTAssertTrue(reader.requests.isEmpty)
+    }
+
     @MainActor
     func testHoverAndFinishOnlySelectMetadataWithoutReading() {
         let reader = InterestSessionReader()
@@ -249,6 +286,244 @@ final class DesktopInterestSessionTests: XCTestCase {
         XCTAssertNil(session.capture)
         XCTAssertNil(session.target)
     }
+
+    @MainActor
+    func testExplicitAttractionRefreshFollowsOnlyTheSelectedWindowWithoutReading() {
+        let reader = InterestSessionReader(), session = DesktopInterestSession(reader: reader)
+        defer { session.cancel() }
+        XCTAssertFalse(session.startAttraction())
+        XCTAssertEqual(reader.refreshCalls, 0)
+        session.begin()
+        XCTAssertFalse(session.startAttraction(), "A hover is not a selected window.")
+        chooseTarget(session)
+        let selected = session.target
+        XCTAssertTrue(session.startAttraction())
+        XCTAssertTrue(session.attracting)
+        XCTAssertEqual(session.attractionTarget, selected)
+
+        let moved = interestTarget(frame: CGRect(x: 30, y: 80, width: 640, height: 450))
+        reader.offeredTarget = moved
+        reader.current = false // The old read boundary correctly rejects movement.
+        XCTAssertTrue(session.refreshAttraction())
+        XCTAssertEqual(session.attractionTarget, moved)
+        XCTAssertEqual(session.target, selected, "Following metadata cannot replace the explicit read boundary.")
+        XCTAssertEqual(session.phase, .targeted)
+        XCTAssertNil(session.capture)
+        XCTAssertTrue(reader.requests.isEmpty)
+
+        reader.offeredTarget = interestTarget(windowID: moved.windowID + 1, frame: moved.frame)
+        XCTAssertFalse(session.refreshAttraction(), "An identical-looking replacement window has no selection authority.")
+        XCTAssertFalse(session.attracting)
+        XCTAssertNil(session.attractionTarget)
+        let calls = reader.refreshCalls
+        XCTAssertFalse(session.refreshAttraction(), "Polling cannot restart stopped attraction.")
+        XCTAssertEqual(reader.refreshCalls, calls)
+        XCTAssertEqual(session.target, selected)
+    }
+
+    @MainActor
+    func testClosedChangedAndInvalidTargetsStopAttractionWithoutSubstitution() {
+        let alternatives: [DesktopInterestTarget?] = [
+            nil,
+            interestTarget(processID: 999),
+            interestTarget(title: "A different document"),
+            interestTarget(appName: "A different app"),
+            interestTarget(frame: CGRect(x: 0, y: 0, width: 79, height: 60)),
+            interestTarget(frame: CGRect(x: CGFloat.nan, y: 0, width: 400, height: 300))
+        ]
+        for alternative in alternatives {
+            let reader = InterestSessionReader(), session = DesktopInterestSession(reader: reader)
+            defer { session.cancel() }
+            chooseTarget(session)
+            XCTAssertTrue(session.startAttraction())
+            reader.metadataAvailable = alternative != nil
+            if let alternative { reader.offeredTarget = alternative }
+            XCTAssertFalse(session.refreshAttraction())
+            XCTAssertFalse(session.attracting)
+            XCTAssertNil(session.attractionTarget)
+            XCTAssertEqual(session.phase, .targeted)
+            XCTAssertTrue(reader.requests.isEmpty)
+            XCTAssertFalse(session.startAttraction(), "A stale selection cannot authorize a fresh follow session.")
+        }
+    }
+
+    @MainActor
+    func testReviewCaptureRemainsFixedWhileExplicitAttractionFollowsFreshMetadata() async throws {
+        let reader = InterestSessionReader(), session = DesktopInterestSession(reader: reader)
+        defer { session.cancel(); reader.cancelPending() }
+        chooseTarget(session)
+        XCTAssertTrue(session.startAttraction())
+        session.read()
+        XCTAssertFalse(session.attracting, "Explicit reading ends attraction before capturing an exact frame.")
+        XCTAssertNil(session.attractionTarget)
+        try await interestSettle { reader.requests.count == 1 }
+        let captured = reader.snapshot(text: "This reviewed text belongs to the original capture.")
+        reader.complete(0, with: captured)
+        try await interestSettle { session.phase == .review }
+        let moved = interestTarget(frame: CGRect(x: 300, y: 150, width: 800, height: 500))
+        reader.offeredTarget = moved; reader.current = false
+        XCTAssertFalse(session.refreshAttraction(), "An old review never starts attraction passively.")
+        XCTAssertTrue(session.startAttraction(), "The explicit action refreshes the same window's metadata.")
+        XCTAssertEqual(session.attractionTarget, moved)
+        XCTAssertEqual(session.capture, captured)
+        XCTAssertEqual(session.target, captured.target)
+        reader.metadataAvailable = false
+        XCTAssertFalse(session.refreshAttraction())
+        XCTAssertEqual(session.capture, captured, "Closing the followed window does not rewrite reviewed text.")
+        XCTAssertEqual(session.phase, .review)
+        XCTAssertEqual(reader.requests.count, 1)
+    }
+
+    @MainActor
+    func testNewAimCancelAndReadFenceAttractionAndLateOldReads() async throws {
+        let reader = InterestSessionReader(), session = DesktopInterestSession(reader: reader)
+        defer { session.cancel(); reader.cancelPending() }
+        chooseTarget(session)
+        XCTAssertTrue(session.startAttraction())
+        session.begin()
+        XCTAssertFalse(session.attracting); XCTAssertNil(session.attractionTarget)
+        chooseTarget(session); session.read()
+        try await interestSettle { reader.requests.count == 1 }
+        reader.offeredTarget = interestTarget(windowID: 222, title: "New selected window")
+        chooseTarget(session)
+        XCTAssertTrue(session.startAttraction())
+        let newest = session.attractionTarget
+        reader.fail(0)
+        try await interestSettle { reader.completed.contains(0) }
+        await interestDrain()
+        XCTAssertTrue(session.attracting, "An old failed read cannot stop a newer explicit attraction.")
+        XCTAssertEqual(session.attractionTarget, newest)
+        XCTAssertEqual(session.phase, .targeted)
+        session.cancel()
+        XCTAssertFalse(session.attracting); XCTAssertNil(session.attractionTarget)
+
+        chooseTarget(session)
+        XCTAssertTrue(session.startAttraction())
+        reader.offeredTarget = interestTarget(windowID: 222, title: "New selected window",
+            frame: CGRect(x: 80, y: 60, width: 600, height: 400))
+        reader.current = false
+        XCTAssertTrue(session.refreshAttraction())
+        session.read()
+        XCTAssertEqual(session.phase, .idle, "Moved metadata does not silently authorize a new content capture.")
+        XCTAssertFalse(session.attracting); XCTAssertNil(session.attractionTarget)
+        XCTAssertEqual(reader.requests.count, 1)
+    }
+    @MainActor
+    func testExplicitAreaMarkingUsesMetadataAndFollowsOnlySameWindow() throws {
+        let reader = InterestSessionReader(), session = DesktopInterestSession(reader: reader)
+        defer { session.cancel() }
+        XCTAssertFalse(session.beginMarkingArea())
+        XCTAssertEqual(reader.refreshCalls, 0)
+        chooseTarget(session)
+        let readBoundary = session.target
+        XCTAssertTrue(session.beginMarkingArea())
+        let marking = try XCTUnwrap(session.areaMarking)
+        let region = try XCTUnwrap(ImageRegionRect(x: 0.1, y: 0.2, width: 0.3, height: 0.4))
+        XCTAssertTrue(session.completeMarkingArea(region, markingID: marking.id))
+        XCTAssertEqual(session.markedArea, region)
+        XCTAssertNil(session.areaMarking)
+        XCTAssertFalse(session.attracting)
+        let moved = interestTarget(frame: CGRect(x: 200, y: -80, width: 800, height: 600))
+        reader.offeredTarget = moved; reader.current = false
+        session.refreshBoundary()
+        XCTAssertEqual(session.areaTarget, moved)
+        XCTAssertEqual(session.markedArea, region)
+        XCTAssertEqual(session.target, readBoundary, "Geometry attention never replaces the text-read boundary.")
+        let projected = try XCTUnwrap(ParticleAttractionProjection.desktopAreaFrame(session.markedArea, in: moved.frame))
+        XCTAssertEqual(projected.minX, 280, accuracy: 1e-10)
+        XCTAssertEqual(projected.minY, 160, accuracy: 1e-10)
+        XCTAssertEqual(projected.size, CGSize(width: 240, height: 240))
+        XCTAssertTrue(session.startAttraction())
+        XCTAssertEqual(session.attractionTarget, moved)
+        XCTAssertTrue(reader.requests.isEmpty)
+        reader.offeredTarget = interestTarget(windowID: 222, frame: moved.frame)
+        XCTAssertFalse(session.refreshAttraction())
+        session.refreshBoundary()
+        XCTAssertNil(session.markedArea)
+        XCTAssertNil(session.areaTarget)
+        XCTAssertTrue(reader.requests.isEmpty)
+    }
+
+    @MainActor
+    func testMarkGestureRejectsMovedClosedReplacedAndLateTargets() throws {
+        let region = try XCTUnwrap(ImageRegionRect(x: 0.2, y: 0.2, width: 0.4, height: 0.4))
+        let alternatives: [DesktopInterestTarget?] = [nil,
+            interestTarget(frame: CGRect(x: 100, y: 100, width: 400, height: 300)),
+            interestTarget(frame: CGRect(x: -500, y: 30, width: 800, height: 300)),
+            interestTarget(processID: 55), interestTarget(windowID: 333), interestTarget(title: "Changed title")]
+        for alternative in alternatives {
+            let reader = InterestSessionReader(), session = DesktopInterestSession(reader: reader)
+            chooseTarget(session)
+            XCTAssertTrue(session.beginMarkingArea())
+            let old = try XCTUnwrap(session.areaMarking)
+            reader.metadataAvailable = alternative != nil
+            if let alternative { reader.offeredTarget = alternative }
+            XCTAssertFalse(session.completeMarkingArea(region, markingID: old.id))
+            XCTAssertNil(session.markedArea)
+            XCTAssertNil(session.areaMarking)
+            XCTAssertTrue(reader.requests.isEmpty)
+            session.cancel()
+        }
+        let reader = InterestSessionReader(), session = DesktopInterestSession(reader: reader)
+        defer { session.cancel() }
+        chooseTarget(session)
+        XCTAssertTrue(session.beginMarkingArea())
+        let old = try XCTUnwrap(session.areaMarking)
+        session.cancelMarkingArea()
+        XCTAssertTrue(session.beginMarkingArea())
+        let current = try XCTUnwrap(session.areaMarking)
+        XCTAssertNotEqual(old.id, current.id)
+        XCTAssertFalse(session.completeMarkingArea(region, markingID: old.id))
+        XCTAssertEqual(session.areaMarking?.id, current.id)
+        XCTAssertTrue(session.completeMarkingArea(region, markingID: current.id))
+    }
+
+    @MainActor
+    func testCancelMarkingPreservesAreaAndWholeWindowAndNewAimClearIt() throws {
+        let reader = InterestSessionReader(), session = DesktopInterestSession(reader: reader)
+        defer { session.cancel() }
+        chooseTarget(session)
+        let region = try XCTUnwrap(ImageRegionRect(x: 0.1, y: 0.2, width: 0.5, height: 0.5))
+        XCTAssertTrue(session.beginMarkingArea())
+        XCTAssertTrue(session.completeMarkingArea(region, markingID: try XCTUnwrap(session.areaMarking).id))
+        XCTAssertTrue(session.startAttraction())
+        XCTAssertTrue(session.beginMarkingArea())
+        XCTAssertFalse(session.attracting)
+        session.cancelMarkingArea()
+        XCTAssertEqual(session.markedArea, region)
+        session.useWholeWindow()
+        XCTAssertNil(session.markedArea); XCTAssertNil(session.areaTarget)
+        XCTAssertTrue(session.startAttraction())
+        XCTAssertEqual(session.attractionTarget?.frame, reader.offeredTarget.frame)
+        XCTAssertTrue(session.beginMarkingArea())
+        let old = try XCTUnwrap(session.areaMarking)
+        session.begin()
+        XCTAssertNil(session.areaMarking); XCTAssertNil(session.markedArea)
+        XCTAssertFalse(session.completeMarkingArea(region, markingID: old.id))
+        XCTAssertTrue(reader.requests.isEmpty)
+    }
+
+    @MainActor
+    func testTinyMarksAreRejectedAndReadingCancelsPendingGesture() async throws {
+        let reader = InterestSessionReader(), session = DesktopInterestSession(reader: reader)
+        defer { session.cancel(); reader.cancelPending() }
+        chooseTarget(session)
+        XCTAssertTrue(session.beginMarkingArea())
+        let tiny = try XCTUnwrap(ImageRegionRect(x: 0, y: 0, width: 0.001, height: 0.5))
+        XCTAssertFalse(session.completeMarkingArea(tiny, markingID: try XCTUnwrap(session.areaMarking).id))
+        XCTAssertNil(session.markedArea); XCTAssertNil(session.areaMarking)
+        XCTAssertTrue(reader.requests.isEmpty)
+        XCTAssertTrue(session.beginMarkingArea())
+        let old = try XCTUnwrap(session.areaMarking)
+        session.read()
+        XCTAssertNil(session.areaMarking)
+        let region = try XCTUnwrap(ImageRegionRect(x: 0, y: 0, width: 0.5, height: 0.5))
+        XCTAssertFalse(session.completeMarkingArea(region, markingID: old.id))
+        try await interestSettle { reader.requests.count == 1 }
+        reader.complete(0, with: reader.snapshot(text: "The explicit read remains a separate action."))
+        try await interestSettle { session.phase == .review }
+        XCTAssertEqual(reader.requests.count, 1)
+    }
 }
 
 @MainActor
@@ -289,6 +564,8 @@ private final class InterestSessionReader: DesktopInterestReading {
     var offeredTarget = interestTarget()
     var current = true
     var targetCalls = 0, currentChecks = 0
+    var metadataAvailable = true
+    var refreshCalls = 0
     private(set) var requests: [DesktopInterestTarget] = []
     private(set) var completed: Set<Int> = []
     private var pending: [Int: CheckedContinuation<DesktopInterestCapture, any Error>] = [:]
@@ -301,6 +578,11 @@ private final class InterestSessionReader: DesktopInterestReading {
     func isCurrent(_ target: DesktopInterestTarget) -> Bool {
         currentChecks += 1
         return current
+    }
+
+    func refreshedTarget(for target: DesktopInterestTarget) -> DesktopInterestTarget? {
+        refreshCalls += 1
+        return metadataAvailable ? offeredTarget : nil
     }
 
     func read(_ target: DesktopInterestTarget) async throws -> DesktopInterestCapture {

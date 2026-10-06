@@ -114,10 +114,13 @@ final class VoiceInputController: ObservableObject {
     func cancel(ifOwnedBy surface: VoiceInputSurface? = nil) {
         if let surface, self.surface != surface { return }
         retire()
-        transcript = ""
-        phase = .idle
+        // Navigation also retires an idle owner. Do not publish unchanged UI
+        // state from a segmented picker or a disappearing composer.
+        if !transcript.isEmpty { transcript = "" }
+        if phase != .idle { phase = .idle }
         self.surface = nil
-        message = "On this Mac · review before Send"
+        let idleMessage = "On this Mac · review before Send"
+        if message != idleMessage { message = idleMessage }
     }
 
     func takeReviewedTranscript() -> String? {

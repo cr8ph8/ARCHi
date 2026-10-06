@@ -15,6 +15,9 @@ final class CompanionHarmonyPlayer {
     private var themeTask: Task<Void, Never>?
     private var activeThemeID: UUID?
     private var lastThemeRequest: UUID?
+    private var resonanceGate = CompanionResonancePlaybackGate()
+    private var resonanceTask: Task<Void, Never>?
+    private var activeResonance: CompanionResonancePlaybackRequest?
 
     init(store: CompanionStore) {
         self.store = store
@@ -28,6 +31,8 @@ final class CompanionHarmonyPlayer {
 
     func suspend() {
         suspended = true
+        stopResonance()
+        store?.stopResonancePlayback()
         stopTheme()
         store?.stopHarmonyTheme()
         player?.stop(); player = nil
@@ -50,6 +55,24 @@ final class CompanionHarmonyPlayer {
             enabled: settings.musicalCues && volume > 0,
             quiet: settings.quiet, visible: visible, previewID: store.kinLightPreview?.id)
         let decision = gate.update(snapshot: snapshot, now: ProcessInfo.processInfo.systemUptime)
+        let resonance = store.resonancePlaybackRequest
+        let resonanceContext = resonance.map { store.resonancePlaybackContext(for: $0, visible: visible) }
+        let resonanceDecision = resonanceGate.update(request: resonance, context: resonanceContext)
+        if let resonance, resonanceContext?.permits(resonance) != true { store.stopResonancePlayback() }
+        switch resonanceDecision {
+        case .play(let request):
+            stopResonance()
+            stopTheme()
+            beginResonance(request)
+            return
+        case .stop:
+            stopResonance()
+        case .none: break
+        }
+        if activeResonance != nil {
+            player?.volume = Float(volume)
+            return
+        }
         if let activeThemeID {
             if store.harmonyThemeRequest != activeThemeID || !visible || settings.quiet
                 || !snapshot.enabled || store.isWorking || store.kinLightPreview != nil || decision != .none {
@@ -104,6 +127,54 @@ final class CompanionHarmonyPlayer {
         activeThemeID = nil
         player?.stop(); player = nil
         if store?.harmonyThemeRequest == id { store?.stopHarmonyTheme() }
+    }
+
+    private func stopResonance() {
+        guard let request = activeResonance else { return }
+        resonanceTask?.cancel(); resonanceTask = nil
+        activeResonance = nil
+        resonanceGate.finish(request.id)
+        player?.stop(); player = nil
+        if store?.resonancePlaybackRequest?.id == request.id { store?.stopResonancePlayback() }
+    }
+
+    private func beginResonance(_ request: CompanionResonancePlaybackRequest) {
+        player?.stop(); player = nil
+        activeResonance = request
+        playbackFailure = nil
+        resonanceTask = Task { [weak self] in
+            let bytes = await Task.detached(priority: .userInitiated) {
+                HarmonySynth.resonanceWAV(for: request.kind)
+            }.value
+            guard !Task.isCancelled, let self else { return }
+            guard let store = self.store, self.activeResonance == request,
+                  store.resonancePlaybackRequest == request,
+                  store.resonancePlaybackContext(for: request,
+                    visible: !self.suspended && !(NSApp?.isHidden ?? false)).permits(request) else {
+                self.stopResonance()
+                return
+            }
+            do {
+                guard let bytes else { throw CocoaError(.fileReadCorruptFile) }
+                let next = try AVAudioPlayer(data: bytes, fileTypeHint: AVFileType.wav.rawValue)
+                next.volume = Float(min(1, store.preferences.musicalVolume))
+                guard next.prepareToPlay(), store.resonancePlaybackRequest == request,
+                      store.resonancePlaybackContext(for: request,
+                        visible: !self.suspended && !(NSApp?.isHidden ?? false)).permits(request),
+                      next.play() else { throw CocoaError(.fileReadUnknown) }
+                self.player = next
+                let note = CompanionResonance.forKind(request.kind)
+                self.setMessage("Playing \(note.noteName) · \(request.kind.title) record note")
+                try? await Task.sleep(for: .seconds(next.duration + 0.05))
+                guard !Task.isCancelled, self.activeResonance == request else { return }
+                self.stopResonance()
+                self.setMessage("Record note finished.")
+            } catch {
+                self.stopResonance()
+                self.playbackFailure = "The record note could not play. Check your Mac’s audio output."
+                self.setMessage(self.playbackFailure!)
+            }
+        }
     }
 
     private func beginTheme(id: UUID) {

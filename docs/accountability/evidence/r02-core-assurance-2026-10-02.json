@@ -1,0 +1,77 @@
+{
+  "schema": "archi-core-assurance/v1",
+  "date": "2026-10-02",
+  "status": "IMPLEMENTED_INSTALLED_FOCUSED",
+  "curatedBaseCommit": "36705041be61886bfcc15bf154b46e22f8d93cca",
+  "authorityDecision": "ARCHi local records authoritative; WikiOS linked interface",
+  "newJournalCreated": false,
+  "checks": [
+    {
+      "scope": "Provider parsing, reply phase, memory freshness and numerical bounds",
+      "xctestPassed": 10,
+      "swiftTestingPassed": 64,
+      "logSHA256": "751b1261ddbed81bf9f3119bb8f030afb258196e20a8e36f0d42317f52d058c5"
+    },
+    {
+      "scope": "Task provenance, local transport and catalog compatibility",
+      "xctestPassed": 50,
+      "swiftTestingPassed": 40,
+      "logSHA256": "806166aead3a302523e6779dcbbb44379a12eeb1198a8ab515a8ceeaf5b71bc5"
+    },
+    {
+      "scope": "Acquisition, migration, collection and profile backup",
+      "xctestPassed": 53,
+      "swiftTestingPassed": 0,
+      "logSHA256": "e82255f9f959229f65e681e1b89c4af579309edde8bf0202a631000309edf63b"
+    }
+  ],
+  "counting": "Sets overlap; do not sum them as independent or unique checks.",
+  "installation": {
+    "schema": "archi-core-install/v1",
+    "date": "2026-10-02",
+    "installedExecutableSHA256": "2a383a7dd2da9855c0b4a7d41d4f2ab4ecf0379fd4ac9277be9071944ae07326",
+    "compiled": {
+      "textSHA256": "95d3d6ceb69a003edebb8bac413f7b983013370b877d58cba28e0598d98545da",
+      "uuid": "ce5d638d-4c97-300d-a556-12cb3c6b5f4f"
+    },
+    "installed": {
+      "textSHA256": "95d3d6ceb69a003edebb8bac413f7b983013370b877d58cba28e0598d98545da",
+      "uuid": "ce5d638d-4c97-300d-a556-12cb3c6b5f4f"
+    },
+    "compiledInstalledProgramMatch": true,
+    "profileFileCount": 23,
+    "profilesUnchanged": true,
+    "resourceFileCount": 435,
+    "resourcesUnchanged": true,
+    "signaturePassed": true,
+    "guardedUpdater": true,
+    "rollbackRetained": true,
+    "rollbackDirectory": "20261002T191818Z-yocbp1qz",
+    "launched": true,
+    "nativeReadback": {
+      "home": true,
+      "memoryMap": true,
+      "marketplace": true,
+      "missingAcquisitionLabel": true,
+      "returnedHome": true,
+      "qwenReadyNothingSent": true,
+      "liveAcquisitionWalkthrough": false
+    }
+  },
+  "execution": {
+    "liveModelCalls": 0,
+    "puzzleRuns": 0,
+    "trainingRuns": 0,
+    "broadSuite": false,
+    "liveMarketplaceTransactions": 0
+  },
+  "limits": [
+    "Local development alpha, not whole-system security certification or beta acceptance.",
+    "Acquisition and source rights are declarations, not verified legal title or complete upstream assignment chains.",
+    "No global cross-file atomic transaction or cryptographically attested journal.",
+    "Historical graph links do not automatically select an exact page revision.",
+    "ChatGPT plugin and new WikiOS adapter are not installed by this increment.",
+    "General-answer RepE qualification, useful task transfer, iPhone parity and previous release blockers remain open."
+  ],
+  "privateData": "Private profile inventories, source text and UI snapshots excluded."
+}

@@ -142,6 +142,99 @@ final class CompanionItemPackageTests: XCTestCase {
         XCTAssertFalse(invalidSummary.isValid)
     }
 
+    func testReviewDistinguishesMissingRequiredTextFromInvalidText() {
+        var design = bundled
+        design.title = "   "
+        design.creator = ""
+        design.summary = ""
+        let missing = design.review
+        XCTAssertFalse(missing.isValid)
+        XCTAssertEqual(missing.issues.map(\.field), [.title, .creator])
+        XCTAssertEqual(missing.issues.map(\.outcome), [.missing, .missing])
+        XCTAssertEqual(missing.correctionMessage, "Enter an item name. Enter a creator name.")
+        XCTAssertEqual(missing.checks.first { $0.field == .summary }?.outcome, .pass,
+                       "A description is optional and must not block an otherwise valid recipe.")
+
+        design.title = "Hidden\u{0000}name"
+        design.creator = "one\ntwo"
+        design.summary = "line\u{2028}break"
+        let invalid = design.review
+        XCTAssertEqual(invalid.issues.map(\.field), [.title, .creator, .summary])
+        XCTAssertEqual(invalid.issues.map(\.outcome), [.fail, .fail, .fail])
+        XCTAssertTrue(invalid.correctionMessage.contains("item name"))
+        XCTAssertTrue(invalid.correctionMessage.contains("creator name"))
+        XCTAssertTrue(invalid.correctionMessage.contains("description"))
+        XCTAssertFalse(invalid.correctionMessage.contains("Hidden"), "Feedback must not repeat rejected file content.")
+        XCTAssertThrowsError(try design.encoded())
+    }
+
+    func testReviewKeepsUTF16BoundariesAndReportsEveryOversizedField() {
+        var design = bundled
+        design.title = String(repeating: "🌱", count: 12)
+        design.creator = String(repeating: "作", count: 48)
+        design.summary = String(repeating: "🌱", count: 80)
+        XCTAssertTrue(design.review.isValid)
+        XCTAssertTrue(design.review.issues.isEmpty)
+        design.title += "🌱"
+        design.creator += "作"
+        design.summary += "🌱"
+        XCTAssertEqual(design.review.issues.map(\.field), [.title, .creator, .summary])
+        XCTAssertTrue(design.review.issues.allSatisfy { $0.outcome == .fail })
+        XCTAssertTrue(design.review.correctionMessage.contains("Shorten the item name"))
+        XCTAssertTrue(design.review.correctionMessage.contains("Shorten the creator name"))
+        XCTAssertTrue(design.review.correctionMessage.contains("Shorten the description"))
+        XCTAssertFalse(design.isValid)
+        XCTAssertThrowsError(try design.encoded())
+    }
+
+    func testReviewRejectsUnsupportedSchemaAndRevisionWithoutChangingImportErrors() throws {
+        var design = bundled
+        design.schema = "archi-item-design/v2"
+        design.revision = 0
+        XCTAssertEqual(design.review.issues.map(\.field), [.schema, .revision])
+        XCTAssertEqual(design.review.issues.map(\.outcome), [.fail, .fail])
+        XCTAssertFalse(design.isValid)
+        XCTAssertEqual(CompanionItemCatalog.registeredDesign(for: design), .unregistered)
+        XCTAssertTrue(CompanionItemCatalog.canonicalArenaEffects(for: design).isEmpty)
+
+        var fields = try object(bundled.encoded())
+        fields["schema"] = design.schema
+        XCTAssertThrowsError(try CompanionItemPackage.decode(json(fields))) {
+            XCTAssertEqual($0 as? CompanionItemPackageError, .unsupportedSchema)
+        }
+        fields["schema"] = CompanionItemPackage.currentSchema
+        fields["revision"] = 0
+        XCTAssertThrowsError(try CompanionItemPackage.decode(json(fields))) {
+            XCTAssertEqual($0 as? CompanionItemPackageError, .invalidPackage)
+        }
+    }
+
+    func testReviewIsDerivedOnlyAndCannotRegisterAValidVariation() throws {
+        for design in CompanionItemCatalog.designs + [.creatorDefault] {
+            let bytes = try design.encoded()
+            let fingerprint = design.id
+            let review = design.review
+            XCTAssertTrue(review.isValid)
+            XCTAssertEqual(review.checks.map(\.field), [.schema, .revision, .title, .creator, .summary])
+            XCTAssertTrue(review.correctionMessage.isEmpty)
+            XCTAssertEqual(try design.encoded(), bytes)
+            XCTAssertEqual(design.id, fingerprint)
+            XCTAssertEqual(Set(try object(bytes).keys), packageKeys)
+            XCTAssertEqual(try CompanionItemPackage.decode(bytes).review, review)
+        }
+        var variation = bundled
+        variation.palette = .rose
+        XCTAssertTrue(variation.review.isValid)
+        XCTAssertEqual(variation.creator, "Hampton", "The declaration alone must grant nothing.")
+        XCTAssertNotEqual(variation.id, bundled.id)
+        XCTAssertEqual(CompanionItemCatalog.registeredDesign(for: variation), .unregistered)
+        XCTAssertTrue(CompanionItemCatalog.canonicalArenaEffects(for: variation).isEmpty)
+        var claimedReview = try object(variation.encoded())
+        claimedReview["review"] = ["isValid": true]
+        XCTAssertThrowsError(try CompanionItemPackage.decode(json(claimedReview)),
+                             "Review is computed locally, never accepted from an imported claim.")
+    }
+
     func testAllSupportedChoiceValuesRoundTripWithoutArbitraryCapabilityFields() throws {
         for license in CompanionItemPackage.License.allCases {
             for palette in CompanionItemPackage.Palette.allCases {

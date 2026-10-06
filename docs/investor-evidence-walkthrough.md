@@ -1,0 +1,50 @@
+# ARCHi: an investor evidence walkthrough
+
+27 September 2026 · presentation draft · approximately 7 minutes 40 seconds
+
+**Show a development alpha connecting sources, reusable methods, explicit actions and attributable outcomes.** Hampton's numerical mechanisms have bounded native consumers; broad transfer and release readiness remain unfinished. This script is not a new validation result. Baseline: [current progress](system-progress-2026-09-26.md).
+
+## Label the evidence on screen
+
+| Category | Meaning |
+| --- | --- |
+| **LIVE CURRENT** | Observed now. Record the date, running build and request/session reference. Opening a screen alone does not establish workflow completion. |
+| **PRIOR RETAINED** | Linked earlier observations, receipts or checks. Preserve their date, synthetic/owner-data scope and limitations. Not rerun for this draft. |
+| **PROPOSED** | Unfinished work. Use this label for future consumers such as automatic world-action dispatch and remote participation. |
+
+**Current Arena verification:** nineteen focused cases passed. The final installed walkthrough observed a Pulse suggestion, explicit tracking, the next manually chosen Pulse linked as matched (7 dealt / 10 taken), and successful native report export. Ending the session cleared the in-app data; profiles and bundled helpers were unchanged. This closes the earlier summary/Save acceptance gap. [Delivery evidence](../output/arena-advice-2026-09-27/RESULT.md) retains the handoff and Save-window defects found and fixed during the work. This is an agent-operated bounded walkthrough, not owner/investor acceptance or proof of improved performance.
+
+Use a disposable profile with prepared synthetic sources and methods. Preload retained receipts; label a summary as a summary when the original report is unavailable. Keep empty libraries visibly empty. This sequence needs no new generation or personal relationship notes.
+
+## Demo sequence
+
+| Time | Concrete action and observable result | Evidence label and narration |
+| --- | --- | --- |
+| **0:00–0:40** | Open ARCHi and Work together. Identify the running build separately from earlier installation evidence. | **LIVE CURRENT** screen; **PRIOR RETAINED** earlier checks. Distinguish selected guidance, proposed output, applied work and reviewed usefulness. |
+| **0:40–2:00** | In **Find a saved method**, search “project update blocker”. Inspect matched words, version and requirements. Preview, then cancel: the draft stays unchanged. Reopen and explicitly choose the method. Do not Send. | **LIVE CURRENT**, when observed. Search makes no model call; word overlap does not prove fit. With an empty library, show no matches and [retained evidence](native-method-finder.md). |
+| **2:00–3:00** | Open the retained finder demonstration: source/method references, proposal, eight mechanical checks and usage. Show wording only from the original report. | **PRIOR RETAINED**: one local `qwen3.5:9b` invocation; 2,033 input, 198 output tokens; no supplied target answer, Apply or Helpful review. [Evidence](native-method-finder.md#evidence-and-limits). |
+| **3:00–4:30** | Open **Applied work to review → Review** on a demo receipt. Inspect date, version and checks. Show **Next approach → Why this approach**. Leave unverifiable outcomes unreviewed. | **LIVE CURRENT** when observed. No restored prose, historical Undo or automatic learning. Numerical steps require attributed outcomes; zero steps is valid. [Queue](native-document-review-queue.md), [numerical mechanism](native-numerical-adaptation.md). |
+| **4:30–5:40** | In **Memories → Record lookup**, use the visit-only example. Select a present field, then an absent field: exact value, then **Need source**. Do not start a prefill in this timed sequence. | **LIVE CURRENT** source lookup; **PRIOR RETAINED** measurement: 118 input tokens, zero generated. A score cannot fill a missing field. [Contract](native-record-lookup.md), [observation](system-progress-2026-09-26.md). |
+| **5:40–7:20** | Open **Arena → Play Arena**. After explicit solo inputs, inspect **Practice outcomes**: retained actions, damage, shield absorption, observed results and coverage. Track a conditional suggestion, make one further explicit move, inspect its link, then **Save practice report…** and end the session; in-app observations clear. | **LIVE CURRENT**, with a compatible player. Resolved Unity rules from user input. The JSON is a frozen retained window with declared coverage. [Report](native-arena-practice-report.md), [existing stream](everyday-learning-and-world-outcomes.md#observe-resolved-solo-actions-in-arena). |
+| **7:20–7:40** | Return to the evidence map below and name the next measurable milestone. | Separate shipped local mechanisms, prior demonstrations and unfinished consumers. No single completion percentage. |
+
+## Mechanism → measure → evidence → limitation
+
+| Mechanism | Observable measure and evidence | What the evidence does not establish |
+| --- | --- | --- |
+| **Source-bound reusable methods** | Matched words; exact method ID/revision/digest; explicit preview; proposal checks and per-invocation tokens. Nineteen focused finder/source cases and one retained live proposal are reported. [Finder](native-method-finder.md). | Retrieval is an ordinary lexical heuristic, not a recovered Hampton equation or semantic fit test. No owner-rated usefulness or broad transfer was established by that proposal. |
+| **Numerical Q2E adaptation** | Latest eight requirement-matching outcomes; attributed numerical steps; previous/candidate state, effective delta, potential check and coupled lane adjustment. The [document adapter](../desktop/Sources/ARCHiDesktop/HamptonDocumentNumericalControl.swift) computes a bounded update and `Δlane = MᵀΔq_effective`; the [consumer](../desktop/Sources/ARCHiDesktop/HamptonDocumentControl.swift) uses the decision in preparation/local guidance. | Matrices and gains are authored. Per-observation potential decrease does not prove global convergence, causal benefit, model-weight learning or superior task performance. Three usefulness coordinates are distinct from five diagnostic pressures and model residual measurements. |
+| **Recoverable human feedback** | Pending applied records remain discoverable after restart; exact feedback updates existing history. Seven projection and three owner cases passed; installed inspection observed an empty queue. [Review queue](native-document-review-queue.md). | Fixtures are not owner usefulness judgments. Opening a receipt cannot manufacture text, an applied result, Helpful feedback or saved growth. |
+| **Task-specific representation reading** | Frozen final-residual projection with bound model/reader identities. Prior synthetic qualification: 24/24 calibration and 24/24 held-out cases; source lookup owns the answer. [Lookup](native-record-lookup.md), [progress](system-progress-2026-09-26.md). | Synthetic field-support qualification does not qualify arbitrary owner records, truth detection, ordinary chat measurement or steering. Earlier failed readers remain part of the record. |
+| **Arena observation** | Native report retains at most 32 recent actions, counts action effects and distinguishes missed from retired sequences. Prior installed Pulse observation: 7 dealt, 6 taken, Integrity 36 → 30; ending the session cleared it. [Everyday outcomes](everyday-learning-and-world-outcomes.md). | Rule resolution is not physics-contact evidence, autonomous action, automatic native actions, a complete persistent play log or canonical development. Paired action receipts are outside this version. |
+| **Arena numerical advice** | Same-field integrity exchange updates a move coordinate through existing bounded Hampton primitives. The explicit suggestion contains version, evidence digest, potential/effective-delta steps and sample counts; tracking links only the exact next context. [Definition and use](native-arena-advice.md). | Conditional advice is not a current-state legality check, automatic dispatch, win probability or causal advantage. The mapping and gains are authored; no learning result is manufactured from following a suggestion. |
+
+## Comparisons and the next evidence to earn
+
+Two supported before/after comparisons concern product behavior: generic preparation previously could select an unrelated Helpful method; the finder now requires explicit method choice. Earlier applied edits previously required browsing mixed history after moving to another copy; the review queue now surfaces eligible records across copies and restart. These are documented workflow changes, not model-superiority experiments. [Finder](native-method-finder.md), [queue](native-document-review-queue.md).
+
+The retained call used **2,231 observed tokens for one mechanically checked proposal**. It supplies no denominator of owner-accepted useful tasks, so **cost per owner-accepted task is not established**. Keep proposal admission, Apply and Helpful counts separate. Existing method resource rules compare measured tokens per Helpful result only when their comparability requirements hold; no dollar savings or improvement percentage is supported here. [Method evidence and resource ordering](native-method-finder.md).
+
+The lane tables in [Q2E control](native-q2e-control.md) and [numerical adaptation](native-numerical-adaptation.md) were corrected on 27 September to match the current consumer: generic preparation retains an attached method, including a blocked one, until explicit user action. Historical automatic selection/repair-detachment descriptions are superseded.
+
+The next everyday milestone is a retained owner-authored Apply → meaningful review → restart → useful reuse journey with attributable usage. The Arena report makes retained observations inspectable; physics-contact reporting and automatic world-action dispatch still need separate current-context contracts. Neither milestone validates patent claims or completes Hampton's research stack. [Remaining integration](system-progress-2026-09-26.md#next-completion-priorities).

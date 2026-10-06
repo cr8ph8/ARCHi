@@ -51,6 +51,7 @@ namespace ARCHi.Port
                 Directory.CreateDirectory(destination);
                 // Only an explicitly requested smoke run continues while Codex has focus.
                 Application.runInBackground = true;
+                Application.targetFrameRate = 60; // Explicit capture runs need bounded frame pacing on Metal.
                 var runner = new GameObject("Explicit ARCHi port smoke").AddComponent<DesktopPortSmoke>();
                 runner.output = destination;
                 runner.receipt = new Receipt { startedUtc = DateTime.UtcNow.ToString("O"), unityVersion = Application.unityVersion };

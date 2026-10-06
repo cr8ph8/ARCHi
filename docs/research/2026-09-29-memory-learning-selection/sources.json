@@ -1,0 +1,108 @@
+{
+  "schema": "archi-research-batch-sources/v1",
+  "reviewDate": "2026-09-29",
+  "status": "RESEARCH_REVIEWED_NOT_RUNTIME_ADMITTED",
+  "sources": [
+    {
+      "id": "wfm",
+      "title": "WFM: Wiki Foundation Model for Complex Agentic Reasoning",
+      "url": "https://arxiv.org/html/2609.18182v1",
+      "version": "v1",
+      "date": "2026-09-16",
+      "review": "primary method and result qualification reviewed",
+      "sections": [
+        "3.1-3.5",
+        "4.4"
+      ],
+      "evidenceStatus": "MEASUREMENT_UNRESOLVED",
+      "caveat": "Section 4.4 describes unspecified result entries as constructed planning values. Numerical superiority is not admitted as measured ARCHi evidence."
+    },
+    {
+      "id": "dce-srcl",
+      "title": "Recursive Self-Improvement via On-Policy Distillation for Reasoning",
+      "url": "https://arxiv.org/html/2609.30652v1",
+      "version": "v1",
+      "date": "2026-09-25",
+      "review": "primary methods, Table 1 and Appendices F/J/M reviewed",
+      "evidenceStatus": "AUTHOR_REPORTED_NOT_REPRODUCED",
+      "caveat": "Weight training, privileged reference conditioning, endpoint-based rewrite verification; small-model deterioration. No author implementation located in bounded search; code/data/checkpoint qualification unresolved."
+    },
+    {
+      "id": "decisions",
+      "title": "DevDay 2026 Recap \u2014 Decisions API",
+      "url": "https://openai.com/index/devday-2026-recap/",
+      "version": "announcement accessed 2026-09-29",
+      "date": "2026-09-29",
+      "review": "official Decisions API section reviewed",
+      "evidenceStatus": "ANNOUNCED_LIMITED_PREVIEW",
+      "caveat": "Account access, request schema, pricing, confidence calibration and live behavior not verified. No provider call or credential inspection."
+    },
+    {
+      "id": "declarative-attention",
+      "title": "Language Models Can Control Their Own Attention",
+      "url": "https://arxiv.org/html/2609.02737v1",
+      "version": "v1",
+      "date": "2026-09-02",
+      "review": "primary method and reported results reviewed",
+      "sections": [
+        "2.3",
+        "4",
+        "5.4",
+        "Appendix B"
+      ],
+      "evidenceStatus": "AUTHOR_REPORTED_NOT_REPRODUCED",
+      "caveat": "Modified vLLM block masks; attended-position savings are distinct from output tokens, API cost and measured end-to-end latency. Current ARCHi model interfaces expose no mask control."
+    },
+    {
+      "id": "structured-output-limits",
+      "title": "Structured Outputs \u2014 Handling mistakes",
+      "url": "https://developers.openai.com/api/docs/guides/structured-outputs#handling-mistakes",
+      "version": "accessed 2026-09-29",
+      "review": "official documentation section fetched",
+      "evidenceStatus": "DOCUMENTED_INTERFACE_LIMITATION",
+      "caveat": "Schema-compliant output can still be incorrect; this is not a Decisions benchmark."
+    }
+  ],
+  "conversations": [
+    {
+      "id": "6abadf9f-74d8-83e8-965e-7e312c0af06f",
+      "title": "Linked Wiki Memory",
+      "privateCopy": "output/research-intake-2026-09-29/chat-6abadf9f-74d8-83e8-965e-7e312c0af06f.json",
+      "sha256": "b190eaea37046842ffff0fa76f62a81d381fc71657584f56ba9a9ce39949b4c7",
+      "returnedTurns": 3,
+      "atCharacterCap": 2,
+      "citationPlaceholdersResolved": false,
+      "sandboxAttachmentsRetrieved": false
+    },
+    {
+      "id": "6abb9a8f-c3d4-83e8-9687-277bd7e6c3b1",
+      "title": "Declarative Attention Breakthrough",
+      "privateCopy": "output/research-intake-2026-09-29/chat-6abb9a8f-c3d4-83e8-9687-277bd7e6c3b1.json",
+      "sha256": "17b845f498ebca8c70a69752ed965d6ba068bc9012c6dcfb0e1dec55dc2503ad",
+      "returnedTurns": 1,
+      "atCharacterCap": 0,
+      "citationPlaceholdersResolved": false,
+      "sandboxAttachmentsRetrieved": false
+    },
+    {
+      "id": "6abbed8f-1760-83e8-a378-33b3d425f650",
+      "title": "Recursive Self Distillation",
+      "privateCopy": "output/research-intake-2026-09-29/chat-6abbed8f-1760-83e8-a378-33b3d425f650.json",
+      "sha256": "1d858031a020739816b0f013b81e48c3d13d20523f3f4ba460f2ec8bfe540392",
+      "returnedTurns": 1,
+      "atCharacterCap": 1,
+      "citationPlaceholdersResolved": false,
+      "sandboxAttachmentsRetrieved": false
+    },
+    {
+      "id": "6abc2406-9f3c-83e8-9e1b-d5067f4cab1f",
+      "title": "Decision API Overview",
+      "privateCopy": "output/research-intake-2026-09-29/chat-6abc2406-9f3c-83e8-9e1b-d5067f4cab1f.json",
+      "sha256": "1a0ab185e0702e02f528cf719d464956bfe60cf1c1e053f3bf4f47342f4eeaa7",
+      "returnedTurns": 4,
+      "atCharacterCap": 3,
+      "citationPlaceholdersResolved": false,
+      "sandboxAttachmentsRetrieved": false
+    }
+  ]
+}

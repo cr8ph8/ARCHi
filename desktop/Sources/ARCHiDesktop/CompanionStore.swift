@@ -2,10 +2,15 @@ import AppKit
 import Combine
 import UniformTypeIdentifiers
 import CryptoKit
+import ARCHiSpatial
 
 enum WorkspaceSection: String, CaseIterable, Identifiable {
+    case home = "Home"
     case assistant = "Assistant"
     case nodeLab = "Node Lab"
+    case steward = "Token Steward"
+    case capabilities = "ARC Capabilities"
+    case unity = "Unity Area"
     case play = "Habitat & Arena"
     case appearance = "Appearance"
     case marketplace = "Marketplace"
@@ -27,6 +32,9 @@ enum CompanionForm: String, CaseIterable, Identifiable, Codable {
     case ribbonSpirit = "Ribbon Spirit", geode = "Crystal Core"
     case kin = "KIN · First Light", kinSpark = "KIN · Spark", kinSimple = "Simple KIN"
     case kinSeed = "KIN · Core Seed"
+    case particleSeed = "Particle Seed"
+    case hamptonSeed = "Hampton · Liminal Seed"
+    case velaSeed = "Vela Seed", velaLantern = "Vela Lantern"
     var id: String { rawValue }
 
     /// Related local drawings of the same companion, not additional individuals.
@@ -35,8 +43,14 @@ enum CompanionForm: String, CaseIterable, Identifiable, Codable {
 }
 
 struct CompanionPreferences: Codable, Equatable {
+    var workspaceAppearance: WorkspaceAppearance = .system
     var form: CompanionForm = .companion
+    var seedAppearance: CompanionSeedAppearance = .kinParticles
+    var seedColor: CompanionSeedColor = .original
     var visualTreatment: CompanionVisualTreatment = .original
+    /// Explicit visual pose; nil retains the saved historical growth behavior.
+    var companionPose: CompanionPresentationPose? = nil
+    var liminalPointProgress: Double = 107.0 / 119.0
     var equipment: CompanionEquipment = .empty
     var tone = "Calm"
     var replyLength = 0.35
@@ -48,7 +62,8 @@ struct CompanionPreferences: Codable, Equatable {
     var musicalVolume = 0.35
 
     var isValid: Bool {
-        equipment.isValid && size.isFinite && (0.65...1.6).contains(size)
+        liminalPointProgress.isFinite && (0...1).contains(liminalPointProgress)
+        && equipment.isValid && size.isFinite && (0.65...1.6).contains(size)
         && replyLength.isFinite && (0...1).contains(replyLength)
         && musicalVolume.isFinite && (0...1).contains(musicalVolume)
         && ["Calm", "Direct", "Playful", "Warm"].contains(tone)
@@ -60,8 +75,13 @@ extension CompanionPreferences {
     // omit visual treatment and equipment without selecting a wearable.
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        workspaceAppearance = try values.decodeIfPresent(WorkspaceAppearance.self, forKey: .workspaceAppearance) ?? .system
         form = try values.decode(CompanionForm.self, forKey: .form)
+        seedAppearance = try values.decodeIfPresent(CompanionSeedAppearance.self, forKey: .seedAppearance) ?? .kinParticles
+        seedColor = try values.decodeIfPresent(CompanionSeedColor.self, forKey: .seedColor) ?? .original
         visualTreatment = try values.decodeIfPresent(CompanionVisualTreatment.self, forKey: .visualTreatment) ?? .original
+        companionPose = try values.decodeIfPresent(CompanionPresentationPose.self, forKey: .companionPose)
+        liminalPointProgress = try values.decodeIfPresent(Double.self, forKey: .liminalPointProgress) ?? 107.0 / 119.0
         equipment = try values.decodeIfPresent(CompanionEquipment.self, forKey: .equipment) ?? .empty
         tone = try values.decode(String.self, forKey: .tone)
         replyLength = try values.decode(Double.self, forKey: .replyLength)
@@ -83,18 +103,110 @@ struct ContextTicket: Equatable, Sendable {
 
 @MainActor
 final class CompanionStore: ObservableObject {
+    var liminalStructureSessionID = UUID().uuidString
+    /// One disposable allocation history for every presentation of this individual.
+    /// Session wrappers may change; retired art IDs cannot become another record.
+    var liminalKnowledgeBindings: LiminalKnowledgeBindings?
+    var liminalKnowledgeIdentity: String?
+    let tokenSteward: TokenStewardStore
+    let arcCapabilities: ARCCapabilitiesStore
+    let arc3: ARC3SessionStore
+    @Published private(set) var documentWork: DocumentWorkJournal
+    @Published private(set) var documentProcedures: DocumentProcedureLibrary
+    @Published private(set) var readingSources: ReadingSourceLibrary
+    @Published var selectedReadingSourceIDs: Set<String> = []
+    @Published var knowledgePageDraft: KnowledgePageDraft?
+    @Published var knowledgeLinkDraft: KnowledgeLinkDraft?
+    var hasOpenKnowledgeDraft: Bool { knowledgePageDraft != nil || knowledgeLinkDraft != nil }
+    @Published var selectedKnowledgePageID: String?
+    @Published var selectedKnowledgePages: [KnowledgePageBinding] = []
+    @Published var knowledgePageMessage: String?
+    @Published private(set) var knowledgeMethodDraftPage: KnowledgePageBinding?
+    @Published private(set) var knowledgeMethodDraftMessage: String?
+    @Published private(set) var knowledgeMethodDraft: KnowledgeMethodDraft?
+    private var knowledgeMethodDraftRequestID: String?
+    @Published private(set) var knowledgeConceptDraft: KnowledgeConceptDraft?
+    @Published private(set) var knowledgeConceptDraftMessage: String?
+    private var knowledgeConceptDraftRequestID: String?
+    @Published private(set) var preparedDocumentProcedure: DocumentProcedureUse?
+    private var preparedProcedureSelection: DocumentSelection?
+    private var preparedProcedureSourceDigest: String?
+    private var documentProcedureRequests: [String: DocumentProcedureUse] = [:]
+    @Published private(set) var documentWorkMessage: String?
+    @Published var documentReadingPreview: DocumentReadingPreview?
+    @Published var documentReadingMessage: String?
+    @Published private(set) var showsARC3Reply = false
+    /// Transient navigation only. Everyday reasoning never starts a solver or world.
+    @Published var showsReasoningTools = false
+    @Published private(set) var arenaActivity: ArenaActivity = .practice
+    @Published private(set) var reasoningToolsShowWorlds = false
+    @Published private(set) var lastARC3Summary: ARC3SessionSummary?
+    @Published private(set) var stewardMessage: String?
+    /// Navigation focus is transient and never enters a profile or usage journal.
+    @Published private(set) var selectedStewardTaskID: String?
+    @Published private(set) var selectedGraphNodeID: String? {
+        didSet { if selectedGraphNodeID != oldValue { stopResonancePlayback() } }
+    }
+    /// Explicit, ephemeral playback over a current record; never serialized.
+    @Published var resonancePlaybackRequest: CompanionResonancePlaybackRequest?
+    /// Transient cross-surface focus, never persisted as identity or learning.
+    @Published private(set) var memoryParticleSelection: CompanionParticleSelection?
+    /// Disposable projection cache; rebuilt whenever owner evidence changes.
+    var particleSceneCache: CompanionParticleScene?
+    var desktopParticleSceneCheck: (motionID: String, uptime: Double)?
+    /// One transient motion runtime shared by all native particle presentations.
+    let particleMotion = CompanionParticleMotion()
+    /// Shared native presentation only; never saved as growth or identity.
+    @Published var memoryParticleFormProgress = 0.0
+    @Published var memoryParticleMotionEnabled = true
+    @Published var desktopParticleOverlayVisible = false
+    @Published var inspectedDocumentMethod: DocumentMethodInspectionSelection?
+    @Published var inspectedKnowledgeRecord: KnowledgeRecordInspectionSelection?
+    /// Chosen method for the document-side preview; never persisted or sent.
+    @Published private(set) var documentMethodToTry: DocumentMethodInspectionSelection?
+    @Published private(set) var workspaceRoutingNotice: String?
+    private var pendingStewardReceipts: [String: AssistantLaneReceipt] = [:]
+    private var pendingStewardEvaluations: [String: ARCCapabilitiesEvent] = [:]
+    private var pendingStewardUseful: Set<String> = []
+    private var pendingARC3Summaries: [String: ARC3SessionSummary] = [:]
     /// Desktop delivery may suspend the game without altering its saved data.
     let allowsPlay: Bool
-    @Published var section: WorkspaceSection = .assistant {
-        didSet {
-            if section == .play && !allowsPlay { section = .assistant; return }
-            if section != oldValue, focusGesturePlayback != nil { stopFocusGesture() }
+    @Published private(set) var presentedSection: WorkspaceSection = .home
+    var section: WorkspaceSection {
+        get { presentedSection }
+        set {
+            let oldValue = presentedSection
+            var destination = newValue
+            // The image draft belongs to its presenting workspace. Menu and
+            // keyboard navigation must not dismantle that host before review.
+            if isImageRegionImportPresented, destination != oldValue {
+                status = "Finish or cancel the image region draft before changing views."
+                return
+            }
+            // The page editor is hosted by Memories. Keep that host alive until
+            // the user explicitly saves or cancels its local editable fields.
+            if hasOpenKnowledgeDraft, destination != .memory {
+                destination = .memory
+                knowledgePageMessage = "Save or cancel your open page or connection draft before changing views."
+            }
+            if destination == .play && !allowsPlay { destination = .assistant }
+            guard destination != oldValue else { return }
+            if focusGesturePlayback != nil { stopFocusGesture() }
+            if oldValue == .context {
+                // Retire the document's spatial reference at navigation time,
+                // before SwiftUI dismantles its native view during an update.
+                invalidateTextSelection(reason: "Work together closed. Select the passage again when you return.")
+            }
+            if destination != .nodeLab { stopResonancePlayback() }
+            // Publish only the accepted route, never a transient rejected view.
+            presentedSection = destination
         }
     }
     @Published var preferences = CompanionPreferences() {
         didSet {
             if preferences.quiet { stopKinLightPreview() }
-            if preferences.quiet || !preferences.musicalCues || preferences.musicalVolume == 0 { stopHarmonyTheme() }
+            if preferences.quiet || !preferences.musicalCues || !preferences.musicalVolume.isFinite
+                || preferences.musicalVolume <= 0 { stopHarmonyTheme(); stopResonancePlayback() }
             if preferences != oldValue { invalidatePlacementPreview(reason: "Appearance or preferences changed. Preview again.") }
             refreshReactorReference()
         }
@@ -102,6 +214,7 @@ final class CompanionStore: ObservableObject {
     @Published var isVisible = true {
         didSet {
             if !isVisible {
+                stopResonancePlayback()
                 desktopInterest.cancel(reason: "ARCHi hidden. Point again when ready.")
                 stopKinLightPreview()
                 stopHarmonyTheme()
@@ -112,12 +225,18 @@ final class CompanionStore: ObservableObject {
     }
     @Published var position = CGPoint.zero
     @Published var placementRevision: UInt64 = 0
-    @Published var sharedText = ""
+    @Published var sharedText = "" {
+        didSet { if sharedText != oldValue { invalidateActiveARCSource() } }
+    }
     let desktopInterest: DesktopInterestSession
     @Published private(set) var desktopInterestSource: DesktopInterestSource?
     @Published private(set) var desktopInterestExternalDigest: String?
-    @Published var sourceName: String?
-    @Published var sourceRevision: UInt64 = 0
+    @Published var sourceName: String? {
+        didSet { if sourceName != oldValue { invalidateActiveARCSource() } }
+    }
+    @Published var sourceRevision: UInt64 = 0 {
+        didSet { if sourceRevision != oldValue { invalidateActiveARCSource() } }
+    }
     @Published private(set) var textSelection: DocumentSelection?
     @Published private(set) var replySourceSelection: DocumentSelection?
     @Published private(set) var spatialPreview: SpatialPreview?
@@ -130,18 +249,32 @@ final class CompanionStore: ObservableObject {
     @Published var prompt = ""
     let voiceInput: VoiceInputController
     @Published var requestsRevision = false
+    @Published var documentRequirements = DocumentWorkRequirements()
     @Published private(set) var workingCopyNotice = "Select a passage to begin."
     private var workingCopyUndo: WorkingCopyEditReceipt?
+    @Published private(set) var pendingDocumentReceipt: DocumentWorkRecord?
     private var openedWorkingCopyDigest: String?
     private var exportedWorkingCopyDigest: String?
+    enum WorkingCopyOrigin { case file, pasted, imageRegion }
+    @Published private(set) var workingCopyOrigin: WorkingCopyOrigin = .file
+    var workingCopyIsPasted: Bool { workingCopyOrigin == .pasted }
+    @Published private(set) var imageRegionWorkingSource: ImageRegionDocument?
+    @Published private(set) var imageRegionWorkingImage: ImageRegionImage?
+    @Published var pastedDocumentDraft = PastedDocumentDraft()
+    @Published var isImageRegionImportPresented = false
     var hasUnexportedWorkingCopy: Bool {
         guard sourceName != nil, let openedWorkingCopyDigest else { return false }
         let current = SHA256.hash(data: Data(sharedText.utf8)).map { String(format: "%02x", $0) }.joined()
-        return current != openedWorkingCopyDigest && current != exportedWorkingCopyDigest
+        return (workingCopyOrigin != .file || current != openedWorkingCopyDigest) && current != exportedWorkingCopyDigest
     }
     private var importedSourceURL: URL?
+    @Published private(set) var wikiOSTask: QiWorkRequestFile?
+    @Published var wikiOSExchangeReview: WikiOSExchangeReview?
+    @Published var wikiOSExchangeMessage: String?
     @Published var activity: [String] = []
     @Published var isWorking = false
+    @Published private(set) var activeARCAnswer: ARCActiveAssistantAnswer?
+    private var activeARCOwner: ARCActiveAssistantOwnership?
     @Published private(set) var isShuttingDown = false
     @Published var connectionState: AssistantConnectionState = .disconnected
     @Published var connectionMessage = "Connect Qwen on this Mac when you are ready."
@@ -152,11 +285,24 @@ final class CompanionStore: ObservableObject {
     @Published private var connectionMessages: [AssistantProvider: String] = [:]
     @Published private(set) var qwenModel = QwenAssistant.defaultModel
     @Published private(set) var qwenContextModel = HamptonReasonsAssistant.defaultContextModel
+    @Published private(set) var localWorkPreference: LocalWorkPreference = .automatic
+    @Published private(set) var installedLocalModels: [QwenModelMetadata]?
+    @Published private(set) var modelInventoryNotice = "Refresh to inspect installed local models."
+    @Published private(set) var isRefreshingModels = false
+    private var modelInventoryTask: Task<Void, Never>?
+    // Reader selection belongs to this visit, never to a Seed or retained memory.
+    @Published private(set) var representationReader: GGUFReaderArtifact?
+    @Published private(set) var representationMeasurementsEnabled = false
+    @Published private(set) var representationNotice = "Import a model-specific reader for inspection."
     @Published private(set) var sessionContextEnabled = false
     @Published private(set) var localConversation = AssistantConversation()
     @Published private(set) var localConversationEnabled = true
     @Published private(set) var localConversationNotice = "Recent Qwen exchanges stay in this visit only."
+    private var localConversationRequestIDs = Set<UUID>()
     private var localConversationExpiry: Date?
+    private var localConversationReadingSources: [ReadingSourceBinding]?
+    private var localConversationKnowledgePages: [KnowledgePageBinding]?
+    private var localContextTaskScope: HamptonTaskScope?
     @Published private(set) var hamptonSnapshot = HamptonAssistantSnapshot()
     @Published var rememberPreferences = false
     @Published private(set) var keptLessons: [KeptLesson] = []
@@ -181,7 +327,7 @@ final class CompanionStore: ObservableObject {
     @Published private(set) var harmonyThemeRequest: UUID?
     private var kinLightPreviewTask: Task<Void, Never>?
     @Published private(set) var focusGestureMessage = "Teach how the staff points when you ask."
-    @Published var status = "Desktop preview · assistant not connected"
+    @Published var status = "On this Mac · assistant not connected"
     var onShowCompanion: (() -> Void)?
     var onHideCompanion: (() -> Void)?
     var onOpenLab: (() -> Void)?
@@ -209,6 +355,8 @@ final class CompanionStore: ObservableObject {
     private let assistantFactory: @MainActor (AssistantProvider, String) -> any AssistantClient
     private var retiringAssistants: [UUID: Task<Void, Never>] = [:]
     private let preferenceURL: URL
+    @Published var hasPersonalContextDraft = false
+    @Published var hasSeedDesignDraft = false
     private var preferenceDocument = NativePreferenceDocument()
     private var preferenceBaseline: Data?
     private var preferenceFileReadable = true
@@ -217,7 +365,10 @@ final class CompanionStore: ObservableObject {
     private let wallClock: () -> Date
     let evolution: EvolutionStore
     let reactor = ReactorExpressionStore()
+    let unityPresentation = UnityPresentationConnection()
+    let marketplaceCatalog: MarketplaceCatalogStore
     private var evolutionSubscriptions = Set<AnyCancellable>()
+    private var documentDataSubscriptions = Set<AnyCancellable>()
     private var lastEvolutionAppearanceID: String?
 
     /// Ordinary settings have their own explicit Save. Remember controls that
@@ -244,8 +395,8 @@ final class CompanionStore: ObservableObject {
     /// inspecting another app's files. Custom/test locations remain distinct.
     var retentionProfileLabel: String {
         switch preferenceURL.standardizedFileURL.deletingLastPathComponent().lastPathComponent {
-        case "ARCHiDesktopReview": "Development Review"
-        case "ARCHiDesktop": "ARCHi"
+        case "ARCHiDesktopReview": "ARCHi"
+        case "ARCHiDesktop": "Legacy Desktop Preview"
         default: "Custom local profile"
         }
     }
@@ -256,7 +407,26 @@ final class CompanionStore: ObservableObject {
     }
 
     var assistantActivity: AssistantActivity {
-        AssistantActivity.derive(owned: Set(replyOwners.keys), results: compareResults)
+        if showsARC3Reply {
+            if arc3.isWorking { return .working }
+            if arc3.error != nil { return .failed }
+            if arc3.observation != nil { return .ready }
+        }
+        if let answer = activeARCAnswer {
+            return answer.isWorking ? .working : answer.cancelled ? .stopped : answer.error == nil ? .ready : .failed
+        }
+        return AssistantActivity.derive(owned: Set(replyOwners.keys), results: compareResults)
+    }
+
+    /// Presentation may describe the current local request's captured references,
+    /// never a prepared connection, an unowned receipt or a completed old reply.
+    var currentParticleActivityReceipt: AssistantLaneReceipt? {
+        guard !isShuttingDown, profileRecoveryBlock == nil, replyOwners[.qwen] != nil,
+              let lane = compareResults[.qwen], lane.state == .pending,
+              let receipt = lane.receipt, receipt.provider == .qwen,
+              receipt.state == .pending, receipt.requestStarted,
+              isCurrentReplyContext(receipt) else { return nil }
+        return receipt
     }
 
     var hasFreshKinFocus: Bool {
@@ -278,7 +448,10 @@ final class CompanionStore: ObservableObject {
         let preview = kinLightPreview.flatMap {
             $0.isFresh(at: monotonicTime(), ticket: contextTicket()) ? $0.mode : nil
         }
-        return KinLightRules.resolve(activity: assistantActivity, hasFreshFocus: hasFreshKinFocus,
+        // Pointing shows attention to the same outlined window, without claiming
+        // its content has been read. The acquisition owner retires this cue.
+        let outlinedWindow = desktopInterest.cue.outlineFrame != nil
+        return KinLightRules.resolve(activity: assistantActivity, hasFreshFocus: hasFreshKinFocus || outlinedWindow,
             preview: preview, visible: isVisible && !isShuttingDown,
             quiet: settings.quiet, activeKin: activeQiMon != nil)
     }
@@ -292,6 +465,7 @@ final class CompanionStore: ObservableObject {
         guard canPreviewKinLight, mode != .rest else { return false }
         let now = monotonicTime()
         guard now.isFinite, now >= 0 else { return false }
+        stopResonancePlayback()
         stopHarmonyTheme()
         stopKinLightPreview()
         let preview = KinLightPreview(id: UUID(), mode: mode, startedAt: now, ticket: contextTicket())
@@ -316,6 +490,7 @@ final class CompanionStore: ObservableObject {
 
     func previewHarmonyTheme() {
         guard canPreviewHarmonyTheme else { return }
+        stopResonancePlayback()
         stopKinLightPreview()
         harmonyThemeRequest = UUID()
     }
@@ -355,42 +530,139 @@ final class CompanionStore: ObservableObject {
                                      role: CompanionPresentationRole = .body) -> String {
         let cue = gesture?.purpose == .practice ? ". Practicing staff gesture"
             : gesture?.purpose == .pointing ? ". Pointing with staff" : ""
-        let identity = role == .cursor && activeQiMon != nil ? "KIN · Seed cursor. " : ""
-        return identity + CompanionVisualAsset.label(form: presentationForm(for: preferences, role: role), family: presentationFamily,
+        let scene = role == .cursor ? companionParticleScene() : nil
+        let memoryAvatar = scene != nil
+        let activity = scene.map { companionParticleActivity(in: $0) } ?? .empty
+        let preparedCue = activity.preparedNodeIDs.isEmpty ? "" : ". \(activity.preparedNodeIDs.count) records prepared for next reply"
+        let requestCue = activity.requestNodeIDs.isEmpty ? "" : ". \(activity.requestNodeIDs.count) records referenced by current request"
+        let identity = role == .cursor ? activeQiMon.map { "\($0.name) · \(memoryAvatar ? "Memory avatar" : "Seed cursor"). " } ?? "" : ""
+        let appearance = memoryAvatar ? "Connected memory particles. \(preferences.seedColor.title)"
+            + (preferences.equipment.item.map { " · " + $0.title } ?? "")
+            : CompanionVisualAsset.label(form: presentationForm(for: preferences, role: role), family: presentationFamily,
             treatment: preferences.visualTreatment, recipe: presentationRecipe,
-            naturalVariation: presentationNaturalVariation, equipment: preferences.equipment) + ". Assistant: " + assistantActivity.title + cue
+            naturalVariation: presentationNaturalVariation, equipment: preferences.equipment, seedColor: preferences.seedColor)
+        return identity + appearance + ". Assistant: " + assistantActivity.title + cue + preparedCue + requestCue
             + (activeQiMon == nil ? "" : ". Light expression: " + kinLightExpression(for: preferences).label)
             + (desktopInterest.phase == .idle ? "" : ". Object of interest: " + desktopInterest.message)
     }
 
+    var nextExecutionSelection: AssistantExecutionSelection {
+        executionSelection(question: prompt, pointing: nil)
+    }
+
+    func executionSelection(question: String, pointing: AssistantPointingSnapshot?) -> AssistantExecutionSelection {
+        .select(question: question, hasPreparedProcedure: preparedDocumentProcedure != nil, hasPointing: pointing != nil)
+    }
+
+    var nextLocalExpertDecision: LocalExpertDecision {
+        LocalExpertPolicy.decide(prompt: prompt,
+            requiresReasoning: !selectedKnowledgePages.isEmpty || sourceName != nil || !sharedText.isEmpty || textSelection != nil
+                || requestsRevision || !selectedReadingSourceIDs.isEmpty,
+            preference: localWorkPreference, measurements: representationMeasurementsEnabled)
+    }
+
+    /// Configuration checks only; current-source, proposal and budget validation
+    /// remain owned by submit. Reading previews never prepare or mutate a plan.
+    var nextAssistantBlockedReason: String? {
+        nextExecutionSelection == .assistant ? assistantBlockedReason(hasPointing: false) : nil
+    }
+
+    private func assistantBlockedReason(hasPointing: Bool) -> String? {
+        if preparedDocumentProcedureKnowledge != nil,
+           hasPointing || route == .codex || route == .compare {
+            return "Methods linked to knowledge pages stay on this Mac. Choose a local route before sending."
+        }
+        if !selectedKnowledgePages.isEmpty {
+            if requestsRevision || hasPointing || route == .codex || route == .compare {
+                return "Selected knowledge pages use local chat. Finish or detach the pages before revising, pointing, or using an external route. Nothing sent."
+            }
+            if let issue = selectedKnowledgePageIssue { return issue + " Nothing sent." }
+        }
+        if representationMeasurementsEnabled && !route.providers.allSatisfy({ $0 == .qwen }) {
+            return "Model measurements stay on this Mac. Choose a local route, or turn measurements off before using an external assistant. Nothing sent."
+        }
+        if selectedKnowledgePages.isEmpty, !selectedReadingSourceIDs.isEmpty,
+           requestsRevision || hasPointing || sourceName == nil || route == .codex || route == .compare {
+            return "Kept reading copies use local Qwen for document questions. Choose a local route or deselect the copies. Nothing sent."
+        }
+        return nil
+    }
+
+    /// This is a ceiling explanation, never permission to invoke fallback.
+    /// The captured request still passes finishFailedAttempt's complete checks.
+    var nextAssistantFallbackBlockedReason: String? {
+        if preparedDocumentProcedureKnowledge != nil { return "This method is linked to a knowledge page; external fallback is disabled." }
+        if !selectedKnowledgePages.isEmpty { return "Selected knowledge pages stay local; external fallback is disabled." }
+        if representationMeasurementsEnabled { return "Model measurements stay local; external fallback is disabled." }
+        if !selectedReadingSourceIDs.isEmpty { return "Selected kept reading copies stay local; external fallback is disabled." }
+        let lessons = nextReplyLessons
+        let knowledgeBackedLesson = keptLessons.contains { lesson in
+            !(lesson.origin?.knowledgePages?.isEmpty ?? true) && lessons.contains { $0.id == lesson.id }
+        }
+        if knowledgeBackedLesson || (!nextReplyConversation.isEmpty && !(localConversationKnowledgePages?.isEmpty ?? true)) {
+            return "Context supported by knowledge pages stays local; external fallback is disabled."
+        }
+        let readingBackedLesson = keptLessons.contains { lesson in
+            !(lesson.origin?.readingSources?.isEmpty ?? true) && lessons.contains { $0.id == lesson.id }
+        }
+        if readingBackedLesson || (!nextReplyConversation.isEmpty && !(localConversationReadingSources?.isEmpty ?? true)) {
+            return "Context supported by kept reading copies stays local; external fallback is disabled."
+        }
+        if desktopInterestSource != nil, desktopInterestExternalDigest != LessonSource.digest(of: sharedText) {
+            return "This window copy stays local until you allow this exact copy for an external route."
+        }
+        return nil
+    }
+
     var nextCallBudget: String {
-        let local = sessionContextEnabled ? "1 local answer call, plus up to 2 context calls" : "1 local answer call"
+        if let budget = nextExecutionSelection.nativeCallBudget { return budget }
+        if let reason = nextAssistantBlockedReason { return "0 model calls · " + reason }
+        let answerCalls = nextLocalExpertDecision.target == .reasoning
+            ? "1 local answer attempt" : "Up to 2 local answer attempts (compact + recovery)"
+        let local = answerCalls + (sessionContextEnabled ? ", plus up to 2 context calls" : "")
         switch route {
-        case .local: return local
+        case .native:
+            return local + (nextAssistantFallbackBlockedReason == nil
+                ? " · at most 1 Codex fallback request" : " · no external requests")
+        case .local, .automatic: return local + " · no external requests"
         case .codex: return "1 Codex request"
         case .compare: return local + " · 1 Codex request"
-        case .automatic: return local + " · no external requests"
         }
     }
 
-    var canBeginReply: Bool { !isShuttingDown && !voiceInput.isActive && canShareDesktopInterestWithRoute
-        && (route == .automatic || connectionState == .ready) }
+    var arc3CommandSelected: Bool { nextExecutionSelection.isARC3Command }
+    var arcCommandSelected: Bool { nextExecutionSelection.isNativeCommand }
+    var isARCWorking: Bool { activeARCOwner != nil || arc3.isWorking }
+    var canBeginReply: Bool { canBeginReply(selection: nextExecutionSelection, hasPointing: false) }
+
+    private func canBeginReply(selection: AssistantExecutionSelection, hasPointing: Bool) -> Bool {
+        !isShuttingDown && !voiceInput.isActive
+            && (selection.isNativeCommand || (assistantBlockedReason(hasPointing: hasPointing) == nil
+                && canShareDesktopInterestWithRoute && (route.connectsAutomatically || connectionState == .ready)))
+    }
 
     var canShareDesktopInterestWithRoute: Bool {
-        desktopInterestSource == nil || route == .local || route == .automatic
+        desktopInterestSource == nil || route == .local || route.connectsAutomatically
             || desktopInterestExternalDigest == LessonSource.digest(of: sharedText)
     }
 
     func allowDesktopInterestWithExternalRoute() {
         guard !isShuttingDown, desktopInterestSource != nil,
-              route == .codex || route == .compare else { return }
+              route == .codex || route == .compare || route == .native else { return }
         desktopInterestExternalDigest = LessonSource.digest(of: sharedText)
         status = "This exact copy may be sent with your selected route. Nothing sent yet."
     }
-    var resultProviders: [AssistantProvider] { route.providers }
+    var resultProviders: [AssistantProvider] {
+        if knowledgeMethodDraftPage != nil || knowledgeConceptDraftRequestID != nil { return [.qwen] }
+        return route == .native && compareResults[.codex] != nil ? [.qwen, .codex] : route.providers
+    }
 
     var nextReplyConversation: [AssistantConversationExchange] {
         localConversationEnabled && route != .codex
+            && localPreferenceMemoryIsCurrent
+            && (localContextTaskScope == nil || localContextTaskScope == currentTaskScope)
+            && readingDependenciesAreCurrent(localConversationReadingSources)
+            && knowledgeDependenciesAreCurrent(localConversationKnowledgePages)
             && (localConversationExpiry.map { $0 > wallClock() } ?? true) ? localConversation.exchanges : []
     }
 
@@ -403,26 +675,52 @@ final class CompanionStore: ObservableObject {
 
     func startNewLocalConversation() {
         guard !isShuttingDown else { return }
+        cancelActiveARC(reason: "New conversation.")
+        arc3.stop(reason: "New conversation.")
+        showsARC3Reply = false
         clearSessionContext()
         localConversationNotice = "New local conversation. Your draft, shared copy and kept lessons are unchanged."
         if assistantProvider == .qwen { reply = "What would you like to work on?" }
         if !isWorking { status = localConversationNotice }
     }
 
+    /// A reading correction retires generated continuation, not exact source
+    /// spans or explicitly kept lessons. Preserve the visible answer for review.
+    func invalidateCorrectedReadingContinuation() {
+        clearLocalConversation()
+        localConversationNotice = "The corrected answer was removed from follow-up context. Your shared copy and kept lessons are unchanged."
+    }
+
+    private func readingContinuationIsCurrent(_ parents: Set<UUID>) -> Bool {
+        guard !parents.isEmpty else { return true }
+        do { try tokenSteward.refresh() } catch { return false }
+        return parents.isDisjoint(with: HamptonMemoryDependencies.invalidatedReadings(tasks: tokenSteward.tasks))
+    }
+
     private func clearLocalConversation() {
-        localConversation.clear()
-        localConversationExpiry = nil
-        localConversationNotice = "Recent Qwen exchanges stay in this visit only."
+        // Document detachment can retire an already-empty selection during a
+        // native view update. Do not publish a change when nothing changed.
+        if !localConversation.exchanges.isEmpty { localConversation.clear() }
+        if localConversationExpiry != nil { localConversationExpiry = nil }
+        localConversationReadingSources = nil
+        localConversationKnowledgePages = nil
+        localConversationRequestIDs.removeAll()
+        localContextTaskScope = nil
+        let notice = "Recent Qwen exchanges stay in this visit only."
+        if localConversationNotice != notice { localConversationNotice = notice }
     }
 
     init(preferenceURL: URL? = nil, assistant: (any AssistantClient)? = nil,
          provider: AssistantProvider = .qwen,
          assistantFactory: @escaping @MainActor (AssistantProvider, String) -> any AssistantClient = { provider, model in
-             provider == .qwen ? HamptonReasonsAssistant(model: model) : CodexAssistant()
+             provider == .qwen ? HamptonReasonsAssistant(model: model, nativeRuntime: .shared) : CodexAssistant()
          },
          monotonicTime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
          wallClock: @escaping () -> Date = Date.init, allowsPlay: Bool = true,
-         voiceInput: VoiceInputController? = nil, interestReader: (any DesktopInterestReading)? = nil) {
+         voiceInput: VoiceInputController? = nil, interestReader: (any DesktopInterestReading)? = nil,
+         tokenSteward: TokenStewardStore? = nil, arcCapabilities: ARCCapabilitiesStore? = nil, arc3: ARC3SessionStore? = nil,
+         marketplaceCatalog: MarketplaceCatalogStore? = nil) {
+        self.marketplaceCatalog = marketplaceCatalog ?? MarketplaceCatalogStore()
         self.voiceInput = voiceInput ?? VoiceInputController()
         self.desktopInterest = DesktopInterestSession(reader: interestReader)
         self.allowsPlay = allowsPlay
@@ -436,9 +734,14 @@ final class CompanionStore: ObservableObject {
         let resolvedPreferenceURL = preferenceURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("ARCHiDesktop/preferences.json")
         self.preferenceURL = resolvedPreferenceURL
-        // A prepared recovery journal is resolved before either saved owner is
-        // admitted. A conflicting interrupted restore leaves both owners closed.
+        self.tokenSteward = tokenSteward ?? TokenStewardStore(url: resolvedPreferenceURL.deletingPathExtension().appendingPathExtension("steward.json"))
+        self.arcCapabilities = arcCapabilities ?? ARCCapabilitiesStore(storageURL: resolvedPreferenceURL.deletingPathExtension().appendingPathExtension("arc.json"))
+        self.arc3 = arc3 ?? ARC3SessionStore(outputDirectory: resolvedPreferenceURL.deletingLastPathComponent().appendingPathComponent("ARC3Episodes", isDirectory: true))
+        // Resolve all five files before admitting any dependent document owner.
         let startupRecoveryBlock = DesktopRecoveryStartup.recoverIfNeeded(at: resolvedPreferenceURL)
+        self.documentWork = DocumentWorkJournal(url: resolvedPreferenceURL.deletingPathExtension().appendingPathExtension("document-work.json"), recoveryBlocked: startupRecoveryBlock != nil)
+        self.documentProcedures = DocumentProcedureLibrary(url: resolvedPreferenceURL.deletingPathExtension().appendingPathExtension("document-procedures.json"), recoveryBlocked: startupRecoveryBlock != nil)
+        self.readingSources = ReadingSourceLibrary(url: resolvedPreferenceURL.deletingPathExtension().appendingPathExtension("reading-sources.json"), recoveryBlocked: startupRecoveryBlock != nil)
         self.profileRecoveryBlock = startupRecoveryBlock
         do {
             if let startupRecoveryBlock { throw DesktopRecoveryError.blocked(startupRecoveryBlock) }
@@ -458,6 +761,9 @@ final class CompanionStore: ObservableObject {
         self.evolution = EvolutionStore(origin: initialPreferences?.form ?? .companion,
             saveURL: resolvedPreferenceURL.deletingPathExtension().appendingPathExtension("evolution.json"))
         self.evolution.persistenceBlockedReason = startupRecoveryBlock
+        if documentWork.loadError != nil {
+            self.evolution.historicalEvidenceUnavailableReason = "Document review history could not be read. Restore that file and reopen ARCHi before loading saved learning; your current appearance is unchanged."
+        }
         if let saved = initialPreferences {
             preferences = saved
             rememberPreferences = true
@@ -465,6 +771,25 @@ final class CompanionStore: ObservableObject {
         bindHamptonAssistant()
         evolution.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &evolutionSubscriptions)
+        self.tokenSteward.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &evolutionSubscriptions)
+        self.arcCapabilities.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &evolutionSubscriptions)
+        bindDocumentDataOwners()
+        self.arc3.objectWillChange.receive(on: RunLoop.main).sink { [weak self] in
+            guard let self else { return }
+            self.objectWillChange.send()
+            self.isWorking = !self.replyOwners.isEmpty || self.activeARCOwner != nil || self.arc3.isWorking
+            if self.showsARC3Reply { self.status = self.arc3.status }
+        }.store(in: &evolutionSubscriptions)
+        self.arc3.onFinished = { [weak self] summary in
+            guard let self else { return }
+            self.lastARC3Summary = summary
+            self.pendingARC3Summaries[summary.sessionID] = summary
+            do { try self.retryStewardReceipts(); self.stewardMessage = nil }
+            catch { self.stewardMessage = "ARC3 episode retained; Usage needs attention: \(error.localizedDescription)" }
+        }
+
         reactor.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &evolutionSubscriptions)
         self.voiceInput.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
@@ -474,13 +799,16 @@ final class CompanionStore: ObservableObject {
         $compareResults.combineLatest($isWorking).receive(on: RunLoop.main).sink { [weak self] _ in
             guard let self else { return }; self.reactor.updateCue(self.assistantActivity)
         }.store(in: &evolutionSubscriptions)
+        $activeARCAnswer.receive(on: RunLoop.main).sink { [weak self] _ in
+            guard let self else { return }; self.reactor.updateCue(self.assistantActivity)
+        }.store(in: &evolutionSubscriptions)
         refreshReactorReference()
         lastEvolutionAppearanceID = CompanionVisualAsset.appearanceID(form: presentationForm,
-            family: presentationFamily, treatment: preferences.visualTreatment, recipe: presentationRecipe, naturalVariation: presentationNaturalVariation)
+            family: presentationFamily, treatment: preferences.visualTreatment, recipe: presentationRecipe, naturalVariation: presentationNaturalVariation, seedColor: preferences.seedColor)
         evolution.$revision.dropFirst().sink { [weak self] _ in
             guard let self else { return }
             let id = CompanionVisualAsset.appearanceID(form: self.presentationForm, family: self.presentationFamily,
-                treatment: self.preferences.visualTreatment, recipe: self.presentationRecipe, naturalVariation: self.presentationNaturalVariation)
+                treatment: self.preferences.visualTreatment, recipe: self.presentationRecipe, naturalVariation: self.presentationNaturalVariation, seedColor: self.preferences.seedColor)
             guard id != self.lastEvolutionAppearanceID else { return }
             self.lastEvolutionAppearanceID = id
             self.invalidatePlacementPreview(reason: "ARCHi's chosen appearance changed. Preview placement again.")
@@ -492,8 +820,7 @@ final class CompanionStore: ObservableObject {
         guard point.x.isFinite, point.y.isFinite else { return }
         position = point
         placementRevision &+= 1
-        invalidateTextSelection(reason: "ARCHi moved. Select the passage again to restore its reference.")
-        cancelWork(reason: "Placement changed; old spatial work cancelled.")
+        invalidateDocumentGeometry(reason: "ARCHi moved. Preview pointing again.")
     }
 
     func showCompanion() { isVisible = true; onShowCompanion?() }
@@ -504,10 +831,244 @@ final class CompanionStore: ObservableObject {
         onHideCompanion?()
     }
     func open(_ section: WorkspaceSection) {
-        voiceInput.cancel()
         let destination = section == .play && !allowsPlay ? .assistant : section
-        self.section = destination
-        onOpenWorkspace?(destination)
+        if isImageRegionImportPresented, self.section != destination {
+            status = "Finish or cancel the image region draft before changing views."
+            return
+        }
+        voiceInput.cancel()
+        if workspaceRoutingNotice != nil { workspaceRoutingNotice = nil }
+        if destination == .capabilities { showsReasoningTools = false }
+        if self.section != destination { self.section = destination }
+        onOpenWorkspace?(self.section)
+    }
+
+    func openReasoningTools(worlds: Bool = false) {
+        open(.capabilities)
+        reasoningToolsShowWorlds = worlds
+        showsReasoningTools = true
+    }
+
+    /// Browsing Arena never discovers games, starts a solver, or launches Unity.
+    /// In-flight work stays with the same owners when the page changes.
+    func openArena(_ activity: ArenaActivity) {
+        arenaActivity = activity
+        open(.unity)
+    }
+
+    var arcGridStartUnavailableReason: String? {
+        if isShuttingDown { return "ARCHi is finishing this session." }
+        if arc3.isWorking || arc3.isSessionActive {
+            return "A World Trial is open. Choose Stop & keep record there before starting a Pattern Trial."
+        }
+        return nil
+    }
+
+    func inspectKnowledgeRecord(_ reference: KnowledgeRecordReference) {
+        guard !isShuttingDown, profileRecoveryBlock == nil else {
+            workspaceRoutingNotice = "Finish profile recovery or reopen ARCHi before inspecting a memory record."
+            return
+        }
+        guard !hasOpenKnowledgeDraft else {
+            workspaceRoutingNotice = "Save or cancel the open knowledge draft before inspecting another record."
+            return
+        }
+        inspectedKnowledgeRecord = .init(reference: reference, sourceOwner: ObjectIdentifier(readingSources))
+    }
+
+    func dismissWorkspaceRoutingNotice() { workspaceRoutingNotice = nil }
+
+    @discardableResult
+    func openDocumentUsage(taskID: String) -> Bool {
+        let available = tokenSteward.loadError == nil && tokenSteward.tasks.contains { $0.id == taskID }
+        selectedStewardTaskID = available ? taskID : nil
+        open(.steward)
+        workspaceRoutingNotice = available ? nil : "That request's usage is unavailable. No replacement was selected."
+        return available
+    }
+
+    @discardableResult
+    func openARCUsage(taskID: String) -> Bool {
+        let available = tokenSteward.loadError == nil && tokenSteward.tasks.contains {
+            $0.id == taskID && ["arc-evaluation", "arc-interactive"].contains($0.route)
+        }
+        selectedStewardTaskID = available ? taskID : nil
+        open(.steward)
+        workspaceRoutingNotice = available ? nil : "That ARC usage task is unavailable. No replacement task was selected."
+        return available
+    }
+
+    /// Resume the avatar's exact current record; never carry an activity-only,
+    /// changed, removed or earlier-profile selection into the Memory map.
+    func openMemoryMap() {
+        if let scene = companionParticleScene(), let selection = memoryParticleSelection,
+           let id = selection.selectedID(in: scene), selectedGraphNodeID == id {
+            memoryParticleSelection = .init(nodeID: id, in: scene)
+        } else {
+            selectedGraphNodeID = nil
+            memoryParticleSelection = nil
+        }
+        open(.nodeLab)
+    }
+
+    /// Navigation to the retained version, including a corrected or withdrawn
+    /// one. Opening its evidence never prepares work or picks a newer version.
+    @discardableResult
+    func openDocumentMethodMap(_ binding: DocumentProcedureUse) -> Bool {
+        guard !isShuttingDown, profileRecoveryBlock == nil,
+              documentProcedures.isCurrentOnDisk, documentWork.isCurrentOnDisk,
+              documentProcedures.procedure(matching: binding) != nil,
+              memoryMapSnapshot().nodes.contains(where: { $0.id == DocumentMethodGraph.nodeID(binding) }) else {
+            workspaceRoutingNotice = "That exact method or its history is unavailable. No replacement was selected."
+            return false
+        }
+        let nodeID = DocumentMethodGraph.nodeID(binding)
+        selectedGraphNodeID = nodeID
+        memoryParticleSelection = companionParticleScene().flatMap { .init(nodeID: nodeID, in: $0) }
+        open(.nodeLab)
+        workspaceRoutingNotice = nil
+        return true
+    }
+
+    @discardableResult
+    func beginDocumentMethodWork(_ selection: DocumentMethodInspectionSelection) -> Bool {
+        guard !isWorking, let method = methodForInspection(selection),
+              documentProcedures.latestProcedures.contains(method),
+              documentProcedureUnavailable(method.binding) == nil, !hasOpenKnowledgeDraft else { return false }
+        documentMethodToTry = selection
+        selectedGraphNodeID = DocumentMethodGraph.nodeID(method.binding)
+        inspectedDocumentMethod = nil
+        open(.context)
+        return true
+    }
+
+    func clearDocumentMethodToTry() { documentMethodToTry = nil }
+
+    @discardableResult
+    func openARCGraph(evidenceID: String) -> Bool {
+        let node = companionGraphSnapshot().nodes.first {
+            $0.kind == .evaluation && $0.target == .arcEvidence(proposalHash: evidenceID)
+        }
+        selectedGraphNodeID = node?.id
+        open(.nodeLab)
+        workspaceRoutingNotice = node == nil ? "That ARC result is unavailable in this profile's Activity map. No replacement was selected." : nil
+        return node != nil
+    }
+
+    /// Resolve the current record again at interaction time. This opens the
+    /// existing inspector; it does not run the target action or admit memory.
+    @discardableResult
+    func inspectKnowledgeParticle(nodeID: String, graphDigest: String) -> Bool {
+        let graph = companionGraphSnapshot()
+        guard LiminalKnowledgeBindings.digest(graph) == graphDigest,
+              graph.nodes.contains(where: { $0.id == nodeID }) else { return false }
+        if let scene = companionParticleScene(), scene.graph.nodes.contains(where: { $0.id == nodeID }) {
+            memoryParticleSelection = .init(nodeID: nodeID, in: scene)
+        } else { memoryParticleSelection = nil }
+        selectedGraphNodeID = nodeID
+        open(.nodeLab)
+        return true
+    }
+
+    /// Revalidate a displayed Seed/map binding before highlighting or opening it.
+    @discardableResult
+    func selectMemoryParticle(_ id: String, in scene: CompanionParticleScene, openInspector: Bool = false) -> Bool {
+        guard let current = companionParticleScene(),
+              scene.isCurrent(graph: current.graph, originDigest: current.originDigest, sessionID: current.sessionID),
+              current.graph.nodes.contains(where: { $0.id == id }) else { return false }
+        memoryParticleSelection = .init(nodeID: id, in: current)
+        selectedGraphNodeID = id
+        if openInspector { open(.nodeLab) }
+        return true
+    }
+
+    /// One transient selection owner for map, Seed, filters and navigation.
+    /// A callback from an old projection cannot clear or replace a newer pick.
+    @discardableResult
+    func selectGraphRecord(_ id: String?, in snapshot: CompanionGraphSnapshot,
+                           particleScene: CompanionParticleScene?, memoryOnly: Bool = false,
+                           expectedSessionID: String? = nil) -> Bool {
+        guard profileRecoveryBlock == nil, !isShuttingDown,
+              expectedSessionID == nil || expectedSessionID == liminalStructureSessionID else { return false }
+        let current: CompanionGraphSnapshot
+        let scene: CompanionParticleScene?
+        if let particleScene {
+            guard let fresh = companionParticleScene(),
+                  particleScene.isCurrent(graph: fresh.graph, originDigest: fresh.originDigest, sessionID: fresh.sessionID) else { return false }
+            current = fresh.graph; scene = fresh
+        } else {
+            // The Memory map remains usable without an active particle form.
+            // Validate its exact scope; unrelated document/activity nodes belong
+            // only to All activity and must not make a current memory pick stale.
+            current = memoryOnly ? memoryMapSnapshot() : companionGraphSnapshot()
+            scene = companionParticleScene()
+        }
+        guard LiminalKnowledgeBindings.digest(snapshot) == LiminalKnowledgeBindings.digest(current),
+              id == nil || current.nodes.contains(where: { $0.id == id }) else { return false }
+        selectedGraphNodeID = id
+        if let id, let scene, scene.graph.nodes.contains(where: { $0.id == id }) {
+            memoryParticleSelection = .init(nodeID: id, in: scene)
+        } else { memoryParticleSelection = nil }
+        return true
+    }
+
+    private func clearParticleNavigationForProfileChange() {
+        stopResonancePlayback()
+        // A restored graph may have identical IDs and bytes. Retire the active
+        // transport session too, so its earlier acknowledgments cannot survive.
+        unityPresentation.stop()
+        selectedGraphNodeID = nil
+        memoryParticleSelection = nil
+        particleSceneCache = nil
+        desktopParticleSceneCheck = nil
+        particleMotion.reset()
+        memoryParticleFormProgress = 0
+        memoryParticleMotionEnabled = true
+        liminalKnowledgeBindings = nil
+        liminalKnowledgeIdentity = nil
+        liminalStructureSessionID = UUID().uuidString
+    }
+
+    func canOpenARCEvidenceForUsage(taskID: String) -> Bool {
+        currentARC3EvidenceMatches(taskID) || arcEvidenceForUsage(taskID: taskID) != nil
+    }
+
+    private func currentARC3EvidenceMatches(_ taskID: String) -> Bool {
+        tokenSteward.loadError == nil && lastARC3Summary?.sessionID == taskID
+            && lastARC3Summary?.receiptURL == arc3.receiptURL && arc3.receiptURL != nil
+            && tokenSteward.tasks.contains { $0.id == taskID && $0.route == "arc-interactive" }
+    }
+
+    func openARCEvidenceForUsage(taskID: String) -> Bool {
+        if currentARC3EvidenceMatches(taskID) { return runARC3(.open) }
+        guard let record = arcEvidenceForUsage(taskID: taskID) else {
+            let notice = "This usage task has no matching ARC result available in the current profile. No replacement was selected."
+            arcCapabilities.clearRecordSelection(notice: notice)
+            open(.capabilities)
+            workspaceRoutingNotice = notice
+            return false
+        }
+        let selected = arcCapabilities.selectRecord(id: record.id)
+        openReasoningTools()
+        workspaceRoutingNotice = selected ? nil : arcCapabilities.selectionNotice
+        return selected
+    }
+
+    private func arcEvidenceForUsage(taskID: String) -> ARCCapabilitiesRecord? {
+        guard tokenSteward.loadError == nil,
+              let task = tokenSteward.tasks.first(where: { $0.id == taskID && $0.route == "arc-evaluation" }) else { return nil }
+        return arcCapabilities.records.first { record in
+            let current = arcCapabilities.solverReview
+            // The journal is shared across profiles. A matching evidence hash alone
+            // cannot establish ownership of an older replay or another profile's task.
+            let currentRunMatches = current?.taskID == taskID && current?.evidenceID == record.id && current?.error == nil
+            let proposal = arcCapabilities.qwenProposalReview
+            let currentProposalMatches = proposal?.taskID == taskID && proposal?.evidenceID == record.id && proposal?.error == nil
+            guard record.taskID == taskID || currentRunMatches || currentProposalMatches else { return false }
+            return task.outcomes.contains {
+                $0.kind == .checked && $0.evidenceID == record.id && $0.value == record.summary.allExact
+            }
+        }
     }
 
     var activeQiMon: LocalQiMon? {
@@ -555,9 +1116,203 @@ final class CompanionStore: ObservableObject {
         return true
     }
 
+    var wikiOSExchangeBlockReason: String? {
+        if isShuttingDown { return "ARCHi is closing. Reopen the task after this session ends." }
+        if isWorking || isARCWorking { return "Finish or stop the current request before changing task context." }
+        if voiceInput.isActive || voiceInput.phase == .review { return "Use or discard the current voice draft first." }
+        if pendingDocumentReceipt != nil { return "Save the pending document receipt before changing task context." }
+        if documentWork.records.contains(where: { $0.state.isActive }) { return "Apply or dismiss the pending document proposal before changing task context." }
+        if profileRecoveryBlock != nil { return "Finish profile recovery before exchanging work." }
+        if hasOpenKnowledgeDraft { return "Save or cancel the open knowledge page or connection draft before reviewing this task." }
+        return nil
+    }
+
+    /// Opening a file stages one review. It never replaces the current copy.
+    @discardableResult
+    func stageWikiOSTask(from url: URL) -> Bool {
+        guard wikiOSExchangeReview == nil else {
+            wikiOSExchangeMessage = "Finish or cancel the open task review before opening another task."
+            return false
+        }
+        do {
+            let file = try QiWorkRequestFile.read(url)
+            wikiOSExchangeReview = .incoming(file)
+            wikiOSExchangeMessage = nil
+            return true
+        } catch {
+            wikiOSExchangeMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
+    func acceptWikiOSTask(_ file: QiWorkRequestFile, reviewWorkingCopy: (() -> Bool)? = nil) -> Bool {
+        guard case .incoming(let pending) = wikiOSExchangeReview, pending == file else {
+            wikiOSExchangeMessage = WikiOSTaskExchangeError.changed.localizedDescription; return false
+        }
+        if let reason = wikiOSExchangeBlockReason { wikiOSExchangeMessage = reason; return false }
+        let previousRevision = sourceRevision, previousName = sourceName
+        let previousBytes = Data(sharedText.utf8), previousPrompt = Data(prompt.utf8)
+        do {
+            try file.verifyUnchanged()
+            let review = reviewWorkingCopy ?? {
+                self.confirmDiscardWorkingCopy(before: "opening this WikiOS task", discardTitle: "Use WikiOS task instead")
+            }
+            guard review(), sourceRevision == previousRevision, sourceName == previousName,
+                  Data(sharedText.utf8) == previousBytes, Data(prompt.utf8) == previousPrompt,
+                  wikiOSExchangeBlockReason == nil, sourceRevision < UInt64.max,
+                  case .incoming(let latest) = wikiOSExchangeReview, latest == file else {
+                wikiOSExchangeMessage = "The task was not imported. Your current copy and question are still here."
+                return false
+            }
+            try file.verifyUnchanged()
+            share(text: file.request.brief, name: "WikiOS · " + file.request.taskTitle)
+            wikiOSTask = file
+            importedSourceURL = file.url.resolvingSymlinksInPath().standardizedFileURL
+            wikiOSExchangeReview = nil
+            workingCopyNotice = "WikiOS task opened locally · return your work before closing this session."
+            wikiOSExchangeMessage = "Task copy imported. Select a passage or prepare a question; Send starts a request."
+            open(.context)
+            return true
+        } catch { wikiOSExchangeMessage = error.localizedDescription; return false }
+    }
+
+    @discardableResult
+    func beginWikiOSReturnReview() -> Bool {
+        guard wikiOSExchangeReview == nil else { return false }
+        if let reason = wikiOSExchangeBlockReason { wikiOSExchangeMessage = reason; return false }
+        guard let request = wikiOSTask, let sourceName else {
+            wikiOSExchangeMessage = WikiOSTaskExchangeError.noTask.localizedDescription; return false
+        }
+        wikiOSExchangeReview = .outgoing(WikiOSReturnPreview(request: request, text: sharedText,
+            sourceName: sourceName, sourceRevision: sourceRevision))
+        return true
+    }
+
+    /// Saves reviewed bytes only. Delivery and WikiOS admission are later actions.
+    func exportWikiOSResult(_ preview: WikiOSReturnPreview, summary: String,
+                           directory: URL? = nil) throws -> QiWorkResultFile {
+        if let reason = wikiOSExchangeBlockReason { throw WikiOSTaskExchangeError.busy(reason) }
+        guard wikiOSTask == preview.request, sourceName == preview.sourceName,
+              sourceRevision == preview.sourceRevision, Data(sharedText.utf8) == Data(preview.text.utf8),
+              case .outgoing(let current) = wikiOSExchangeReview, current == preview else {
+            throw WikiOSTaskExchangeError.changed
+        }
+        try preview.request.verifyUnchanged()
+        let request = preview.request.request
+        let result = QiWorkResult(resultID: UUID().uuidString, requestID: request.requestID,
+            requestSHA256: preview.request.digest, taskID: request.taskID, projectID: request.projectID,
+            taskRevision: request.taskRevision, createdAtUnix: wallClock().timeIntervalSince1970,
+            summary: summary, text: preview.text, textSHA256: QiWorkExchange.digest(Data(preview.text.utf8)),
+            sourceRevision: preview.sourceRevision)
+        try result.validate(request: preview.request)
+        let outbox = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ARCHiTaskExchange/Outbox", isDirectory: true)
+        let url = outbox.appendingPathComponent(result.resultID + ".qiresult")
+        try QiWorkExchange.writeNew(QiWorkExchange.encode(result), to: url)
+        let saved = try QiWorkResultFile.read(url)
+        guard saved.result == result else { throw QiWorkExchangeError.writeFailed }
+        exportedWorkingCopyDigest = result.textSHA256
+        workingCopyNotice = "WikiOS result saved · working-copy bytes verified."
+        wikiOSExchangeMessage = "Result saved locally. Review it in WikiOS before attaching it to the task."
+        return saved
+    }
+
+    var canBeginPastedDocumentImport: Bool {
+        !isShuttingDown && !isWorking && !isARCWorking && profileRecoveryBlock == nil
+            && !voiceInput.isActive && voiceInput.phase != .review
+            && pendingDocumentReceipt == nil && !documentWork.records.contains { $0.state.isActive }
+    }
+
+    func beginPastedDocumentImport() -> PastedDocumentImportContext? {
+        guard canBeginPastedDocumentImport else { return nil }
+        return PastedDocumentImportContext(sourceRevision: sourceRevision, sourceName: sourceName,
+            sourceBytes: Data(sharedText.utf8), journalOwner: ObjectIdentifier(documentWork), companion: activeQiMon)
+    }
+
+    func pastedDocumentImportBlockReason(_ context: PastedDocumentImportContext) -> String? {
+        guard context.journalOwner == ObjectIdentifier(documentWork), context.companion == activeQiMon,
+              context.sourceRevision == sourceRevision, context.sourceName == sourceName,
+              context.sourceBytes == Data(sharedText.utf8) else {
+            return "Your document or profile changed. Keep this text and reopen the import from the current workspace."
+        }
+        guard canBeginPastedDocumentImport else {
+            return "Finish the current request, proposal, voice draft or profile recovery before replacing the working copy."
+        }
+        return nil
+    }
+
+    static func pastedDocumentValidationMessage(text: String, title: String) -> String? {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "Paste some text to begin." }
+        guard text.utf8.count <= 100_000 else { return "Use up to 100 KB of text. Nothing is trimmed automatically." }
+        guard !text.contains("\0") else { return "Use plain text without binary content." }
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard name.count <= 160, name.rangeOfCharacter(from: .controlCharacters) == nil else {
+            return "Use a single-line title of up to 160 characters."
+        }
+        return nil
+    }
+
+    @discardableResult
+    func importPastedDocument(text: String, title: String, context: PastedDocumentImportContext,
+                              reviewWorkingCopy: (() -> Bool)? = nil) -> Bool {
+        if let reason = Self.pastedDocumentValidationMessage(text: text, title: title)
+            ?? pastedDocumentImportBlockReason(context) { status = reason; return false }
+        let review = reviewWorkingCopy ?? {
+            self.confirmDiscardWorkingCopy(before: "using pasted text", discardTitle: "Use pasted text instead")
+        }
+        guard review() else { return false }
+        // Modal alerts can run callbacks. Approval cannot follow a replaced source/profile.
+        if let reason = pastedDocumentImportBlockReason(context) { status = reason; return false }
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        share(text: text, name: name.isEmpty ? "Pasted text" : name)
+        workingCopyOrigin = .pasted
+        pastedDocumentDraft = PastedDocumentDraft()
+        workingCopyNotice = "Pasted copy · Export to keep. Select a passage to begin."
+        status = "Pasted locally · no content sent"
+        open(.context)
+        return true
+    }
+
+    /// Image pixels stay local and transient. The reviewed text and its exact
+    /// region receipt use the same source, method, apply/undo and outcome owners.
+    @discardableResult
+    func importImageRegion(_ document: ImageRegionDocument, image: ImageRegionImage,
+                           context: PastedDocumentImportContext,
+                           reviewWorkingCopy: (() -> Bool)? = nil) -> Bool {
+        guard document.source.isValid,
+              document.source.imageSHA256 == image.imageSHA256,
+              document.source.pixelWidth == image.pixelWidth,
+              document.source.pixelHeight == image.pixelHeight,
+              Self.pastedDocumentValidationMessage(text: document.text, title: document.title) == nil,
+              pastedDocumentImportBlockReason(context) == nil else {
+            status = "The image region or workspace changed. Review the current region again."
+            return false
+        }
+        let review = reviewWorkingCopy ?? {
+            self.confirmDiscardWorkingCopy(before: "using this image region", discardTitle: "Use region instead")
+        }
+        guard review(), pastedDocumentImportBlockReason(context) == nil else { return false }
+        share(text: document.text, name: document.title)
+        workingCopyOrigin = .imageRegion
+        imageRegionWorkingSource = document
+        imageRegionWorkingImage = image
+        desktopInterestSource = .init(appName: "Image region", title: document.title,
+            method: "Reviewed region text · original image unchanged", capturedAt: wallClock(),
+            digest: LessonSource.digest(of: document.text))
+        // The reviewed draft has reached its existing working-copy owner;
+        // navigation can now retire the temporary sheet without losing it.
+        isImageRegionImportPresented = false
+        open(.context)
+        selectText(range: document.contentRange, sourceRevision: sourceRevision)
+        workingCopyNotice = "Region text selected · use a saved method or ask about it. Export to keep this copy."
+        status = "Image region shared locally · nothing sent"
+        return true
+    }
+
     func chooseDocument() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.plainText, .utf8PlainText, .text]
+        panel.allowedContentTypes = [.plainText, .utf8PlainText, .text, .json]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.message = "Choose a text document to share with ARCHi locally."
@@ -580,6 +1335,66 @@ final class CompanionStore: ObservableObject {
         } catch { status = "Could not read that UTF-8 text document."; return false }
     }
 
+    @discardableResult
+    func importMeetingNotes(_ notes: MeetingNotesImport, sourceURL: URL? = nil,
+                            reviewWorkingCopy: (() -> Bool)? = nil) -> Bool {
+        guard canImportMeetingNotes(notes) else { status = meetingNotesBudgetNotice; return false }
+        let previousRevision = sourceRevision, previousName = sourceName
+        let previousBytes = Data(sharedText.utf8)
+        let review = reviewWorkingCopy ?? { self.confirmDiscardWorkingCopy(before: "importing meeting notes", discardTitle: "Use meeting notes instead") }
+        guard review(), sourceRevision == previousRevision, sourceName == previousName,
+              Data(sharedText.utf8) == previousBytes else { return false }
+        guard canImportMeetingNotes(notes) else { status = meetingNotesBudgetNotice; return false }
+        let hasDraftQuestion = !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        share(text: notes.sharedText, name: notes.sourceName)
+        importedSourceURL = sourceURL?.resolvingSymlinksInPath().standardizedFileURL
+        if !hasDraftQuestion { prepareMeetingDigest() }
+        workingCopyNotice = "Meeting copy opened locally. Review proposed facts before keeping a lesson."
+        status = hasDraftQuestion ? "Meeting notes shared locally · your draft question was kept" : "Meeting notes shared locally · digest question ready to send"
+        open(.context)
+        return true
+    }
+
+    func prepareMeetingDigest() {
+        guard sourceName != nil, !isWorking else { return }
+        guard meetingNotesQuestionFitsLocalBudget(MeetingNotesImport.digestQuestion,
+            sourceName: sourceName, sourceText: sharedText, sourceRevision: sourceRevision) else {
+            status = meetingNotesBudgetNotice
+            return
+        }
+        clearTextSelection()
+        requestsRevision = false
+        prompt = MeetingNotesImport.digestQuestion
+        status = "Digest question prepared · Send starts the request"
+    }
+
+    var meetingNotesBudgetNotice: String {
+        "This question and its selected source sections exceed the local assistant's 22 KB encoded request budget, including instructions and lessons. Review a shorter excerpt or shorten your question. Nothing was sent or replaced."
+    }
+
+    func canImportMeetingNotes(_ notes: MeetingNotesImport) -> Bool {
+        var questions = [MeetingNotesImport.digestQuestion]
+        if !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { questions.append(prompt) }
+        return questions.allSatisfy {
+            meetingNotesQuestionFitsLocalBudget($0, sourceName: notes.sourceName,
+                sourceText: notes.sharedText, sourceRevision: sourceRevision &+ 1)
+        }
+    }
+
+    private func meetingNotesQuestionFitsLocalBudget(_ question: String, sourceName: String?,
+                                                   sourceText: String, sourceRevision: UInt64) -> Bool {
+        let lessons = keptLessons.filter {
+            lessonDependenciesAreCurrent($0.origin) && $0.matches(question: question, sourceName: sourceName, sourceText: sourceText, now: wallClock(), taskScope: .documentQuestion)
+        }.map(LessonSnapshot.init(lesson:))
+        let reading = prepareReading(question: question, text: sourceText, selection: nil)
+        guard let reading, reading.control.lane != .stop else { return false }
+        let request = AssistantRequest(prompt: question, sourceName: sourceName, sourceText: sourceText,
+            sourceRevision: sourceRevision, placementRevision: placementRevision, settings: nextReplySettings,
+            localLessons: lessons, companion: activeQiMon?.character, localProfile: personalContext?.assistantSnapshot,
+            localControl: reading.control, localReading: reading.plan)
+        return HamptonReasonsAssistant.fitsMandatoryReasoningInput(request)
+    }
+
     func share(text: String, name: String) {
         guard text.utf8.count <= 100_000 else {
             status = "Choose a text file no larger than 100 KB. The current source is unchanged."
@@ -590,9 +1405,13 @@ final class CompanionStore: ObservableObject {
         clearSessionContext()
         desktopInterest.cancel()
         desktopInterestSource = nil; desktopInterestExternalDigest = nil
+        wikiOSTask = nil
+        wikiOSExchangeMessage = nil
         sharedText = text
         openedWorkingCopyDigest = SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
         exportedWorkingCopyDigest = nil
+        workingCopyOrigin = .file
+        imageRegionWorkingSource = nil; imageRegionWorkingImage = nil
         sourceName = name
         importedSourceURL = nil
         workingCopyUndo = nil
@@ -648,7 +1467,9 @@ final class CompanionStore: ObservableObject {
         let reviewedBytes = Data(sharedText.utf8)
         let alert = NSAlert()
         alert.messageText = "Keep this draft before \(action)?"
-        alert.informativeText = "Your working copy has edits that have not been exported. Keep working to export a separate draft, or discard these session edits. The original file stays unchanged."
+        alert.informativeText = workingCopyOrigin != .file
+            ? "This imported copy has not been exported. Keep working to save a draft, or discard this session copy."
+            : "Your working copy has edits that have not been exported. Keep working to export a separate draft, or discard these session edits. The original file stays unchanged."
         alert.alertStyle = .warning
         let keep = alert.addButton(withTitle: "Keep working")
         keep.keyEquivalent = "\r"
@@ -671,8 +1492,12 @@ final class CompanionStore: ObservableObject {
         invalidateTextSelection(reason: "Sharing stopped.")
         cancelWork(reason: "Sharing stopped.")
         clearSessionContext()
+        wikiOSTask = nil
+        wikiOSExchangeMessage = nil
         sharedText = ""; sourceName = nil; sourceRevision &+= 1
         openedWorkingCopyDigest = nil; exportedWorkingCopyDigest = nil
+        workingCopyOrigin = .file
+        imageRegionWorkingSource = nil; imageRegionWorkingImage = nil
         importedSourceURL = nil; workingCopyUndo = nil; requestsRevision = false
         workingCopyNotice = "Select a text document to begin."
         compareResults = [:]
@@ -698,6 +1523,18 @@ final class CompanionStore: ObservableObject {
     }
 
     func clearTextSelection() { invalidateTextSelection(reason: "Passage selection cleared.") }
+
+    /// Layout is a spatial dependency, not a change to the selected source bytes.
+    /// A history card, resize or scroll must retire old pointing coordinates
+    /// without cancelling an ordinary document question or reviewed revision.
+    func invalidateDocumentGeometry(reason: String) {
+        stopKinLightPreview()
+        stopHarmonyTheme()
+        invalidatePlacementPreview(reason: reason)
+        guard compareResults.values.contains(where: { $0.state != .cancelled && $0.receipt?.pointing != nil }) else { return }
+        clearLocalConversation()
+        cancelWork(reason: reason)
+    }
 
     func invalidateTextSelection(reason: String) {
         clearLocalConversation()
@@ -735,7 +1572,9 @@ final class CompanionStore: ObservableObject {
     var canPointAndExplainSelection: Bool {
         !isShuttingDown && !isWorking && isVisible && preferences.equipment.supportsPointing
             && textSelection?.matches(text: sharedText, sourceRevision: sourceRevision) == true
-            && canBeginReply
+            && preparedDocumentProcedure == nil
+            && canBeginReply(selection: .select(question: pointedExplanationQuestion,
+                hasPreparedProcedure: preparedDocumentProcedure != nil, hasPointing: true), hasPointing: true)
             && pointedExplanationQuestion.utf8.count <= 16_000
     }
 
@@ -784,74 +1623,519 @@ final class CompanionStore: ObservableObject {
         guard let textSelection, textSelection.matches(text: sharedText, sourceRevision: sourceRevision) else {
             status = "Select a passage in the document first."; return
         }
+        clearPreparedDocumentProcedure()
         requestsRevision = true
+        documentRequirements.mustBeShorter = shorten
         prompt = shorten ? "Shorten the selected passage while preserving its meaning."
             : "Make the selected passage clearer while preserving its meaning."
         status = "Revision prepared · describe what you want, then Send"
     }
 
-    var canUndoWorkingCopyEdit: Bool {
-        workingCopyUndo?.canUndo(text: sharedText, revision: sourceRevision) == true
+    func documentProcedureUnavailable(_ use: DocumentProcedureUse) -> String? {
+        if profileRecoveryBlock != nil || !documentWork.isCurrentOnDisk || documentProcedures.loadError != nil {
+            return "Procedure history needs recovery before reuse."
+        }
+        guard let procedure = documentProcedures.procedure(matching: use) else {
+            return "This exact procedure version is unavailable."
+        }
+        if let reason = documentProcedures.availability(of: procedure, records: documentWork.records,
+            knowledgeIsCurrent: { knowledgeDependenciesAreCurrent([$0]) }) { return reason }
+        // Preserve the originating local lesson dependencies through procedure
+        // chaining; withdrawing a lesson cannot smuggle it back through a method.
+        var current: DocumentProcedure? = procedure
+        var visited = Set<DocumentProcedureUse>()
+        while let item = current {
+            guard visited.insert(item.binding).inserted else { return "The procedure’s source history is cyclic." }
+            if item.knowledgeOrigin != nil && item.originRecordID.isEmpty { break }
+            guard let origin = documentWork.records.first(where: { $0.id == item.originRecordID }) else {
+                return "The procedure’s source history is unavailable."
+            }
+            if let reason = documentMethodDependencyIssue(origin) { return reason }
+            current = origin.procedureUse.flatMap { documentProcedures.procedure(matching: $0) }
+        }
+        return nil
     }
 
-    /// A candidate stays inside its original lane until this explicit action.
-    /// There is no await between checking the exact source and replacing it.
-    func applyPassageRevision(provider: AssistantProvider, targetID: String) {
-        guard let lane = compareResults[provider], lane.state == .complete,
-              let proposal = lane.revision, proposal.decision == .propose,
-              proposal.target.id == targetID, let receipt = lane.receipt,
-              isCurrent(receipt.context, requireVisible: false),
-              textSelection == proposal.target.selection else {
-            workingCopyNotice = "This revision is no longer current. Select the passage and request a new one."; return
+    /// Availability follows every supplied lesson version. A model citation is
+    /// useful for explicit credit, but cannot enumerate all possible influence.
+    func documentMethodDependencyIssue(_ record: DocumentWorkRecord) -> String? {
+        guard let learning = record.learning, learning.isValid, learning.hasCompleteLessonProvenance else {
+            return "This earlier result did not retain all supplied lesson dependencies. Complete and review a fresh edit before keeping or reusing a method."
+        }
+        if !learning.dependencyLessons.isEmpty {
+            guard let disk = try? NativePreferencePersistence.read(preferenceURL), disk.baseline == preferenceBaseline else {
+                return "Saved lessons changed outside this session. Reopen ARCHi before using this method."
+            }
+        }
+        for lesson in learning.dependencyLessons {
+            guard let supporting = keptLessons.first(where: {
+                let snapshot = LessonSnapshot(lesson: $0)
+                return lesson.matches(snapshot: snapshot) && currentKeptLesson(matching: snapshot) != nil
+            }) else { return "A lesson supplied to this method’s source result changed, was withdrawn, or expired." }
+            guard supporting.taskScope == nil || supporting.taskScope == .passageRevision else {
+                return "A supporting lesson no longer applies to passage revision."
+            }
+            guard supporting.source == nil || supporting.source == currentLessonSource else {
+                return "A supporting lesson applies only to its original shared copy."
+            }
+        }
+        return nil
+    }
+
+    var canKeepDocumentProcedure: Bool {
+        !isShuttingDown && !isWorking && profileRecoveryBlock == nil
+            && pendingDocumentReceipt == nil && documentWork.isCurrentOnDisk
+    }
+
+    @discardableResult
+    func keepDocumentProcedure(recordID: String, title: String, instruction: String) -> Bool {
+        guard canKeepDocumentProcedure, documentWork.isCurrentOnDisk, pendingDocumentReceipt == nil,
+              let record = documentWork.records.first(where: { $0.id == recordID }),
+              canReviewDocument(record), record.state == .applied, record.feedback?.verdict == .helpful,
+              record.procedureUse.map({ documentProcedureUnavailable($0) == nil }) ?? true else { return false }
+        if let reason = documentMethodDependencyIssue(record) {
+            documentWorkMessage = reason
+            return false
         }
         do {
-            let before = sharedText
-            let after = try WorkingCopyEditReceipt.applying(proposal: proposal, to: before, sourceRevision: sourceRevision)
-            // Cancels a still-running Compare sibling and revokes both previews.
-            invalidateTextSelection(reason: "A reviewed revision was applied.")
-            cancelWork(reason: "Working copy changed; earlier proposals cleared.")
-            clearSessionContext()
-            sharedText = after
-            sourceRevision &+= 1
-            compareResults = [:]
-            workingCopyUndo = WorkingCopyEditReceipt(before: before,
-                afterDigest: SHA256.hash(data: Data(after.utf8)).map { String(format: "%02x", $0) }.joined(),
-                afterRevision: sourceRevision)
-            requestsRevision = false
-            guard sharedText.utf8.elementsEqual(after.utf8), canUndoWorkingCopyEdit else {
-                workingCopyNotice = "The working copy could not be verified."; return
-            }
-            workingCopyNotice = "Applied to working copy · Undo is available. Export to keep a separate draft."
-            reply = proposal.explanation
-            status = "Reviewed revision applied · original file unchanged"
-            record("Applied reviewed \(provider.name) passage revision \(targetID) to working copy revision \(sourceRevision)")
+            _ = try documentProcedures.keep(from: record, title: title, instruction: instruction, records: documentWork.records,
+                knowledgeIsCurrent: { knowledgeDependenciesAreCurrent([$0]) })
+            documentWorkMessage = "Procedure kept on this Mac. Select it for a matching passage; every result still needs review."
+            return true
         } catch {
-            workingCopyNotice = "This revision could not be applied to the current copy. Nothing changed."
+            documentWorkMessage = "Procedure was not kept: \(error.localizedDescription)"
+            return false
         }
+    }
+
+    func withdrawDocumentProcedure(_ use: DocumentProcedureUse) {
+        guard !isShuttingDown, profileRecoveryBlock == nil else { return }
+        do {
+            try documentProcedures.withdraw(binding: use)
+            documentWorkMessage = "Procedure withdrawn. Its history is retained; future reuse is disabled."
+        } catch { documentWorkMessage = "Procedure withdrawal was not saved: \(error.localizedDescription)" }
+    }
+
+    /// A revision retains a named helpful result and checks its lesson/ancestor
+    /// dependencies with the same live owners used for ordinary procedure reuse.
+    func revisionSourceRecords(for use: DocumentProcedureUse) -> [DocumentWorkRecord] {
+        guard canKeepDocumentProcedure, pendingDocumentReceipt == nil, documentWork.isCurrentOnDisk,
+              documentProcedures.loadError == nil,
+              let previous = documentProcedures.procedure(matching: use) else { return [] }
+        let previousUnavailable = documentProcedureUnavailable(use) != nil
+        return documentWork.records.filter { record in
+            guard canReviewDocument(record),
+                  documentProcedures.canSupportRevision(of: use, with: record, records: documentWork.records,
+                    knowledgeIsCurrent: { knowledgeDependenciesAreCurrent([$0]) }),
+                  record.procedureUse.map({ documentProcedureUnavailable($0) == nil }) ?? true else { return false }
+            if previousUnavailable && (record.id == previous.originRecordID || record.createdAt <= previous.createdAt) { return false }
+            return documentMethodDependencyIssue(record) == nil
+        }.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    @discardableResult
+    func reviseDocumentProcedure(_ use: DocumentProcedureUse, title: String, instruction: String,
+                                 changeNote: String, recordID: String) -> Bool {
+        guard let record = revisionSourceRecords(for: use).first(where: { $0.id == recordID }) else {
+            documentWorkMessage = "Choose a current helpful applied result. Complete and review corrective work before revising a blocked method."
+            return false
+        }
+        do {
+            let revision = try documentProcedures.revise(binding: use, title: title, instruction: instruction,
+                changeNote: changeNote, from: record, records: documentWork.records,
+                knowledgeIsCurrent: { knowledgeDependenciesAreCurrent([$0]) })
+            documentWorkMessage = "Version \(revision.revision) saved as a candidate. Earlier versions and their outcomes remain in history. Choose Use when you want to try it."
+            return true
+        } catch {
+            documentWorkMessage = "New version was not saved: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func canPrepareDocumentProcedure(_ procedure: DocumentProcedure) -> Bool {
+        !isShuttingDown && !isWorking && requestsRevision && procedure.matches(requirements: documentRequirements)
+            && documentProcedures.latestProcedures.contains(procedure)
+            && textSelection?.matches(text: sharedText, sourceRevision: sourceRevision) == true
+            && documentProcedureUnavailable(procedure.binding) == nil
+    }
+
+    @discardableResult
+    func prepareDocumentProcedure(_ use: DocumentProcedureUse) -> Bool {
+        guard let procedure = documentProcedures.procedure(matching: use), canPrepareDocumentProcedure(procedure) else {
+            documentWorkMessage = "Select a passage in Revise mode with the procedure’s requirements before using it."
+            return false
+        }
+        preparedDocumentProcedure = use
+        preparedProcedureSelection = textSelection
+        preparedProcedureSourceDigest = WorkingCopyEditReceipt.digest(sharedText)
+        prompt = procedure.instruction
+        status = "Procedure prepared · review its instruction, then Send"
+        return true
+    }
+
+    func preparedProcedureMatchesCurrentDraft(question: String) -> Bool {
+        guard let use = preparedDocumentProcedure, let procedure = documentProcedures.procedure(matching: use) else { return false }
+        return requestsRevision && question.utf8.elementsEqual(procedure.instruction.utf8)
+            && procedure.matches(requirements: documentRequirements)
+            && textSelection == preparedProcedureSelection
+            && preparedProcedureSourceDigest == WorkingCopyEditReceipt.digest(sharedText)
+    }
+
+    func clearPreparedDocumentProcedure() {
+        preparedDocumentProcedure = nil
+        preparedProcedureSelection = nil
+        preparedProcedureSourceDigest = nil
+    }
+
+    var canUndoWorkingCopyEdit: Bool {
+        guard let undo = workingCopyUndo, undo.canUndo(text: sharedText, revision: sourceRevision),
+              let id = undo.documentWorkID else { return false }
+        return documentWork.records.contains { $0.id == id && $0.state == .applied }
+    }
+
+    /// Follow-through belongs to the exact edit still visible in this session,
+    /// never whichever historical record happens to sort first. Read-only;
+    /// opening the card cannot keep a method, rate work or restore a document.
+    var currentDocumentOutcome: DocumentWorkRecord? {
+        guard profileRecoveryBlock == nil, pendingDocumentReceipt == nil,
+              documentWork.isCurrentOnDisk,
+              let edit = workingCopyUndo, edit.canUndo(text: sharedText, revision: sourceRevision),
+              let id = edit.documentWorkID,
+              let record = documentWork.records.first(where: { $0.id == id }),
+              record.state == .applied, canReviewDocument(record),
+              record.afterRevision == sourceRevision,
+              record.actualAfterDigest == edit.afterDigest else { return nil }
+        return record
+    }
+
+    func documentVerification(_ proposal: PassageRevisionProposal) -> DocumentWorkVerification {
+        let checked = DocumentWorkCapability.verify(proposal: proposal, text: sharedText,
+            sourceRevision: sourceRevision, requirements: proposal.target.requirements)
+        guard let use = documentWork.records.first(where: { $0.targetID == proposal.target.id })?.procedureUse,
+              let reason = documentProcedureUnavailable(use) else { return checked }
+        return DocumentWorkVerification(checks: checked.checks + [
+            .init(id: "procedure", title: reason, passed: false)
+        ], predictedDigest: nil)
+    }
+
+    func documentRecord(requestID: String, provider: AssistantProvider) -> DocumentWorkRecord? {
+        documentWork.records.first { $0.id == requestID + "-" + provider.rawValue }
+    }
+
+    func canApplyDocumentRevision(provider: AssistantProvider, proposal: PassageRevisionProposal) -> Bool {
+        guard let lane = compareResults[provider], lane.state == .complete,
+              let receipt = lane.receipt, isCurrentReplyContext(receipt),
+              textSelection == proposal.target.selection, documentWork.loadError == nil,
+              let record = documentRecord(requestID: receipt.requestID, provider: provider),
+              record.targetID == proposal.target.id, record.state == .ready else { return false }
+        return documentVerification(proposal).canApply
+    }
+
+    private func beginDocumentWork(requestID: String, provider: AssistantProvider, target: RevisionTarget,
+                                   control: HamptonQ2EDecision? = nil) throws {
+        try retryDocumentReceipt()
+        guard documentWork.isCurrentOnDisk, control?.isValid ?? true,
+              control == nil || (control?.contextID == target.sourceDigest && control?.lane != .stop) else {
+            throw DocumentWorkJournalError.changed
+        }
+        // Connection can suspend after Send. A changed review or method must
+        // not dispatch the previously captured approach. Same-request provider
+        // lanes are not prior outcomes and cannot invalidate one another.
+        if let control, [HamptonQ2EController.version, HamptonQ2EController.numericalVersion].contains(control.version) {
+            guard control == makeDocumentQ2EDecision(excludingRequestID: requestID) else {
+                throw DocumentWorkJournalError.changed
+            }
+        }
+        let use = documentProcedureRequests[requestID]
+        if let use, let reason = documentProcedureUnavailable(use) {
+            throw DocumentWorkJournalError.invalid(reason)
+        }
+        let now = wallClock()
+        try documentWork.save(DocumentWorkRecord(id: requestID + "-" + provider.rawValue,
+            requestID: requestID, provider: provider.rawValue, targetID: target.id,
+            sourceDigest: target.sourceDigest, sourceRevision: target.selection.sourceRevision,
+            selectionStart: target.selection.range.location, selectionLength: target.selection.range.length,
+            mustBeShorter: target.requirements.mustBeShorter,
+            preserveNumbersAndLinks: target.requirements.preserveNumbersAndLinks,
+            createdAt: now, updatedAt: now, state: .proposing,
+            detail: "Exact working-copy passage captured. No edit applied.", procedureUse: use,
+            q2eDecision: control))
+        documentWorkMessage = nil
+    }
+
+    private func completeDocumentProposal(requestID: String, provider: AssistantProvider, proposal: PassageRevisionProposal) throws {
+        guard var record = documentRecord(requestID: requestID, provider: provider), record.state == .proposing else {
+            throw WorkingCopyRevisionError.staleTarget
+        }
+        let originalChecks = documentVerification(proposal)
+        let restoration = provider == .qwen && originalChecks.checks.filter({ !$0.passed }).map(\.id) == ["links"]
+            ? DocumentURLBoundaryPreservation.restore(proposal, text: sharedText, sourceRevision: sourceRevision) : nil
+        let effective = restoration?.proposal ?? proposal
+        let checked = documentVerification(effective)
+        record.proposedDigest = WorkingCopyEditReceipt.digest(effective.replacement)
+        record.urlBoundaryRestoration = restoration?.restoration
+        record.expectedAfterDigest = checked.predictedDigest
+        record.checks = checked.checks.map { .init(id: $0.id, title: $0.title, passed: $0.passed) }
+        if let receipt = compareResults[provider]?.receipt {
+            record.learning = DocumentWorkLearningContext(requestBinding: EvolutionRequestBinding(receipt: receipt),
+                usedLessons: provider == .qwen ? receipt.localLessons.filter {
+                    receipt.usedLessonIDs.contains($0.modelID)
+                }.compactMap(EvolutionLessonUse.make(snapshot:)) : [],
+                suppliedLessons: provider == .qwen ? receipt.localLessons.compactMap(EvolutionLessonUse.make(snapshot:)) : [])
+        }
+        record.state = checked.canApply ? .ready : .blocked
+        record.updatedAt = wallClock()
+        record.detail = checked.canApply ? (restoration == nil
+            ? "Mechanical checks passed. Review meaning and facts before Apply."
+            : "ARCHi restored the source's spacing after one link. Mechanical checks passed; review before Apply.")
+            : "No edit applied. The proposal needs clarification or fails a requested mechanical constraint."
+        try documentWork.save(record)
+        if let restoration {
+            compareResults[provider]?.originalRevision = proposal
+            compareResults[provider]?.urlBoundaryRestoration = restoration.restoration
+            compareResults[provider]?.revision = effective
+        }
+    }
+
+    func canReviewDocument(_ record: DocumentWorkRecord) -> Bool {
+        !isShuttingDown && documentWork.isCurrentOnDisk
+            && documentReviewEvidenceIsCurrent(record)
+    }
+
+    /// Read-only recovery of pending reviews across working copies and restarts.
+    /// Check the journal once for this bounded projection; action owners still
+    /// check it again when the user submits an individual review.
+    var documentReviewQueue: DocumentReviewQueue? {
+        guard !isShuttingDown, !isWorking, profileRecoveryBlock == nil,
+              pendingDocumentReceipt == nil, documentWork.isCurrentOnDisk else { return nil }
+        let reviewable = Set(documentWork.records.filter(documentReviewEvidenceIsCurrent).map(\.id))
+        return DocumentReviewQueue(records: documentWork.records, historyIsCurrent: true,
+            reviewableRecordIDs: reviewable, currentOutcomeID: currentDocumentOutcome?.id)
+    }
+
+    private func documentReviewEvidenceIsCurrent(_ record: DocumentWorkRecord) -> Bool {
+        documentWork.records.first(where: { $0.id == record.id }) == record
+            && [.applied, .undone].contains(record.state)
+            && !(record.procedureUse.map { documentProcedureKnowledgeUnavailable(use: $0) } ?? false)
+            && record.learning?.requestBinding.isValid == true && UUID(uuidString: record.requestID) != nil
+            && record.expectedAfterDigest != nil && record.expectedAfterDigest == record.actualAfterDigest
+            && record.afterRevision != nil && record.checks.allSatisfy(\.passed) && !record.checks.isEmpty
+    }
+
+    func canManageDocumentFeedback(_ record: DocumentWorkRecord) -> Bool {
+        !isShuttingDown && documentWork.isCurrentOnDisk
+            && documentWork.records.first(where: { $0.id == record.id }) == record && record.feedback != nil
+            && [.applied, .undone, .failed].contains(record.state)
+    }
+
+    @discardableResult
+    func reviewDocument(id: String, verdict: DocumentWorkFeedback.Verdict) -> Bool {
+        guard var record = documentWork.records.first(where: { $0.id == id }),
+              canReviewDocument(record) || (verdict == .withdrawn && canManageDocumentFeedback(record)),
+              pendingDocumentReceipt == nil else { return false }
+        do {
+            if record.feedback?.verdict != verdict {
+                guard (record.feedback?.revision ?? 0) < UInt64.max else { return false }
+                record.feedback = DocumentWorkFeedback(id: UUID().uuidString,
+                    revision: (record.feedback?.revision ?? 0) + 1, verdict: verdict, recordedAt: wallClock())
+                record.feedbackUsageSyncedID = nil
+                if record.procedureUse != nil, verdict != .helpful { record.procedureUseRejected = true }
+                record.updatedAt = wallClock()
+                try documentWork.save(record)
+            }
+            syncDocumentFeedback(id: id)
+            return true
+        } catch {
+            documentWorkMessage = "Your review was not saved: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func syncDocumentFeedback(id: String) {
+        guard var record = documentWork.records.first(where: { $0.id == id }), canManageDocumentFeedback(record),
+              let feedback = record.feedback else { return }
+        do {
+            // Save the review first, then project only that exact latest event.
+            // Retrying after either write fails uses the same event identifier.
+            try tokenSteward.recordUserFeedback(requestID: record.requestID,
+                evidenceID: "document-review-" + feedback.id, useful: feedback.verdict == .helpful)
+            if record.feedbackUsageSyncedID != feedback.id {
+                record.feedbackUsageSyncedID = feedback.id
+                record.updatedAt = wallClock()
+                try documentWork.save(record)
+            }
+            documentWorkMessage = "Your review is saved on this Mac and reflected in Usage. Learning and kept lessons have separate review controls."
+        } catch {
+            documentWorkMessage = "Your document review is saved; Usage still needs reconciliation: \(error.localizedDescription)"
+        }
+    }
+
+    func documentFeedbackUsageCurrent(_ record: DocumentWorkRecord) -> Bool {
+        guard let feedback = record.feedback, record.feedbackUsageSyncedID == feedback.id,
+              tokenSteward.isCurrentOnDisk,
+              let outcome = tokenSteward.tasks.first(where: { $0.id == record.requestID })?.outcomes.last(where: { $0.kind == .userUseful }) else { return false }
+        return outcome.evidenceID == "document-review-" + feedback.id && outcome.value == (feedback.verdict == .helpful)
+    }
+
+    func documentReviewLessons(_ record: DocumentWorkRecord) -> [LessonSnapshot] {
+        guard canReviewDocument(record), record.provider == AssistantProvider.qwen.rawValue else { return [] }
+        return keptLessons.map(LessonSnapshot.init(lesson:)).filter { snapshot in
+            currentKeptLesson(matching: snapshot) != nil
+                && record.learning?.usedLessons.contains(where: { $0.matches(snapshot: snapshot) }) == true
+        }
+    }
+
+    @discardableResult
+    func addDocumentToLearningReview(id: String, lesson: LessonSnapshot? = nil) -> Bool {
+        guard let record = documentWork.records.first(where: { $0.id == id }), canReviewDocument(record),
+              record.feedback?.verdict == .helpful, let learning = record.learning,
+              let requestID = UUID(uuidString: record.requestID),
+              lesson == nil || documentReviewLessons(record).contains(lesson!) else { return false }
+        let admitted = evolution.markDocumentWorkUseful(requestID: requestID, sourceDigest: record.sourceDigest,
+            requestBinding: learning.requestBinding, confirmedLesson: lesson.flatMap(EvolutionLessonUse.make(snapshot:)))
+        documentWorkMessage = admitted ? "Added to this session’s learning review. Use Save evolution to retain it."
+            : "The learning review could not accept this outcome: " + evolution.status
+        return admitted
+    }
+
+    func beginDocumentCorrection(id: String) {
+        guard let record = documentWork.records.first(where: { $0.id == id }), canReviewDocument(record),
+              let binding = record.learning?.requestBinding else { return }
+        guard lessonDraft == nil else {
+            lessonMessage = "Your unfinished lesson is still here. Keep or discard it before starting a new document correction."
+            open(.memory)
+            return
+        }
+        guard reviewDocument(id: id, verdict: .needsCorrection) else { return }
+        lessonDraft = LessonCorrectionDraft(expectedRevision: lessonRevision, prior: nil,
+            origin: LessonOrigin(requestID: record.requestID, inputDigest: binding.inputDigest))
+        lessonMessage = "Write what ARCHi should do differently and when to use it. Nothing becomes a lesson until you Keep it."
+        open(.memory)
+    }
+
+    func withdrawLearningReview(requestID: UUID) {
+        if let document = documentWork.records.first(where: { UUID(uuidString: $0.requestID) == requestID && $0.feedback != nil }) {
+            guard reviewDocument(id: document.id, verdict: .withdrawn) else { return }
+        }
+        evolution.withdrawUseful(requestID: requestID)
+    }
+
+    private func retireDocumentWork(requestID: String, provider: AssistantProvider, failed: Bool) {
+        guard var record = documentRecord(requestID: requestID, provider: provider),
+              [.proposing, .ready].contains(record.state) else { return }
+        record.state = failed ? .failed : .cancelled
+        record.updatedAt = wallClock()
+        record.detail = failed ? "Request did not finish. No edit was applied." : "Request retired. No edit was applied."
+        do { try documentWork.save(record) }
+        catch { documentWorkMessage = "Document history could not be updated: \(error.localizedDescription)" }
+    }
+
+    /// The pending receipt is saved before mutation. No await separates source
+    /// verification, replacement and the check of the actual resulting bytes.
+    func applyPassageRevision(provider: AssistantProvider, targetID: String) {
+        guard let lane = compareResults[provider], let proposal = lane.revision,
+              proposal.target.id == targetID, canApplyDocumentRevision(provider: provider, proposal: proposal),
+              let receipt = lane.receipt,
+              var record = documentRecord(requestID: receipt.requestID, provider: provider) else {
+            workingCopyNotice = "This revision is stale or a required check failed. Review the checks and request a new revision."; return
+        }
+        let before = sharedText
+        let after: String
+        do {
+            after = try WorkingCopyEditReceipt.applying(proposal: proposal, to: before, sourceRevision: sourceRevision)
+            guard WorkingCopyEditReceipt.digest(after) == record.expectedAfterDigest else { throw WorkingCopyRevisionError.staleTarget }
+            record.state = .applying; record.updatedAt = wallClock()
+            record.detail = "Apply requested. Awaiting actual working-copy verification."
+            try documentWork.save(record)
+        } catch {
+            workingCopyNotice = "Could not prepare a retained Apply receipt. Nothing changed. \(error.localizedDescription)"; return
+        }
+        invalidateTextSelection(reason: "A reviewed revision was applied.")
+        cancelWork(reason: "Working copy changed; earlier proposals cleared.")
+        clearSessionContext()
+        sharedText = after
+        sourceRevision &+= 1
+        compareResults = [:]
+        workingCopyUndo = WorkingCopyEditReceipt(before: before, afterDigest: WorkingCopyEditReceipt.digest(after),
+            afterRevision: sourceRevision, documentWorkID: record.id)
+        requestsRevision = false
+        record.actualAfterDigest = WorkingCopyEditReceipt.digest(sharedText)
+        record.afterRevision = sourceRevision
+        record.updatedAt = wallClock()
+        let verified = record.actualAfterDigest == record.expectedAfterDigest
+            && workingCopyUndo?.canUndo(text: sharedText, revision: sourceRevision) == true
+        record.state = verified ? .applied : .failed
+        record.detail = verified ? "Applied after review; actual bytes match the predicted working copy. Meaning and facts are user-reviewed. Original file unchanged."
+            : "Apply outcome could not be verified. Inspect the working copy."
+        do { try documentWork.save(record); documentWorkMessage = nil; pendingDocumentReceipt = nil }
+        catch {
+            pendingDocumentReceipt = record
+            documentWorkMessage = "The copy changed, but its completed receipt could not be saved. Retry saving the receipt to enable Undo."
+        }
+        workingCopyNotice = verified && pendingDocumentReceipt == nil
+            ? "Applied to working copy · Undo available. Export to keep a separate draft."
+            : documentWorkMessage ?? record.detail
+        reply = proposal.explanation
+        status = workingCopyNotice
+        self.record("Applied reviewed passage revision \(targetID) to working copy revision \(sourceRevision)")
+    }
+
+    private func retryDocumentReceipt() throws {
+        guard let pendingDocumentReceipt else { return }
+        try documentWork.save(pendingDocumentReceipt)
+        self.pendingDocumentReceipt = nil
+        documentWorkMessage = nil
+    }
+
+    func retryDocumentHistorySave() {
+        do {
+            try retryDocumentReceipt()
+            workingCopyNotice = canUndoWorkingCopyEdit ? "Receipt saved · Undo is available." : "Document receipt saved."
+        } catch { documentWorkMessage = "Receipt remains pending: \(error.localizedDescription)" }
     }
 
     func dismissPassageRevision(provider: AssistantProvider) {
-        guard compareResults[provider]?.state == .complete else { return }
+        guard let lane = compareResults[provider], lane.state == .complete else { return }
+        if let receipt = lane.receipt, var record = documentRecord(requestID: receipt.requestID, provider: provider) {
+            record.state = .dismissed; record.updatedAt = wallClock()
+            record.detail = "Proposal dismissed. Working copy unchanged."
+            do { try documentWork.save(record) }
+            catch { documentWorkMessage = "Dismissal was not saved: \(error.localizedDescription)" }
+        }
         compareResults[provider]?.revision = nil
         compareResults[provider]?.status = "Revision dismissed · copy unchanged"
         workingCopyNotice = "Revision dismissed · your working copy is unchanged."
     }
 
     func undoWorkingCopyEdit() {
-        guard let undo = workingCopyUndo, undo.canUndo(text: sharedText, revision: sourceRevision) else {
-            workingCopyNotice = "That Undo belongs to an earlier copy and cannot change this one."; return
+        guard let undo = workingCopyUndo, undo.canUndo(text: sharedText, revision: sourceRevision),
+              let id = undo.documentWorkID, var record = documentWork.records.first(where: { $0.id == id }),
+              record.state == .applied else {
+            workingCopyNotice = "That Undo is unavailable or belongs to an earlier copy."; return
         }
+        record.state = .undoing; record.updatedAt = wallClock()
+        if record.procedureUse != nil { record.procedureUseRejected = true }
+        record.detail = "Undo requested. Awaiting verification of the original working-copy bytes."
+        do { try documentWork.save(record) }
+        catch { workingCopyNotice = "Could not prepare an Undo receipt. Nothing changed."; return }
         invalidateTextSelection(reason: "Working-copy revision undone.")
         cancelWork(reason: "Working-copy revision undone.")
         clearSessionContext()
         sharedText = undo.before
         sourceRevision &+= 1
-        compareResults = [:]
-        workingCopyUndo = nil
-        requestsRevision = false
-        workingCopyNotice = "Undone · the exact previous working copy is restored."
-        status = workingCopyNotice
-        record("Undid working-copy edit; source revision \(sourceRevision)")
+        compareResults = [:]; workingCopyUndo = nil; requestsRevision = false
+        let restored = WorkingCopyEditReceipt.digest(sharedText) == record.sourceDigest
+        record.state = restored ? .undone : .failed
+        record.updatedAt = wallClock()
+        record.detail = restored ? "Undo restored the exact original working-copy bytes. Apply digests remain as history."
+            : "Undo outcome unverified. Inspect the working copy."
+        do { try documentWork.save(record); documentWorkMessage = nil; pendingDocumentReceipt = nil }
+        catch {
+            pendingDocumentReceipt = record
+            documentWorkMessage = "The copy was restored, but the completed Undo receipt could not be saved. Retry saving the receipt."
+        }
+        workingCopyNotice = record.detail; status = workingCopyNotice
+        self.record("Undid working-copy edit; source revision \(sourceRevision)")
     }
 
     func exportWorkingCopy() {
@@ -912,12 +2196,26 @@ final class CompanionStore: ObservableObject {
         stopHarmonyTheme()
         invalidatePlacementPreview(reason: reason)
         let wasWorking = isWorking
-        let hadDerivedReply = !compareResults.isEmpty || hamptonSnapshot.proposal != nil
+        let hadDerivedReply = !compareResults.isEmpty || hamptonSnapshot.proposal != nil || activeARCAnswer != nil
         workGeneration &+= 1
+        cancelActiveARC(reason: reason, keepAnswer: reason == "Stopped.")
+        arc3.stop(reason: reason)
+        if reason != "Stopped." { showsARC3Reply = false }
         for provider in Array(replyOwners.keys) { cancelLane(provider, reason: reason) }
         // Completed lanes are also bound to the superseded request ticket.
         for provider in Array(compareResults.keys) {
             setLane(provider, text: "", status: reason, state: .cancelled)
+        }
+        if knowledgeMethodDraftPage != nil {
+            knowledgeMethodDraft = nil
+            if reason != "Stopped." && reason != "Method drafting stopped." { knowledgeMethodDraftPage = nil }
+            knowledgeMethodDraftRequestID = nil
+            knowledgeMethodDraftMessage = reason
+        }
+        if knowledgeConceptDraftRequestID != nil {
+            knowledgeConceptDraft = nil
+            knowledgeConceptDraftRequestID = nil
+            knowledgeConceptDraftMessage = reason
         }
         if wasWorking || hadDerivedReply {
             hamptonSnapshot.proposal = nil
@@ -936,8 +2234,315 @@ final class CompanionStore: ObservableObject {
 
     func submit() { _ = submit(question: prompt, pointing: nil) }
 
+    var isDraftingKnowledgeMethod: Bool {
+        knowledgeMethodDraftRequestID != nil && replyOwners[.qwen] != nil
+            && compareResults[.qwen]?.receipt?.requestID == knowledgeMethodDraftRequestID
+    }
+
+    func canDraftKnowledgeMethod(page: KnowledgePage) -> Bool {
+        !isShuttingDown && !isWorking && !isARCWorking && !voiceInput.isActive
+            && !hasOpenKnowledgeDraft && page.kind == .concept && page.state == .reviewed
+            && knowledgeDependenciesAreCurrent([page.binding])
+    }
+
+    func currentKnowledgeMethodDraft(for page: KnowledgePage) -> KnowledgeMethodDraft? {
+        guard let draft = knowledgeMethodDraft, draft.binding == page.binding,
+              draft.requestID == knowledgeMethodDraftRequestID,
+              let receipt = compareResults[.qwen]?.receipt, receipt.state == .complete,
+              receipt.requestID == draft.requestID, isCurrentReplyContext(receipt),
+              knowledgeDependenciesAreCurrent([draft.binding]) else { return nil }
+        return draft
+    }
+
+    func discardKnowledgeMethodDraft() {
+        if isDraftingKnowledgeMethod { cancelWork(reason: "Method drafting stopped.") }
+        knowledgeMethodDraft = nil
+        knowledgeMethodDraftPage = nil
+        knowledgeMethodDraftRequestID = nil
+        knowledgeMethodDraftMessage = nil
+    }
+
+    /// Acquisition uses the ordinary local request owner and accounting. It
+    /// neither edits the user's chat draft/copy nor saves or rates a method.
+    @discardableResult
+    func draftKnowledgeMethod(page: KnowledgePage, requirements: DocumentWorkRequirements) -> Bool {
+        guard canDraftKnowledgeMethod(page: page),
+              let context = KnowledgePageContext.make(page: page,
+                quotes: page.anchors.compactMap { readingSources.quote(for: $0) }),
+              client(for: .qwen) is HamptonReasonsAssistant else {
+            if !isWorking { knowledgeMethodDraftPage = page.binding }
+            knowledgeMethodDraftMessage = "Finish current work and use a reviewed concept with current passages that fit the local context limit. Local Hampton reasoning is required."
+            return false
+        }
+        do {
+            let target = try KnowledgeMethodDraftRequest(context: context, requirements: requirements,
+                requestID: UUID().uuidString)
+            cancelWork(reason: "Preparing a local method candidate.")
+            let request = AssistantRequest(prompt: target.prompt, sourceName: nil, sourceText: "",
+                sourceRevision: sourceRevision, placementRevision: placementRevision,
+                tone: "Direct", replyLength: 0.3, localKnowledge: context, localMethodDraft: target)
+            let digest = SHA256.hash(data: Data(request.localContextInput.utf8)).map { String(format: "%02x", $0) }.joined()
+            try retryStewardReceipts()
+            try tokenSteward.preflight(requestID: target.requestID, route: .automatic)
+            knowledgeMethodDraftPage = page.binding
+            knowledgeMethodDraftRequestID = target.requestID
+            knowledgeMethodDraftMessage = "Drafting a method with local Qwen…"
+            knowledgeMethodDraft = nil
+            assistantProvider = .qwen
+            hamptonSnapshot.proposal = nil
+            compareResults = [:]
+            documentProcedureRequests = [:]
+            replySourceSelection = nil
+            isWorking = true
+            launchLane(.qwen, request: request, ticket: contextTicket(), route: .automatic,
+                requestID: target.requestID, inputDigest: digest,
+                routingReason: "Method candidate acquisition from one reviewed concept and its exact passages. Local Qwen only; no external fallback, prior dialogue, saved lessons or personal context. Drafting is not evidence of usefulness.")
+            return true
+        } catch {
+            knowledgeMethodDraftPage = page.binding
+            knowledgeMethodDraftMessage = "Method drafting did not start: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    var isDraftingKnowledgeConcept: Bool {
+        knowledgeConceptDraftRequestID != nil && replyOwners[.qwen] != nil
+            && compareResults[.qwen]?.receipt?.requestID == knowledgeConceptDraftRequestID
+    }
+
+    var currentKnowledgeConceptDraft: KnowledgeConceptDraft? {
+        guard let draft = knowledgeConceptDraft, draft.requestID == knowledgeConceptDraftRequestID,
+              let receipt = compareResults[.qwen]?.receipt, receipt.state == .complete,
+              receipt.requestID == draft.requestID, isCurrentReplyContext(receipt),
+              draft.anchors.allSatisfy({ readingSources.quote(for: $0) != nil }) else { return nil }
+        return draft
+    }
+
+    func editKnowledgeConceptDraft() {
+        guard let draft = currentKnowledgeConceptDraft, !hasOpenKnowledgeDraft, !isWorking else { return }
+        knowledgePageDraft = KnowledgePageDraft(proposal: draft)
+        knowledgePageMessage = "Review this generated interpretation and its limitations. Save creates an unreviewed draft."
+    }
+
+    func discardKnowledgeConceptDraft() {
+        if isDraftingKnowledgeConcept { cancelWork(reason: "Concept drafting stopped.") }
+        knowledgeConceptDraft = nil
+        knowledgeConceptDraftRequestID = nil
+        knowledgeConceptDraftMessage = nil
+    }
+
+    @discardableResult
+    func draftKnowledgeConcept(title: String, anchors: [KnowledgeAnchor]) -> Bool {
+        guard !isShuttingDown, !isWorking, !isARCWorking, !voiceInput.isActive,
+              !hasOpenKnowledgeDraft, client(for: .qwen) is HamptonReasonsAssistant else { return false }
+        do {
+            let target = try KnowledgeConceptDraftRequest(requestID: UUID().uuidString, title: title,
+                anchors: anchors, quotes: anchors.compactMap { readingSources.quote(for: $0) })
+            guard readingDependenciesAreCurrent(target.readingSources) else { throw KnowledgeConceptDraftError.invalidContext }
+            cancelWork(reason: "Preparing a source-grounded concept draft.")
+            let request = AssistantRequest(prompt: target.prompt, sourceName: nil, sourceText: "",
+                sourceRevision: sourceRevision, placementRevision: placementRevision,
+                tone: "Direct", replyLength: 0.3, localConceptDraft: target)
+            let digest = LessonSource.digest(of: request.localContextInput)
+            try retryStewardReceipts()
+            try tokenSteward.preflight(requestID: target.requestID, route: .automatic)
+            knowledgeConceptDraftRequestID = target.requestID
+            knowledgeConceptDraftMessage = "Drafting a concept with local Qwen…"
+            knowledgeConceptDraft = nil
+            assistantProvider = .qwen
+            hamptonSnapshot.proposal = nil
+            compareResults = [:]
+            documentProcedureRequests = [:]
+            replySourceSelection = nil
+            isWorking = true
+            launchLane(.qwen, request: request, ticket: contextTicket(), route: .automatic,
+                requestID: target.requestID, inputDigest: digest,
+                routingReason: "Concept draft from explicitly selected source passages. Local Qwen only; no external fallback, personal context, saved lessons or dialogue. Generating a note neither saves nor reviews it.")
+            return true
+        } catch {
+            knowledgeConceptDraftMessage = "Concept drafting did not start: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    @discardableResult
+    func prepareARC3Action() -> Bool {
+        guard !isShuttingDown, !voiceInput.isActive else { return false }
+        if !replyOwners.isEmpty || activeARCOwner != nil { cancelWork(reason: "ARC3 replaces earlier work.") }
+        arcCapabilities.stopSolving()
+        activeARCAnswer = nil
+        compareResults = [:]
+        if !arc3.isSessionActive { lastARC3Summary = nil }
+        showsARC3Reply = true
+        return true
+    }
+
+    @discardableResult
+    func runARC3(_ command: ARC3AssistantCommand) -> Bool {
+        guard !isShuttingDown else { return false }
+        if command == .stop {
+            arc3.stop(reason: "Stopped by you.")
+            showsARC3Reply = true
+            return true
+        }
+        guard !voiceInput.isActive else { status = "Finish dictation before using ARC3."; return false }
+        switch command {
+        case .open:
+            showsARC3Reply = true
+            openReasoningTools(worlds: true)
+            if arc3.games.isEmpty, !arc3.isWorking, !arc3.isSessionActive { arc3.discover() }
+        case .explore:
+            guard !arc3.isWorking else { return false }
+            guard prepareARC3Action() else { return false }
+            arc3.explore(maxActions: 8)
+        case .invalid:
+            cancelWork(reason: "Invalid ARC3 command. No new action dispatched.")
+            status = "Use /arc3 open, /arc3 explore, or /arc3 stop."
+            reply = status
+            return false
+        case .stop: break
+        }
+        return true
+    }
+
+    /// Native assistant dispatch. This reuses the profile's existing ARC owner,
+    /// evaluator, evidence shelf and Usage path; no model lane is synthesized.
+    @discardableResult
+    func runARC(_ command: ARCActiveAssistantCommand) -> Bool {
+        guard !isShuttingDown, !voiceInput.isActive else { return false }
+        cancelWork(reason: "New ARC request replaces prior work.")
+        compareResults = [:]
+        replySourceSelection = nil
+        hamptonSnapshot.proposal = nil
+        // Explicit assistant dispatch also replaces work started in the ARC view.
+        arcCapabilities.stopSolving()
+        do {
+            if let name = sourceName {
+                try arcCapabilities.loadSolverTask(data: Data(sharedText.utf8), name: name)
+            }
+            guard let document = arcCapabilities.solverDocument else {
+                showActiveARCError(command: command,
+                    message: "Share standard ARC train/test JSON in the working copy, or load a task in ARC, then try again.")
+                return false
+            }
+            let owner = ARCActiveAssistantOwnership(command: command, ticket: contextTicket(), document: document)
+            activeARCOwner = owner
+            let message = command == .solve ? "Solving this ARC task with native rules…"
+                : "Asking local Qwen for one bounded ARC rule, then checking it…"
+            activeARCAnswer = ARCActiveAssistantAnswer(command: command, taskID: nil, evidenceID: nil,
+                inputName: document.name, inputDigest: document.inputDigest, status: message,
+                result: nil, summary: nil, error: nil, isWorking: true)
+            isWorking = true
+            reply = message
+            status = message
+            let receive: @MainActor (ARCCapabilitiesEvent) -> Void = { [weak self, owner] event in
+                owner.lastEvent = event
+                guard let self else { return }
+                // Accounting belongs to the actual attempt even after the reply
+                // owner is retired. Cancellation never manufactures zero usage.
+                self.recordARCEvaluation(event)
+                self.receiveActiveARC(event, owner: owner)
+            }
+            switch command {
+            case .solve: arcCapabilities.startSolving(onEvaluation: receive)
+            case .propose: arcCapabilities.startQwenProposal(model: qwenModel, onEvaluation: receive)
+            }
+            // Recovery/preflight failures can reject before an ARC owner exists.
+            if activeARCOwner?.id == owner.id, !arcCapabilities.isSolving, !arcCapabilities.isProposing {
+                activeARCOwner = nil
+                showActiveARCError(command: command, message: command == .solve
+                    ? arcCapabilities.solverStatus : arcCapabilities.qwenProposalStatus)
+                return false
+            }
+            return true
+        } catch {
+            showActiveARCError(command: command,
+                message: "The shared working copy is not a valid ARC task. \(error.localizedDescription) Use standard train/test JSON, or stop sharing to use the loaded ARC task.")
+            return false
+        }
+    }
+
+    private func receiveActiveARC(_ event: ARCCapabilitiesEvent, owner: ARCActiveAssistantOwnership) {
+        guard activeARCOwner?.id == owner.id else { return }
+        guard !isShuttingDown, isCurrentContent(owner.ticket) else {
+            cancelActiveARC(reason: "The ARC request context changed.")
+            return
+        }
+        if event.proposalInProgress {
+            let message = event.proposalInference?.attempted == true
+                ? "Local Qwen is proposing one rule. ARC will independently check it."
+                : "Connecting to Qwen on this Mac for this ARC task…"
+            activeARCAnswer = ARCActiveAssistantAnswer(command: owner.command, taskID: event.taskID, evidenceID: nil,
+                inputName: owner.document.name, inputDigest: owner.document.inputDigest, status: message,
+                result: nil, summary: nil, error: nil, isWorking: true)
+            reply = message; status = message
+            return
+        }
+        let result: ARCActiveAssistantResult?
+        if owner.command == .solve, let review = arcCapabilities.solverReview, review.taskID == event.taskID {
+            result = .symbolic(review.run)
+        } else if owner.command == .propose, let review = arcCapabilities.qwenProposalReview,
+                  review.taskID == event.taskID, let proposed = review.result {
+            result = .proposal(proposed)
+        } else { result = nil }
+        let summary = event.evidenceID.flatMap { id in arcCapabilities.records.first(where: { $0.id == id })?.summary }
+        let message = event.error ?? result?.description ?? "ARC finished without an admitted prediction."
+        activeARCOwner = nil
+        let answer = ARCActiveAssistantAnswer(command: owner.command, taskID: event.taskID, evidenceID: event.evidenceID,
+            inputName: owner.document.name, inputDigest: owner.document.inputDigest, status: message,
+            result: result, summary: summary, error: event.error, isWorking: false, cancelled: event.cancelled)
+        activeARCAnswer = answer
+        isWorking = !replyOwners.isEmpty
+        reply = answer.replyText
+        status = message
+    }
+
+    private func showActiveARCError(command: ARCActiveAssistantCommand, message: String) {
+        activeARCAnswer = ARCActiveAssistantAnswer(command: command, taskID: nil, evidenceID: nil,
+            inputName: sourceName, inputDigest: nil, status: "ARC needs your attention",
+            result: nil, summary: nil, error: message, isWorking: false)
+        isWorking = !replyOwners.isEmpty
+        reply = message
+        status = "ARC needs your attention"
+    }
+
+    private func cancelActiveARC(reason: String, keepAnswer: Bool = false) {
+        let owner = activeARCOwner
+        // Retire before the store synchronously reports cancellation.
+        activeARCOwner = nil
+        if owner != nil { arcCapabilities.stopSolving() }
+        if keepAnswer, let owner {
+            activeARCAnswer = ARCActiveAssistantAnswer(command: owner.command, taskID: owner.lastEvent?.taskID,
+                evidenceID: nil, inputName: owner.document.name, inputDigest: owner.document.inputDigest,
+                status: reason, result: nil, summary: nil, error: reason, isWorking: false, cancelled: true)
+        } else { activeARCAnswer = nil }
+        isWorking = !replyOwners.isEmpty
+    }
+
+    private func invalidateActiveARCSource() {
+        guard activeARCOwner != nil || activeARCAnswer != nil || arc3.isWorking || arc3.isSessionActive else { return }
+        cancelWork(reason: "Shared source changed. The earlier ARC answer was cleared.")
+    }
+
     private func submit(question: String, pointing: AssistantPointingSnapshot?) -> Bool {
         guard !isShuttingDown else { return false }
+        switch executionSelection(question: question, pointing: pointing) {
+        case .arc3(let command): return runARC3(command)
+        case .arc(let command):
+            guard !voiceInput.isActive else {
+                status = "Finish or cancel voice input before starting ARC."; return false
+            }
+            return runARC(command)
+        case .invalidARC:
+            guard !voiceInput.isActive else {
+                status = "Finish or cancel voice input before starting ARC."; return false
+            }
+            cancelWork(reason: "New ARC request replaces prior work.")
+            compareResults = [:]
+            showActiveARCError(command: .solve, message: ARCActiveAssistant.commandHelp)
+            return false
+        case .assistant: break
+        }
         guard canShareDesktopInterestWithRoute else {
             status = "This window snapshot stays local. Allow this exact copy for your external route, or choose Local Qwen. Nothing sent."
             return false
@@ -946,12 +2551,34 @@ final class CompanionStore: ObservableObject {
             status = "Finish or cancel voice input before sending. Your draft is unchanged."
             return false
         }
+        if route.providers.contains(.qwen), !requireCurrentLocalPreferenceMemory() { return false }
+        if !localConversationRequestIDs.isEmpty {
+            do { try tokenSteward.refresh() } catch {
+                status = "Reading history is unavailable. Nothing was sent."
+                return false
+            }
+        }
+        if localConversationRequestIDs.count >= 128 {
+            clearLocalConversation()
+            localConversationNotice = "Started fresh context after a long conversation; kept lessons remain available."
+        }
+        if !readingDependenciesAreCurrent(localConversationReadingSources) || !knowledgeDependenciesAreCurrent(localConversationKnowledgePages) {
+            clearSessionContext()
+            localConversationNotice = "A supporting reading source changed. Temporary context was cleared."
+        }
         if let expiry = localConversationExpiry, expiry <= wallClock() {
             clearLocalConversation()
             localConversationNotice = "A lesson used earlier expired. Recent conversation was cleared before this request."
         }
         guard !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
         guard question.utf8.count <= 16_000 else { status = "Keep the message below 16 KB. Nothing was sent."; return false }
+        // A measurement visit cannot also dispatch the same material through an
+        // external/compare lane. This guard precedes every connection, budget
+        // reservation and provider dispatch, including explicitly chosen routes.
+        if let reason = assistantBlockedReason(hasPointing: pointing != nil) {
+            status = reason
+            return false
+        }
         guard textSelection == nil || textSelection?.matches(text: sharedText, sourceRevision: sourceRevision) == true else {
             invalidateTextSelection(reason: "The selected passage is no longer current. Nothing was sent.")
             return false
@@ -959,25 +2586,71 @@ final class CompanionStore: ObservableObject {
         let revisionTarget: RevisionTarget?
         if requestsRevision && pointing == nil {
             guard let selection = textSelection,
-                  let target = RevisionTarget(text: sharedText, sourceRevision: sourceRevision, selection: selection) else {
+                  let target = RevisionTarget(text: sharedText, sourceRevision: sourceRevision, selection: selection, requirements: documentRequirements) else {
                 status = "Select a current passage before requesting a revision. Nothing was sent."; return false
             }
             revisionTarget = target
         } else { revisionTarget = nil }
+        let procedureUse: DocumentProcedureUse?
+        if let prepared = preparedDocumentProcedure {
+            guard revisionTarget != nil, preparedProcedureMatchesCurrentDraft(question: question),
+                  documentProcedureUnavailable(prepared) == nil else {
+                status = "This procedure or its draft changed. Choose it again, or Detach procedure before sending. Nothing sent."
+                return false
+            }
+            procedureUse = prepared
+        } else { procedureUse = nil }
         cancelWork(reason: "New request replaces prior work.")
         let selectedRoute = route
-        guard selectedRoute == .automatic || selectedRoute.providers.allSatisfy({ connection(for: $0) == .ready }) else {
+        if selectedKnowledgePages.isEmpty, !selectedReadingSourceIDs.isEmpty {
+            guard readingReferencesAreCurrent(currentReadingReferences),
+                  currentReadingReferences.count == selectedReadingSourceIDs.count else {
+                invalidateReadingContext(reason: "Kept sources changed or need recovery. Reopen ARCHi before using them.")
+                return false
+            }
+        }
+        guard selectedRoute.connectsAutomatically || selectedRoute.providers.allSatisfy({ connection(for: $0) == .ready }) else {
             replySourceSelection = nil
             compareResults = [:]
             reply = "Connect \(selectedRoute == .compare ? "both assistants" : assistantProvider.name) to send this message. This request has not been sent."
             status = "Not sent · assistant not connected"
             return false
         }
-        let ticket = contextTicket()
         if selectedRoute.providers.contains(.qwen) { hamptonSnapshot.proposal = nil }
-        let request = AssistantRequest(prompt: question, sourceName: sourceName, sourceText: sharedText,
+        let knowledge = currentKnowledgeContext
+        guard selectedKnowledgePages.isEmpty || knowledge != nil else {
+            status = selectedKnowledgePageIssue ?? "Knowledge pages changed. Select current reviewed pages again. Nothing sent."
+            return false
+        }
+        let request = AssistantRequest(prompt: question, sourceName: knowledge == nil ? sourceName : nil, sourceText: knowledge == nil ? sharedText : "",
             sourceRevision: sourceRevision, placementRevision: placementRevision, settings: nextReplySettings,
-            selection: textSelection, revisionTarget: revisionTarget, companion: activeQiMon?.character)
+            selection: knowledge == nil ? textSelection : nil, revisionTarget: revisionTarget, companion: activeQiMon?.character,
+            localProfile: personalContext?.assistantSnapshot, localKnowledge: knowledge,
+            localProcedureKnowledge: procedureUse.flatMap { documentProcedures.procedure(matching: $0)?.knowledgeOrigin }.map { [$0] })
+        let requestTaskScope: HamptonTaskScope = revisionTarget != nil ? .passageRevision
+            : request.sourceName != nil ? .documentQuestion : .conversation
+        let requiresReading = revisionTarget == nil && request.sourceName != nil && !request.sourceText.isEmpty
+            && selectedRoute.providers.contains(.qwen)
+        if requiresReading { documentReadingMessage = nil }
+        let reading = requiresReading ? prepareReading(question: question, text: sharedText, selection: textSelection) : nil
+        if requiresReading && reading == nil {
+            status = documentReadingMessage ?? "The reading context could not fit. Shorten the question or select a smaller passage. Nothing sent."
+            return false
+        }
+        let capturedControl = selectedRoute.providers.contains(.qwen)
+            ? (revisionTarget != nil ? documentQ2EDecision : reading?.control) : nil
+        if let control = capturedControl, control.lane == .stop || !control.isValid {
+            status = control.reason + " Nothing sent."
+            return false
+        }
+        if selectedRoute.providers.contains(.qwen) {
+            if let previousScope = localContextTaskScope, previousScope != requestTaskScope {
+                clearSessionContext()
+                localConversationNotice = "Started fresh local context for \(requestTaskScope.title.lowercased()). Kept lessons still follow their chosen scope."
+            }
+            localContextTaskScope = requestTaskScope
+        }
+        let ticket = contextTicket()
         replySourceSelection = textSelection
         // The same immutable current-input contract is dispatched to both lanes.
         // Hampton may add local-only excerpts internally; no answer is forwarded.
@@ -988,11 +2661,23 @@ final class CompanionStore: ObservableObject {
         }
         let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
         let requestID = UUID().uuidString
+        do {
+            try retryStewardReceipts()
+            try tokenSteward.preflight(requestID: requestID, route: selectedRoute)
+            stewardMessage = nil
+        } catch {
+            stewardMessage = "Usage could not be recorded: \(error.localizedDescription)"
+            status = "Not sent · " + (stewardMessage ?? "Token Steward unavailable")
+            return false
+        }
         assistantProvider = selectedRoute.primaryProvider
+        // Prior owners were cancelled above. Keep only this request's immutable
+        // binding, also used by its possible external fallback lane.
+        documentProcedureRequests = procedureUse.map { [requestID: $0] } ?? [:]
         compareResults = [:]
         isWorking = true; reply = ""; status = "Sending · \(selectedRoute.title)…"
         if revisionTarget != nil { workingCopyNotice = "Preparing a revision · your working copy is unchanged." }
-        let capturedLessons = matchingLessons(question: request.prompt)
+        let capturedLessons = matchingLessons(question: request.prompt, taskScope: requestTaskScope)
         let capturedConversation = nextReplyConversation
         // Expiry follows indirect use too: a later answer may repeat a lesson
         // without citing it again. Keep the earliest dependency conservatively.
@@ -1004,10 +2689,19 @@ final class CompanionStore: ObservableObject {
                 placementRevision: request.placementRevision, settings: request.settings,
                 selection: request.selection, localLessons: provider == .qwen ? capturedLessons : [],
                 revisionTarget: request.revisionTarget, companion: request.companion,
-                localConversation: provider == .qwen ? capturedConversation : [])
+                localConversation: provider == .qwen ? capturedConversation : [],
+                localProfile: provider == .qwen ? request.localProfile : nil,
+                localControl: provider == .qwen ? capturedControl : nil,
+                localReading: provider == .qwen ? reading?.plan : nil,
+                localKnowledge: provider == .qwen ? request.localKnowledge : nil,
+                localProcedureKnowledge: request.localProcedureKnowledge)
             launchLane(provider, request: laneRequest, ticket: ticket, route: selectedRoute,
                        requestID: requestID, inputDigest: digest, pointing: pointing,
-                       routingReason: selectedRoute == .automatic ? "Local Qwen · connects when needed; failures stay on this Mac." : nil,
+                       routingReason: request.localProcedureKnowledge != nil ? "A user-authored method linked to a reviewed page uses local reasoning. Source history stays attached; external fallback is disabled." : knowledge != nil ? "Selected reviewed pages and exact passages use local reasoning. Shared document is not sent; no external fallback." : !(reading?.plan.references.isEmpty ?? true) ? "Local Qwen with selected kept copies; external fallback is disabled for this reading."
+                           : selectedRoute == .native ? (representationMeasurementsEnabled
+                               ? "Local Qwen with read-only measurements; automatic external fallback is disabled."
+                               : "ARCHi-managed local Qwen first; one external fallback only on an eligible failure.")
+                           : selectedRoute == .automatic ? "Local Qwen · connects when needed; failures stay on this Mac." : nil,
                        conversationExpiry: provider == .qwen ? conversationExpiry.min() : nil)
         }
         if let pointing {
@@ -1026,8 +2720,32 @@ final class CompanionStore: ObservableObject {
                             pointing: AssistantPointingSnapshot? = nil, routingReason: String? = nil,
                             conversationExpiry: Date? = nil) {
         // A manual connection check cannot race an automatically owned check.
-        if route == .automatic, connection(for: provider) != .ready { closeConnection(provider) }
+        if route.connectsAutomatically, connection(for: provider) != .ready { closeConnection(provider) }
         let assistant = client(for: provider)
+        if let local = assistant as? HamptonReasonsAssistant { local.workPreference = localWorkPreference }
+        let allowsExternalFallback = !(provider == .qwen
+            && (assistant as? HamptonReasonsAssistant)?.requiresRepresentation == true)
+        var dependencies = (request.localReading?.references.map(\.binding) ?? []) + (request.localKnowledge?.readingSources ?? []) + (request.localConceptDraft?.readingSources ?? [])
+        var knowledgeDependencies = (request.localKnowledge?.bindings ?? []) + (request.localProcedureKnowledge ?? [])
+        for binding in request.localProcedureKnowledge ?? [] {
+            if let page = readingSources.latestKnowledgePages.first(where: { $0.binding == binding }) {
+                dependencies += page.anchors.map(\.source)
+            }
+        }
+        for lesson in request.localLessons {
+            let origin = keptLessons.first(where: { LessonSnapshot(lesson: $0) == lesson })?.origin
+            dependencies += origin?.readingSources ?? []
+            knowledgeDependencies += origin?.knowledgePages ?? []
+        }
+        if !request.localConversation.isEmpty {
+            dependencies += localConversationReadingSources ?? []
+            knowledgeDependencies += localConversationKnowledgePages ?? []
+        }
+        let uniqueKnowledge = HamptonMemoryDependencies.exactUnion(knowledgeDependencies).sorted { $0.id < $1.id }
+        let capturedKnowledgeDependencies: [KnowledgePageBinding]? = uniqueKnowledge.isEmpty ? nil : uniqueKnowledge
+        let uniqueDependencies = HamptonMemoryDependencies.exactUnion(dependencies).sorted { $0.id < $1.id }
+        let capturedReadingDependencies: [ReadingSourceBinding]? = uniqueDependencies.isEmpty ? nil : uniqueDependencies
+        let conversationParents = request.localConversation.isEmpty ? Set<UUID>() : localConversationRequestIDs
         let owner = UUID(), epoch = connectionGenerations[provider, default: 0]
         let seconds = provider == .qwen ? 180 : 90
         let deadline = Date().addingTimeInterval(Double(seconds))
@@ -1040,12 +2758,22 @@ final class CompanionStore: ObservableObject {
                 localInvocations: assistant is HamptonReasonsAssistant ? [] : nil))
         compareResults[provider]?.receipt?.sourceDigest = request.sourceName == nil ? nil
             : SHA256.hash(data: Data(request.sourceText.utf8)).map { String(format: "%02x", $0) }.joined()
+        compareResults[provider]?.receipt?.readingDependencies = capturedReadingDependencies
+        compareResults[provider]?.receipt?.knowledgeDependencies = capturedKnowledgeDependencies
+        compareResults[provider]?.receipt?.isKnowledgeAcquisition = request.isKnowledgeAcquisition
+        compareResults[provider]?.receipt?.knowledgeContextDigest = request.localKnowledge?.digest
+        compareResults[provider]?.receipt?.sourceContext = provider == .qwen
+            ? AssistantSourceContext.capture(request, sourceTitles: Dictionary(uniqueKeysWithValues: readingSources.sources.map { ($0.id, $0.title) })) : nil
+        compareResults[provider]?.receipt?.documentReading = request.localReading
+        compareResults[provider]?.receipt?.readingControl = request.localReading == nil ? nil : request.localControl
         compareResults[provider]?.receipt?.localLessons = request.localLessons
         if provider == .qwen {
             let omissions = lessonOmissions(for: request, now: wallClock())
             compareResults[provider]?.receipt?.localLessonOmissions = omissions
         }
         compareResults[provider]?.receipt?.localLessonDigest = request.localLessonDigest
+        compareResults[provider]?.receipt?.localProfileDigest = request.localProfile?.digest
+        compareResults[provider]?.receipt?.localProfileRevision = request.localProfile?.revision
         compareResults[provider]?.receipt?.localConversationCount = request.localConversation.count
         compareResults[provider]?.receipt?.localConversationBytes = request.localConversationUTF8Bytes
         compareResults[provider]?.receipt?.localConversationDigest = request.localConversationDigest
@@ -1055,12 +2783,27 @@ final class CompanionStore: ObservableObject {
             local.mayAdmitResponse = { [weak self, weak local] in
                 guard let self, let local else { return false }
                 return self.isCurrentLane(provider, owner: owner, epoch: epoch, client: local, ticket: ticket)
+                    && self.readingDependenciesAreCurrent(capturedReadingDependencies)
+                    && self.knowledgeDependenciesAreCurrent(capturedKnowledgeDependencies)
+                    && self.readingContinuationIsCurrent(conversationParents)
             }
             local.onSnapshot = { [weak self, weak local] snapshot in
                 guard let self, let local,
                       self.isCurrentLane(provider, owner: owner, epoch: epoch, client: local, ticket: ticket),
                       self.compareResults[provider]?.receipt?.requestStarted == true else { return }
+                // Source invalidation rejects the semantic result, not work
+                // already spent by this exact request. Retain terminal metrics
+                // before a stale-source failure clears the local context owner.
+                self.compareResults[provider]?.receipt?.localInvocations = snapshot.attemptedInvocations
+                self.compareResults[provider]?.receipt?.localInvocationReceipts = snapshot.invocations
+                self.compareResults[provider]?.receipt?.admissionOutcome = snapshot.admissionOutcome
+                guard self.knowledgeDependenciesAreCurrent(capturedKnowledgeDependencies),
+                      self.readingDependenciesAreCurrent(capturedReadingDependencies) else { return }
                 self.hamptonSnapshot = snapshot
+                if let decision = snapshot.expertDecision {
+                    self.compareResults[provider]?.receipt?.localExpertDecision = decision
+                    self.compareResults[provider]?.receipt?.routingReason = decision.reason + " " + (routingReason ?? "")
+                }
                 self.compareResults[provider]?.receipt?.localConversationCount = snapshot.localConversationCount
                 self.compareResults[provider]?.receipt?.localConversationBytes = snapshot.localConversationBytes
                 self.compareResults[provider]?.receipt?.localConversationDigest = snapshot.localConversationDigest
@@ -1088,12 +2831,15 @@ final class CompanionStore: ObservableObject {
                     status: .rejected, stage: self.compareResults[provider]?.receipt?.requestStarted == true ? .generation : .connection,
                     role: nil, requestID: nil, reason: .timedOut)
             }
-            self.failLane(provider, message: "\(provider.name) reached its \(seconds)-second reply limit.")
+            self.finishFailedAttempt(provider, error: QwenFailure.timedOut,
+                message: "\(provider.name) reached its \(seconds)-second reply limit.",
+                request: request, ticket: ticket, route: route, requestID: requestID,
+                inputDigest: inputDigest, pointing: pointing, allowsExternalFallback: allowsExternalFallback)
         }
         replyTasks[provider] = Task { [weak self, assistant] in
             do {
                 guard let self, self.isCurrentLane(provider, owner: owner, epoch: epoch, client: assistant, ticket: ticket), !Task.isCancelled else { return }
-                if route == .automatic, self.connection(for: provider) != .ready {
+                if route.connectsAutomatically, self.connection(for: provider) != .ready {
                     self.connectionStates[provider] = .connecting
                     self.connectionMessages[provider] = "Checking \(provider.name) for this request…"
                     self.compareResults[provider]?.status = "Connecting to \(provider.name)…"
@@ -1105,16 +2851,47 @@ final class CompanionStore: ObservableObject {
                     self.connectionMessages[provider] = "\(provider.name) connected for this request."
                     self.refreshRouteConnection()
                 }
+                guard self.knowledgeDependenciesAreCurrent(capturedKnowledgeDependencies),
+                      self.readingDependenciesAreCurrent(capturedReadingDependencies),
+                      self.readingContinuationIsCurrent(conversationParents) else { throw QwenFailure.invalidResponse }
+                if let target = request.revisionTarget {
+                    try self.beginDocumentWork(requestID: requestID, provider: provider, target: target,
+                                               control: request.localControl)
+                }
+                if let reading = request.localReading, let control = request.localControl {
+                    guard provider == .qwen, request.hasValidLocalControl else { throw QwenFailure.invalidResponse }
+                    try self.tokenSteward.recordDocumentReading(requestID: requestID,
+                        trace: DocumentReadingTrace(sourceDigest: reading.sourceDigest,
+                            questionDigest: reading.questionDigest, planDigest: reading.digest,
+                            sectionIDs: reading.sourceIDs, control: control,
+                            references: reading.references.isEmpty ? nil : reading.references.map(\.binding),
+                            conversationRequestIDs: conversationParents.isEmpty ? nil : conversationParents.map(\.uuidString).sorted()))
+                }
+                if let reading = request.localReading {
+                    guard self.readingReferencesAreCurrent(reading.references) else { throw QwenFailure.invalidResponse }
+                }
+                if let receipt = self.compareResults[provider]?.receipt,
+                   let provenance = TokenStewardRequestProvenance.capture(receipt) {
+                    try self.tokenSteward.recordRequestProvenance(requestID: requestID, provenance: provenance)
+                }
+                try self.tokenSteward.recordDispatch(requestID: requestID, provider: provider)
+                guard self.readingContinuationIsCurrent(conversationParents) else { throw QwenFailure.invalidResponse }
                 self.compareResults[provider]?.receipt?.requestStarted = true
                 try await assistant.reply(to: request) { [weak self] event in
                     guard let self, self.isCurrentLane(provider, owner: owner, epoch: epoch, client: assistant, ticket: ticket) else { return }
+                    guard self.knowledgeDependenciesAreCurrent(capturedKnowledgeDependencies),
+                          self.readingDependenciesAreCurrent(capturedReadingDependencies) else {
+                        self.clearSessionContext()
+                        self.failLane(provider, message: "Supporting knowledge changed. This reply is no longer current.")
+                        return
+                    }
                     switch event {
                     case .text(let text):
                         guard request.revisionTarget == nil else {
                             self.failLane(provider, message: "The revision response was not a validated proposal."); return
                         }
                         self.setLane(provider, text: text, status: "\(provider.name) is replying…", state: .pending)
-                        if provider == self.assistantProvider { self.reply = text }
+                        if provider == self.assistantProvider, !request.isKnowledgeAcquisition { self.reply = text }
                         self.status = self.route == .compare ? "Receiving independent answers…" : "ARCHi is replying…"
                     case .revision(let proposal):
                         guard proposal.target == request.revisionTarget,
@@ -1130,21 +2907,61 @@ final class CompanionStore: ObservableObject {
                     }
                 }
                 guard self.isCurrentLane(provider, owner: owner, epoch: epoch, client: assistant, ticket: ticket), !Task.isCancelled else { return }
+                guard self.readingContinuationIsCurrent(conversationParents) else { throw QwenFailure.invalidResponse }
+                guard self.knowledgeDependenciesAreCurrent(capturedKnowledgeDependencies),
+                      self.readingDependenciesAreCurrent(capturedReadingDependencies) else {
+                    self.clearSessionContext()
+                    throw QwenFailure.invalidResponse
+                }
                 if request.revisionTarget != nil && self.compareResults[provider]?.revision == nil {
                     self.failLane(provider, message: "No validated revision completed. Your copy is unchanged."); return
                 }
+                if let proposal = self.compareResults[provider]?.revision {
+                    try self.completeDocumentProposal(requestID: requestID, provider: provider, proposal: proposal)
+                }
+                if let reading = request.localReading, provider == .qwen {
+                    // Capture the exact displayed result while this lane still
+                    // owns the request. A citation is membership, not entailment.
+                    guard self.readingReferencesAreCurrent(reading.references),
+                          let proposal = self.hamptonSnapshot.proposal,
+                          let answer = self.compareResults[provider]?.text, !answer.isEmpty else {
+                        throw QwenFailure.invalidResponse
+                    }
+                    let result = DocumentReadingResult(answerDigest: LessonSource.digest(of: answer),
+                        kind: proposal.kind.rawValue,
+                        citedSectionIDs: proposal.sourceIDs.filter { reading.sourceIDs.contains($0) })
+                    try self.tokenSteward.recordDocumentReadingResult(requestID: requestID, result: result)
+                    self.compareResults[provider]?.receipt?.readingResult = result
+                }
+                if let target = request.localMethodDraft {
+                    guard provider == .qwen, self.knowledgeMethodDraftRequestID == requestID,
+                          let proposal = self.hamptonSnapshot.proposal else { throw QwenFailure.invalidResponse }
+                    self.knowledgeMethodDraft = try target.admit(proposal: proposal)
+                }
+                if let target = request.localConceptDraft {
+                    guard provider == .qwen, self.knowledgeConceptDraftRequestID == requestID,
+                          let proposal = (assistant as? HamptonReasonsAssistant)?.snapshot.proposal else { throw KnowledgeConceptDraftError.invalidReply }
+                    self.knowledgeConceptDraft = try target.admit(proposal: proposal)
+                }
                 self.finishOwnership(provider)
-                self.setLane(provider, status: request.revisionTarget == nil ? "Reply ready" : "Revision ready for review", state: .complete)
+                self.setLane(provider, status: request.localConceptDraft != nil ? "Concept draft ready for your review" : request.localMethodDraft != nil ? "Method draft ready for your review" : request.revisionTarget == nil ? "Reply ready" : "Revision ready for review", state: .complete)
                 // Only terminal, current local answers become temporary dialogue.
                 // Revision proposals, partial output and external answers never enter it.
-                if provider == .qwen, request.revisionTarget == nil, self.localConversationEnabled,
+                if provider == .qwen, request.revisionTarget == nil, !request.isKnowledgeAcquisition, self.localConversationEnabled,
                    let answer = self.compareResults[provider]?.text, !answer.isEmpty {
                     if let expiry = conversationExpiry, expiry <= self.wallClock() {
                         self.clearLocalConversation()
                         self.localConversationNotice = "A supplied lesson expired during this reply. This answer was not retained for follow-up."
                     } else {
                         self.localConversationNotice = self.localConversation.retain(question: request.prompt, answer: answer).status
+                        if !self.localConversation.exchanges.isEmpty,
+                           self.compareResults[provider]?.receipt?.readingResult?.kind == "ANSWER",
+                           let id = UUID(uuidString: requestID) {
+                            self.localConversationRequestIDs = conversationParents.union([id])
+                        } else { self.localConversationRequestIDs = conversationParents }
                         self.localConversationExpiry = self.localConversation.exchanges.isEmpty ? nil : conversationExpiry
+                        self.localConversationReadingSources = self.localConversation.exchanges.isEmpty ? nil : capturedReadingDependencies
+                        self.localConversationKnowledgePages = self.localConversation.exchanges.isEmpty ? nil : capturedKnowledgeDependencies
                     }
                 }
                 if request.revisionTarget != nil {
@@ -1154,12 +2971,18 @@ final class CompanionStore: ObservableObject {
                 self.record("\(provider.name) reply received for shared source revision \(ticket.source)")
             } catch {
                 guard let self, self.isCurrentLane(provider, owner: owner, epoch: epoch, client: assistant, ticket: ticket), !Task.isCancelled else { return }
+                if !self.readingDependenciesAreCurrent(capturedReadingDependencies) || !self.knowledgeDependenciesAreCurrent(capturedKnowledgeDependencies) {
+                    self.clearSessionContext()
+                }
                 if provider == .qwen, self.compareResults[provider]?.receipt?.admissionOutcome == nil {
                     self.compareResults[provider]?.receipt?.admissionOutcome = HamptonAdmissionOutcome.failure(error,
                         stage: self.compareResults[provider]?.receipt?.requestStarted == true ? .generation : .connection,
                         role: nil, requestID: nil)
                 }
-                self.failLane(provider, message: (error as? LocalizedError)?.errorDescription ?? "The assistant connection stopped. Try connecting again.")
+                self.finishFailedAttempt(provider, error: error,
+                    message: (error as? LocalizedError)?.errorDescription ?? "The assistant connection stopped. Try connecting again.",
+                    request: request, ticket: ticket, route: route, requestID: requestID,
+                    inputDigest: inputDigest, pointing: pointing, allowsExternalFallback: allowsExternalFallback)
             }
         }
     }
@@ -1170,6 +2993,14 @@ final class CompanionStore: ObservableObject {
     }
 
     func connectAssistant() { for provider in route.providers { connectAssistant(provider: provider) } }
+
+    /// Launch checks local readiness without sending a question or contacting
+    /// an external account. Only explicit Send owns any fallback.
+    func prepareNativeAssistant(route selected: AssistantRoute = .native) {
+        guard !isShuttingDown else { return }
+        setAssistantRoute(selected)
+        if selected.connectsAutomatically { connectAssistant(provider: .qwen) }
+    }
 
     func connectAssistant(provider: AssistantProvider) {
         guard !isShuttingDown, replyOwners[provider] == nil,
@@ -1189,7 +3020,9 @@ final class CompanionStore: ObservableObject {
                       self.connectionGenerations[provider] == generation, !Task.isCancelled else { return }
                 self.connectionStates[provider] = .ready; self.connectionTasks[provider] = nil
                 self.connectionMessages[provider] = provider == .qwen
-                    ? "\(self.qwenModel) is available locally. Send runs inference on this Mac; the first reply may take longer to load."
+                    ? (self.representationMeasurementsEnabled
+                       ? "\(self.qwenModel) reader and local runtime are ready. Send loads the CPU model for a measured reply; no inference has run yet."
+                       : "\(self.qwenModel) is available locally. Send runs inference on this Mac; the first reply may take longer to load.")
                     : "Connected through your ChatGPT login. Send includes only your message and shared copy."
                 self.refreshRouteConnection()
                 if self.route.providers.contains(provider), !self.isWorking { self.status = "\(provider.name) connected · nothing sent yet" }
@@ -1232,14 +3065,108 @@ final class CompanionStore: ObservableObject {
         setAssistantRoute(provider == .qwen ? .local : .codex)
     }
 
+    func setLocalWorkPreference(_ preference: LocalWorkPreference) {
+        guard !isShuttingDown, preference != localWorkPreference else { return }
+        cancelLocalWork(reason: "Local work preference changed.")
+        localWorkPreference = preference
+        (assistants[.qwen] as? HamptonReasonsAssistant)?.workPreference = preference
+        status = "Local work preference changed · nothing sent"
+    }
+
+    func refreshInstalledLocalModels() {
+        guard !isShuttingDown, !isRefreshingModels else { return }
+        isRefreshingModels = true
+        modelInventoryTask = Task { [weak self] in
+            do {
+                let models = try await QwenAssistant.discoverInstalledModels()
+                guard let self, !self.isShuttingDown, !Task.isCancelled else { return }
+                self.installedLocalModels = models
+                self.modelInventoryNotice = models.isEmpty ? "No supported local model was found. Nothing was downloaded."
+                    : "Installed models found. Each connection still verifies the selected model."
+                self.isRefreshingModels = false
+                self.modelInventoryTask = nil
+            } catch {
+                guard let self, !self.isShuttingDown, !Task.isCancelled else { return }
+                self.installedLocalModels = nil
+                self.modelInventoryNotice = "Local model inventory is unavailable. Start Ollama and refresh. Nothing was downloaded."
+                self.isRefreshingModels = false
+                self.modelInventoryTask = nil
+            }
+        }
+    }
+
+    var localModelChoices: [String] {
+        let installed = installedLocalModels?.map(\.name) ?? QwenAssistant.supportedModels
+        return Array(Set(installed + [qwenModel, qwenContextModel])).sorted()
+    }
+
+    func localModelLabel(_ name: String) -> String {
+        guard let models = installedLocalModels else { return name + " · not checked" }
+        return name + (models.contains { $0.name == name } ? " · installed" : " · unavailable")
+    }
+
     func selectQwenModel(_ model: String) {
         guard !isShuttingDown, QwenAssistant.supportedModels.contains(model), model != qwenModel else { return }
+        cancelActiveARC(reason: "Local Qwen model changed.")
+        arcCapabilities.stopQwenProposal(reason: "Local Qwen model changed.")
         qwenModel = model
+        if representationReader?.modelName != model {
+            representationMeasurementsEnabled = false
+            representationReader = nil
+            representationNotice = "Model changed. Import a reader fitted for \(model) to inspect its report."
+        }
         replaceLocalAssistant()
+    }
+
+    func importRepresentationReader(from url: URL) {
+        guard !isShuttingDown else { return }
+        do {
+            let reader = try GGUFReaderArtifact.load(from: url)
+            guard reader.modelName == qwenModel else {
+                representationNotice = "This reader is for \(reader.modelName). Select that reasoning model before importing it."
+                return
+            }
+            representationMeasurementsEnabled = false
+            representationReader = reader
+            replaceLocalAssistant()
+            representationNotice = "Reader imported for inspection this visit. Its supplied calibration history does not qualify ordinary reply measurements."
+        } catch {
+            representationNotice = "Reader was not imported: \(error.localizedDescription)"
+        }
+    }
+
+    func setRepresentationMeasurementsEnabled(_ enabled: Bool) {
+        guard !isShuttingDown, enabled != representationMeasurementsEnabled else { return }
+        if enabled {
+            guard representationReader?.canMeasureGeneralReplies == true else {
+                representationNotice = "Ordinary reply measurements require a reader qualified for general replies. Imported synthetic readers remain available for inspection."
+                return
+            }
+            guard representationReader?.modelName == qwenModel,
+                  representationReader?.hasLimitedShadowReport == true,
+                  GGUFRepresentationClient.bundledWorkerAvailable else {
+                representationNotice = "A matching reader with a complete passing calibration report and the bundled local measurement runtime are required. Legacy readers can be inspected but cannot enable measurements."
+                return
+            }
+        }
+        representationMeasurementsEnabled = enabled
+        replaceLocalAssistant()
+        representationNotice = enabled
+            ? "Read-only measurements selected for local replies this visit. No steering or automatic external fallback. Connect checks readiness; Send loads the model."
+            : "Standard local Qwen selected. Measurements are off."
+    }
+
+    func removeRepresentationReader() {
+        guard !isShuttingDown else { return }
+        representationMeasurementsEnabled = false
+        representationReader = nil
+        replaceLocalAssistant()
+        representationNotice = "Reader removed from this visit. Standard local Qwen selected."
     }
 
     func selectQwenContextModel(_ model: String) {
         guard !isShuttingDown, QwenAssistant.supportedModels.contains(model), model != qwenContextModel else { return }
+        cancelActiveARC(reason: "Local context model changed.")
         qwenContextModel = model
         replaceLocalAssistant()
     }
@@ -1275,6 +3202,7 @@ final class CompanionStore: ObservableObject {
         guard let client = assistants[.qwen] as? HamptonReasonsAssistant else { return }
         client.setContextModel(qwenContextModel)
         client.setContextEnabled(sessionContextEnabled)
+        client.workPreference = localWorkPreference
         hamptonSnapshot = client.snapshot
         // Each reply installs a callback bound to its own operation and ticket.
         client.onSnapshot = nil
@@ -1287,7 +3215,7 @@ final class CompanionStore: ObservableObject {
         closeConnection(.qwen)
         (previous as? HamptonReasonsAssistant)?.onSnapshot = nil
         (previous as? HamptonReasonsAssistant)?.clearSessionContext()
-        assistants[.qwen] = assistantFactory(.qwen, qwenModel)
+        assistants[.qwen] = makeAssistant(.qwen)
         bindHamptonAssistant()
         if route == .local {
             invalidateTextSelection(reason: "Local model changed. Select the passage again to restore its reference.")
@@ -1306,9 +3234,13 @@ final class CompanionStore: ObservableObject {
 
     func shutdownAssistant() async {
         guard !isShuttingDown else { return }
+        arcCapabilities.stopSolving()
+        unityPresentation.stop()
         desktopInterest.cancel(reason: "ARCHi is closing.")
         clearLocalConversation()
+        stopResonancePlayback()
         isShuttingDown = true
+        modelInventoryTask?.cancel(); modelInventoryTask = nil; isRefreshingModels = false
         cancelWork(reason: "App is shutting down.")
         let current = Array(assistants.values)
         for provider in Array(assistants.keys) { closeConnection(provider) }
@@ -1322,21 +3254,32 @@ final class CompanionStore: ObservableObject {
 
     private func client(for provider: AssistantProvider) -> any AssistantClient {
         if let existing = assistants[provider] { return existing }
-        let created = assistantFactory(provider, qwenModel)
+        let created = makeAssistant(provider)
         assistants[provider] = created
         if provider == .qwen { bindHamptonAssistant() }
         return created
+    }
+
+    private func makeAssistant(_ provider: AssistantProvider) -> any AssistantClient {
+        if provider == .qwen, representationMeasurementsEnabled, let reader = representationReader,
+           reader.canMeasureGeneralReplies, reader.hasLimitedShadowReport,
+           reader.modelName == qwenModel, GGUFRepresentationClient.bundledWorkerAvailable {
+            return HamptonReasonsAssistant(model: qwenModel,
+                reasoner: GGUFRepresentationClient(model: qwenModel, reader: reader), nativeRuntime: .shared)
+        }
+        return assistantFactory(provider, qwenModel)
     }
 
     private func isCurrentLane(_ provider: AssistantProvider, owner: UUID, epoch: UInt64,
                                client: any AssistantClient, ticket: ContextTicket) -> Bool {
         guard !isShuttingDown && replyOwners[provider] == owner && assistants[provider] === client
             && connectionGenerations[provider, default: 0] == epoch
-            && isCurrent(ticket, requireVisible: false) else { return false }
+            && isCurrentContent(ticket) else { return false }
+        if provider == .qwen, !requireCurrentLocalPreferenceMemory() { return false }
         // Recheck the actual target before dispatch and every incoming event,
         // even after the short staff animation has completed.
         if let pointing = compareResults[provider]?.receipt?.pointing,
-           !isCurrentPointing(pointing) {
+           (!isCurrent(ticket, requireVisible: false) || !isCurrentPointing(pointing)) {
             cancelWork(reason: "The passage or ARCHi moved. Select the current passage and explain again.")
             return false
         }
@@ -1358,6 +3301,13 @@ final class CompanionStore: ObservableObject {
         replyTasks[provider] = nil
         laneTimeoutTasks.removeValue(forKey: provider)?.cancel()
         isWorking = !replyOwners.isEmpty
+        if provider == .qwen, let receipt = compareResults[provider]?.receipt,
+           (receipt.requestID == knowledgeMethodDraftRequestID || receipt.requestID == knowledgeConceptDraftRequestID) {
+            // Acquisition uses Qwen temporarily without changing the user's
+            // selected chat route or its readiness after the draft ends.
+            assistantProvider = route.primaryProvider
+            refreshRouteConnection()
+        }
         if !isWorking, let receipt = compareResults[provider]?.receipt,
            receipt.pointing != nil, spatialPreview?.ticket == receipt.context {
             invalidatePlacementPreview(reason: "Point and explain finished.")
@@ -1377,12 +3327,12 @@ final class CompanionStore: ObservableObject {
         replyTasks[provider]?.cancel()
         finishOwnership(provider)
         closeConnection(provider)
-        setLane(provider, text: "", status: reason, state: .cancelled)
         if provider == .qwen {
             compareResults[provider]?.receipt?.admissionOutcome = HamptonAdmissionOutcome(status: .stopped,
                 stage: compareResults[provider]?.receipt?.requestStarted == true ? .generation : .connection,
                 role: nil, requestID: nil, reason: .cancelled)
         }
+        setLane(provider, text: "", status: reason, state: .cancelled)
         connectionMessages[provider] = "Response stopped. Connect again when you are ready."
         if provider == .qwen { hamptonSnapshot.proposal = nil }
         if provider == assistantProvider { reply = "The previous response was stopped." }
@@ -1392,8 +3342,11 @@ final class CompanionStore: ObservableObject {
     }
 
     private func cancelLocalWork(reason: String) {
+        cancelActiveARC(reason: reason)
+        arc3.stop(reason: reason)
         let hadLocalWork = replyOwners[.qwen] != nil
         cancelLane(.qwen, reason: reason)
+        if route == .native { cancelLane(.codex, reason: reason) }
         if hadLocalWork && !isWorking && route == .local { workGeneration &+= 1 }
         // Completed local answers can refer to excerpts that have just been
         // revoked, so remove that lane while leaving Codex's result intact.
@@ -1401,8 +3354,8 @@ final class CompanionStore: ObservableObject {
     }
 
     private func failLane(_ provider: AssistantProvider, message: String) {
-        // A local failure never authorizes external processing. The user can
-        // choose an external route and Send a new, visible request instead.
+        // This cleanup never starts external work. Only finishFailedAttempt
+        // can apply the captured route's explicit fallback permission.
         replyTasks[provider]?.cancel()
         finishOwnership(provider)
         closeConnection(provider)
@@ -1417,10 +3370,59 @@ final class CompanionStore: ObservableObject {
         refreshWorkStatus()
     }
 
+    /// Called only for a caught provider failure or the owned reply deadline.
+    /// Invalid proposals, storage failures and cancellations never grant fallback.
+    private func finishFailedAttempt(_ provider: AssistantProvider, error: any Error, message: String,
+                                     request: AssistantRequest, ticket: ContextTicket, route: AssistantRoute,
+                                     requestID: String, inputDigest: String, pointing: AssistantPointingSnapshot?,
+                                     allowsExternalFallback: Bool) {
+        let local = assistants[provider] as? HamptonReasonsAssistant
+        let failedRole = local?.snapshot.admissionOutcome?.role
+        let optionalContextFailure = local?.optionalContextActive == true
+            || failedRole == .memorySelection || failedRole == .memoryReminder
+        let eligible = allowsExternalFallback && provider == .qwen && route == .native && self.route == .native
+            && !optionalContextFailure
+            && (request.localReading?.references.isEmpty ?? true)
+            && compareResults[provider]?.receipt?.readingDependencies == nil
+            && compareResults[provider]?.receipt?.knowledgeDependencies == nil
+            && request.localKnowledge == nil && request.localProcedureKnowledge == nil && !request.isKnowledgeAcquisition
+            && NativeAssistantFallback.isEligible(error) && compareResults[.codex] == nil
+        failLane(provider, message: message)
+        guard eligible, !isShuttingDown, isCurrentContent(ticket) else { return }
+        guard desktopInterestSource == nil || desktopInterestExternalDigest == LessonSource.digest(of: sharedText) else {
+            status = "Local Qwen is unavailable. This window copy is local-only; allow this exact copy before using an external route."
+            return
+        }
+        if let pointing, !isCurrent(ticket, requireVisible: false) || !isCurrentPointing(pointing) { return }
+        do {
+            try retryStewardReceipts()
+            try tokenSteward.registerFallback(requestID: requestID)
+        } catch {
+            stewardMessage = "External fallback was not started: \(error.localizedDescription)"
+            status = stewardMessage ?? "Fallback accounting unavailable"
+            return
+        }
+        let external = AssistantRequest(prompt: request.prompt, sourceName: request.sourceName,
+            sourceText: request.sourceText, sourceRevision: request.sourceRevision,
+            placementRevision: request.placementRevision, settings: request.settings,
+            selection: request.selection, revisionTarget: request.revisionTarget, companion: request.companion)
+        assistantProvider = .codex
+        replySourceSelection = request.selection
+        isWorking = true
+        launchLane(.codex, request: external, ticket: ticket, route: route, requestID: requestID,
+            inputDigest: inputDigest, pointing: pointing,
+            routingReason: "Local Qwen could not finish: \(message) One Codex fallback; no local lessons, personal context or prior conversation forwarded.")
+        status = "Qwen unavailable · using Codex fallback"
+    }
+
     private func setLane(_ provider: AssistantProvider, text: String? = nil, status: String, state: AssistantLaneState) {
         guard var result = compareResults[provider] else { return }
+        let recordsTerminalOutcome = result.state == .pending && state != .pending
         if let text { result.text = text }
         if state == .cancelled || state == .failed {
+            if let receipt = result.receipt {
+                self.retireDocumentWork(requestID: receipt.requestID, provider: provider, failed: state == .failed)
+            }
             result.revision = nil
             // A store-owned timeout can end the lane before the coordinator's
             // terminal callback. Retire only unfinished attempts in the captured
@@ -1436,6 +3438,62 @@ final class CompanionStore: ObservableObject {
         }
         result.status = status; result.state = state; result.receipt?.state = state
         compareResults[provider] = result
+        if provider == .qwen, let id = knowledgeConceptDraftRequestID, result.receipt?.requestID == id {
+            knowledgeConceptDraftMessage = status
+            if state == .failed || state == .cancelled { knowledgeConceptDraft = nil }
+        }
+        if provider == .qwen, result.receipt?.requestID == knowledgeMethodDraftRequestID {
+            knowledgeMethodDraftMessage = status
+            if state == .failed || state == .cancelled { knowledgeMethodDraft = nil }
+        }
+        if recordsTerminalOutcome, let receipt = result.receipt {
+            let key = receipt.requestID + ":" + receipt.provider.rawValue
+            pendingStewardReceipts[key] = receipt
+            do { try tokenSteward.recordLane(receipt); pendingStewardReceipts[key] = nil }
+            catch { stewardMessage = "Answer usage could not be saved: \(error.localizedDescription)" }
+        }
+    }
+
+    private func retryStewardReceipts() throws {
+        for (key, receipt) in pendingStewardReceipts {
+            try tokenSteward.recordLane(receipt)
+            pendingStewardReceipts[key] = nil
+        }
+        for (key, event) in pendingStewardEvaluations {
+            try tokenSteward.recordEvaluation(taskID: event.taskID, evidenceID: event.evidenceID,
+                passed: event.passed, startedAt: event.startedAt, finishedAt: event.finishedAt,
+                sourceStatus: event.sourceStatus, error: event.error,
+                localSolver: event.localSolver, cancelled: event.cancelled,
+                proposalInference: event.proposalInference, proposalInProgress: event.proposalInProgress)
+            pendingStewardEvaluations[key] = nil
+        }
+        for (key, summary) in pendingARC3Summaries {
+            try tokenSteward.recordInteractiveARC(summary)
+            pendingARC3Summaries[key] = nil
+        }
+        for requestID in pendingStewardUseful {
+            try tokenSteward.recordUseful(requestID: requestID)
+            pendingStewardUseful.remove(requestID)
+        }
+    }
+
+    func retryStewardAccounting() {
+        do { try tokenSteward.refresh(); try retryStewardReceipts(); stewardMessage = nil }
+        catch { stewardMessage = "Usage journal still needs attention: \(error.localizedDescription)" }
+    }
+
+    func recordARCEvaluation(_ event: ARCCapabilitiesEvent) {
+        pendingStewardEvaluations[event.taskID] = event
+        do {
+            try retryStewardReceipts()
+            stewardMessage = nil
+        } catch { stewardMessage = "ARC evidence remains separate; usage journal failed: \(error.localizedDescription)" }
+    }
+
+    func recordUsefulReply(requestID: String) {
+        pendingStewardUseful.insert(requestID)
+        do { try retryStewardReceipts(); stewardMessage = nil }
+        catch { stewardMessage = "Usefulness could not be recorded in Token Steward: \(error.localizedDescription)" }
     }
 
     private func refreshRouteConnection() {
@@ -1452,7 +3510,13 @@ final class CompanionStore: ObservableObject {
 
     private func refreshWorkStatus() {
         isWorking = !replyOwners.isEmpty
-        if route == .compare {
+        if knowledgeConceptDraftRequestID != nil {
+            status = knowledgeConceptDraftMessage ?? "Concept draft"
+            return
+        }
+        if knowledgeMethodDraftPage != nil {
+            status = knowledgeMethodDraftMessage ?? "Method candidate"
+        } else if route == .compare {
             if isWorking { status = "Waiting for " + route.providers.filter { replyOwners[$0] != nil }.map(\.name).joined(separator: " and ") + "…" }
             else {
                 let completed = compareResults.values.filter { $0.state == .complete }.count
@@ -1464,22 +3528,57 @@ final class CompanionStore: ObservableObject {
         }
     }
 
-    // Item recipes share the existing profile's atomic admission and recovery.
+    // Item recipes and acquisition claims share the profile's atomic admission.
+    func marketItemAcquisition(for item: CompanionItemPackage) -> MarketplaceItemAcquisition? {
+        preferenceDocument.itemAcquisitions?.first { $0.matches(item) }
+    }
+
     @discardableResult
-    func collectMarketItem(_ item: CompanionItemPackage) -> Bool {
-        guard !isShuttingDown, item.isValid else {
+    func collectMarketDownload(_ download: MarketplaceDownloadedItem) -> Bool {
+        guard marketplaceCatalog.isCurrent(download) else {
+            marketplaceMessage = "This download is no longer current. Download it again from the signed-in account library."
+            return false
+        }
+        return collectMarketItem(download.recipe, acquisition: download.acquisition)
+    }
+
+    @discardableResult
+    func collectMarketItem(_ item: CompanionItemPackage, acquisition: MarketplaceItemAcquisition? = nil) -> Bool {
+        guard !isShuttingDown else {
             marketplaceMessage = "Choose a valid item recipe before adding it."; return false
         }
-        guard !itemLibrary.contains(where: { $0.id == item.id }) else {
+        let review = item.review
+        guard review.isValid else {
+            marketplaceMessage = review.correctionMessage; return false
+        }
+        guard acquisition?.matches(item) ?? true else {
+            marketplaceMessage = "The acquisition record does not match this exact design. Nothing was added."; return false
+        }
+        let saved = marketItemAcquisition(for: item)
+        guard acquisition == nil || saved == nil || saved == acquisition else {
+            marketplaceMessage = "This design already has a different acquisition record. Its saved provenance was preserved."; return false
+        }
+        let alreadyCollected = itemLibrary.contains(where: { $0.id == item.id })
+        if alreadyCollected {
+            guard profileRecoveryBlock == nil, preferenceFileReadable, preferenceBaselineKnownCurrent,
+                  let disk = try? NativePreferencePersistence.read(preferenceURL), disk.baseline == preferenceBaseline else {
+                marketplaceMessage = "The saved collection changed outside this session. Reopen ARCHi before adding this design."
+                return false
+            }
+        }
+        guard !alreadyCollected || (acquisition != nil && saved == nil) else {
             marketplaceMessage = "This exact design is already in My items."; return true
         }
-        guard itemLibrary.count < CompanionItemPackage.maximumLibraryCount else {
+        guard alreadyCollected || itemLibrary.count < CompanionItemPackage.maximumLibraryCount else {
             marketplaceMessage = "Your local Alpha collection holds eight designs. Remove one before adding another."; return false
         }
         var next = preferenceDocument
-        next.itemLibrary.append(item)
+        if !alreadyCollected { next.itemLibrary.append(item) }
+        if let acquisition { next.itemAcquisitions = (next.itemAcquisitions ?? []) + [acquisition] }
         guard commitPreferenceDocument(next) else { marketplaceMessage = status; return false }
-        marketplaceMessage = "Added \(item.title) to My items on this Mac. Choose Equip when ready."
+        marketplaceMessage = alreadyCollected
+            ? "Saved this design's catalog acquisition declaration on this Mac. Legal ownership has not been verified."
+            : "Added \(item.title) to My items on this Mac. Choose Equip when ready."
         return true
     }
 
@@ -1543,6 +3642,8 @@ final class CompanionStore: ObservableObject {
         guard !isShuttingDown, itemLibrary.contains(item) else { return false }
         var next = preferenceDocument
         next.itemLibrary.removeAll { $0.id == item.id }
+        next.itemAcquisitions?.removeAll { $0.recipeID == item.id }
+        if next.itemAcquisitions?.isEmpty == true { next.itemAcquisitions = nil }
         if next.preferences?.equipment.design?.id == item.id { next.preferences?.equipment = .empty }
         guard commitPreferenceDocument(next) else { marketplaceMessage = status; return false }
         if preferences.equipment.design?.id == item.id { preferences.equipment = .empty }
@@ -1777,6 +3878,25 @@ final class CompanionStore: ObservableObject {
         (!requireVisible || isVisible) && ticket == contextTicket()
     }
 
+    /// Ordinary content work depends on the request, source and exact selection.
+    /// Companion movement changes presentation but cannot change those inputs.
+    /// Hide, close, source replacement and profile changes still revoke work
+    /// through their existing generation/selection invalidation paths.
+    func isCurrentContent(_ ticket: ContextTicket) -> Bool {
+        ticket.generation == workGeneration && ticket.source == sourceRevision
+            && ticket.selection == selectionRevision
+    }
+
+    /// A pointing receipt retains its additional placement and live geometry
+    /// requirements, including when a completed answer is reviewed later.
+    func isCurrentReplyContext(_ receipt: AssistantLaneReceipt) -> Bool {
+        guard isCurrentContent(receipt.context), readingDependenciesAreCurrent(receipt.readingDependencies),
+              knowledgeDependenciesAreCurrent(receipt.knowledgeDependencies) else { return false }
+        if receipt.provider == .qwen, !localPreferenceMemoryIsCurrent { return false }
+        guard let pointing = receipt.pointing else { return true }
+        return isCurrent(receipt.context, requireVisible: false) && isCurrentPointing(pointing)
+    }
+
     private func record(_ message: String) {
         activity.append(message)
         if activity.count > 40 { activity.removeFirst(activity.count - 40) }
@@ -1786,6 +3906,11 @@ final class CompanionStore: ObservableObject {
 // The existing preference owner is the only durable lesson write boundary.
 // Model clients receive immutable snapshots and have no way to keep a lesson.
 extension CompanionStore {
+    var currentTaskScope: HamptonTaskScope {
+        if !selectedKnowledgePages.isEmpty { return .conversation }
+        if requestsRevision { return .passageRevision }
+        return sourceName == nil ? .conversation : .documentQuestion
+    }
     var currentLessonSource: LessonSource? {
         guard let name = sourceName else { return nil }
         return LessonSource(name: name, digest: SHA256.hash(data: Data(sharedText.utf8))
@@ -1796,40 +3921,136 @@ extension CompanionStore {
         route == .codex ? [] : matchingLessons(question: prompt)
     }
 
-    func matchingLessons(question: String) -> [LessonSnapshot] {
-        keptLessons.filter { $0.matches(question: question, sourceName: sourceName,
-            sourceText: sharedText, now: wallClock()) }.map(LessonSnapshot.init(lesson:))
+    func matchingLessons(question: String, taskScope: HamptonTaskScope? = nil) -> [LessonSnapshot] {
+        dependencyBoundedLessons(question: question, taskScope: taskScope ?? currentTaskScope).snapshots
+    }
+
+    /// Separate from a blocked-request reason: an otherwise valid local reply
+    /// can proceed with the lessons that fit its exact dependency envelope.
+    var nextReplyKnowledgeOmissionMessage: String? {
+        guard route != .codex else { return nil }
+        let count = dependencyBoundedLessons(question: prompt, taskScope: currentTaskScope).omissionCount
+        guard count > 0 else { return nil }
+        let subject = count == 1 ? "1 saved lesson will" : "\(count) saved lessons will"
+        return subject + " be left out of this reply to keep its combined page and source references within the local context limit. Your saved lessons are unchanged."
+    }
+
+    private func dependencyBoundedLessons(question: String, taskScope: HamptonTaskScope)
+        -> (snapshots: [LessonSnapshot], omissionCount: Int) {
+        guard localPreferenceMemoryIsCurrent else { return ([], 0) }
+        var pages = selectedKnowledgePages
+        var sources = currentKnowledgeContext?.readingSources ?? []
+        if selectedKnowledgePages.isEmpty, taskScope == .documentQuestion,
+           sourceName != nil, !sharedText.isEmpty {
+            sources = HamptonMemoryDependencies.exactUnion(sources, currentReadingReferences.map(\.binding))
+        }
+        if !nextReplyConversation.isEmpty {
+            pages = HamptonMemoryDependencies.exactUnion(pages, localConversationKnowledgePages ?? [])
+            sources = HamptonMemoryDependencies.exactUnion(sources, localConversationReadingSources ?? [])
+        }
+        let now = wallClock()
+        var snapshots: [LessonSnapshot] = []
+        var omissionCount = 0
+        // Retain persisted lesson order. Exact duplicates share a binding;
+        // differing versions of one identity remain a conflict, never a merge.
+        for lesson in keptLessons where (selectedKnowledgePages.isEmpty || lesson.source == nil)
+            && lessonDependenciesAreCurrent(lesson.origin)
+            && lesson.matches(question: question, sourceName: sourceName,
+                sourceText: sharedText, now: now, taskScope: taskScope) {
+            let nextPages = HamptonMemoryDependencies.exactUnion(pages, lesson.origin?.knowledgePages ?? [])
+            let nextSources = HamptonMemoryDependencies.exactUnion(sources, lesson.origin?.readingSources ?? [])
+            guard KnowledgePageBinding.valid(nextPages.isEmpty ? nil : nextPages),
+                  ReadingSourceBinding.valid(nextSources.isEmpty ? nil : nextSources) else {
+                omissionCount += 1
+                continue
+            }
+            pages = nextPages
+            sources = nextSources
+            snapshots.append(LessonSnapshot(lesson: lesson))
+        }
+        return (snapshots, omissionCount)
     }
 
     func currentKeptLesson(matching snapshot: LessonSnapshot) -> KeptLesson? {
-        keptLessons.first {
-            LessonSnapshot(lesson: $0) == snapshot && $0.isValid
+        guard localPreferenceMemoryIsCurrent else { return nil }
+        return keptLessons.first {
+            LessonSnapshot(lesson: $0) == snapshot && $0.isValid && lessonDependenciesAreCurrent($0.origin)
                 && ($0.expiresAt == nil || $0.expiresAt! > wallClock())
         }
     }
 
+    /// Rebuild the local structure study from current owners, never graph size
+    /// or particle count. Reading this projection cannot save or award a body.
+    var liveLiminalPointStructure: LiminalPointStructure? {
+        LiminalV008Runtime.asset.flatMap { liminalKnowledgePresentation(asset: $0)?.structure }
+    }
+
+    func liminalFormDevelopment(at now: Date = Date()) -> LiminalFormDevelopment.Snapshot? {
+        guard let individual = activeQiMon, individual.isValid,
+              profileRecoveryBlock == nil, !isShuttingDown,
+              let disk = try? NativePreferencePersistence.read(preferenceURL), disk.baseline == preferenceBaseline,
+              evolution.observedJourneyOriginDigest == nil || evolution.observedJourneyOriginDigest == individual.originDigest,
+              evolution.practiceJourneyOriginDigest == nil || evolution.practiceJourneyOriginDigest == individual.originDigest
+        else { return nil }
+        let available = Set(keptLessons.filter {
+            currentKeptLesson(matching: LessonSnapshot(lesson: $0)) != nil
+                && ($0.source == nil || $0.source == currentLessonSource)
+        }.map(\.id))
+        let feedbackCurrent = documentWork.isCurrentOnDisk && tokenSteward.isCurrentOnDisk
+            && evolution.historicalEvidenceUnavailableReason == nil && evolution.persistenceBlockedReason == nil
+        let withdrawn = HamptonMemoryDependencies.withdrawnDevelopmentReadings(tasks: tokenSteward.tasks)
+            .union(documentWork.records.compactMap { record in
+                guard let feedback = record.feedback, feedback.verdict != .helpful else { return nil }
+                return UUID(uuidString: record.requestID)
+            })
+        return LiminalFormDevelopment.build(originDigest: individual.originDigest, lessons: keptLessons,
+            currentLessonIDs: available, receipts: evolution.usefulReceipts.filter { !withdrawn.contains($0.requestID) },
+            evidenceOrigin: feedbackCurrent ? evolution.practiceJourneyOriginDigest : nil, now: now,
+            currentKnowledgePages: readingSources.latestKnowledgePages.filter { readingSources.availability(of: $0) == nil })
+    }
+
+    /// Explicit user action. The study can use the current profile's reviewed
+    /// references without inventing per-receipt individual attribution.
+    @discardableResult func connectLiminalLearningStudy() -> Bool {
+        guard !isWorking, let individual = activeQiMon,
+              liminalFormDevelopment(at: wallClock()) != nil,
+              evolution.persistenceBlockedReason == nil,
+              documentWork.isCurrentOnDisk, tokenSteward.isCurrentOnDisk else { return false }
+        return evolution.bindPracticeJourney(individual.originDigest)
+    }
+
     func lessonAvailability(_ lesson: KeptLesson) -> String {
+        if !lessonDependenciesAreCurrent(lesson.origin) { return "Supporting reading copy changed or was forgotten · review this lesson before reuse" }
         if let expiry = lesson.expiresAt, expiry <= wallClock() { return "Expired · revise to use again" }
         if let source = lesson.source, source != currentLessonSource {
             return "Waiting for the same shared copy · \(source.name)"
+        }
+        if let scope = lesson.taskScope {
+            return "\(scope.title) · " + (scope == currentTaskScope ? "matches this activity" : "available for that activity")
         }
         return "Available when your question contains “\(lesson.topic)”"
     }
 
     func beginLessonCorrection(for provider: AssistantProvider? = nil, revisingID: String? = nil) {
         guard !isShuttingDown else { return }
+        if provider == .qwen, !requireCurrentLocalPreferenceMemory() { return }
+        if let provider, compareResults[provider]?.receipt?.isKnowledgeAcquisition == true { return }
         if let revisingID {
             guard let prior = keptLessons.first(where: { $0.id == revisingID }) else { return }
             lessonDraft = LessonCorrectionDraft(lessonID: prior.id, expectedRevision: lessonRevision,
                 prior: prior, topic: prior.topic, text: prior.text, reason: prior.reason,
-                source: prior.source, origin: prior.origin, expiresAt: prior.expiresAt)
+                source: prior.origin?.knowledgePages == nil ? prior.source : nil,
+                origin: prior.origin, expiresAt: prior.expiresAt,
+                taskScope: prior.origin?.knowledgePages == nil ? prior.taskScope : .conversation)
         } else {
             var origin: LessonOrigin?
             if let provider, let result = compareResults[provider], result.state == .complete,
                !result.text.isEmpty, let receipt = result.receipt {
-                origin = LessonOrigin(requestID: receipt.requestID, inputDigest: receipt.inputDigest)
+                origin = LessonOrigin(requestID: receipt.requestID, inputDigest: receipt.inputDigest,
+                    readingSources: receipt.readingDependencies, knowledgePages: receipt.knowledgeDependencies)
             }
-            lessonDraft = LessonCorrectionDraft(expectedRevision: lessonRevision, prior: nil, origin: origin)
+            lessonDraft = LessonCorrectionDraft(expectedRevision: lessonRevision, prior: nil, origin: origin,
+                taskScope: origin?.knowledgePages == nil ? nil : .conversation)
         }
         lessonMessage = "Review the lesson and when to use it. Nothing is saved until you press Keep."
         open(.memory)
@@ -1852,6 +4073,14 @@ extension CompanionStore {
             lessonMessage = "The shared copy changed. Share the original copy again, or remove its scope before keeping."
             return false
         }
+        guard lessonDependenciesAreCurrent(draft.origin) else {
+            lessonMessage = "A supporting reading copy changed or was forgotten. Start a fresh review using current sources."
+            return false
+        }
+        if draft.origin?.knowledgePages != nil, draft.taskScope != .conversation || draft.source != nil {
+            lessonMessage = "A lesson supported by knowledge pages must use local chat without an exact shared-copy restriction. Review a fresh Chat draft before keeping."
+            return false
+        }
         let now = wallClock()
         guard draft.prior?.revision != UInt64.max else { return false }
         let lesson = KeptLesson(id: draft.lessonID ?? UUID().uuidString,
@@ -1860,7 +4089,7 @@ extension CompanionStore {
             text: draft.text.trimmingCharacters(in: .whitespacesAndNewlines),
             reason: draft.reason.trimmingCharacters(in: .whitespacesAndNewlines),
             source: draft.source, origin: draft.origin,
-            createdAt: draft.prior?.createdAt ?? now, updatedAt: now, expiresAt: draft.expiresAt)
+            createdAt: draft.prior?.createdAt ?? now, updatedAt: now, expiresAt: draft.expiresAt, taskScope: draft.taskScope)
         guard lesson.isValid, lesson.expiresAt == nil || lesson.expiresAt! > now else {
             lessonMessage = "Use a topic phrase of 2–80 characters, a lesson of 1–600 characters, an optional reason up to 300 characters, and a future expiry if set."
             return false
@@ -1906,6 +4135,8 @@ extension CompanionStore {
         export.focusGesture = nil
         export.qiMon = nil
         export.itemLibrary = []
+        export.itemAcquisitions = nil
+        export.personalContext = nil
         return try export.encoded()
     }
 
@@ -1919,6 +4150,52 @@ extension CompanionStore {
             try lessonExportData().write(to: url, options: .atomic)
             lessonMessage = "Exported \(keptLessons.count) kept lessons, including expired or unavailable ones."
         } catch { lessonMessage = "Could not export lessons. The saved originals are unchanged." }
+    }
+
+    var personalContext: PersonalContext? { preferenceDocument.personalContext }
+
+    /// The loaded envelope owns saved private context and lessons. Another
+    /// session's correction or forget must revoke their cached and indirect use,
+    /// just as a changed kept-source journal revokes its request snapshots.
+    private var localPreferenceMemoryIsCurrent: Bool {
+        guard preferenceDocument.personalContext != nil || !preferenceDocument.lessons.isEmpty else { return true }
+        guard preferenceFileReadable, preferenceBaselineKnownCurrent, profileRecoveryBlock == nil else { return false }
+        do { return try NativePreferencePersistence.read(preferenceURL).baseline == preferenceBaseline }
+        catch { return false }
+    }
+
+    private func requireCurrentLocalPreferenceMemory() -> Bool {
+        guard !localPreferenceMemoryIsCurrent else { return true }
+        preferenceBaselineKnownCurrent = false
+        clearSessionContext()
+        let reason = "Saved personal context or lessons changed outside this session. Reopen ARCHi before using local memory again."
+        localConversationNotice = reason
+        lessonMessage = reason
+        if assistantProvider == .qwen { reply = reason }
+        status = reason
+        return false
+    }
+
+    @discardableResult
+    func updatePersonalContext(_ value: PersonalContext?, expected: PersonalContext?) -> Bool {
+        guard !isShuttingDown, preferenceDocument.personalContext == expected,
+              value?.isValid ?? true else {
+            status = "Profile changed or needs correction. Review the current context before saving."
+            return false
+        }
+        var document = preferenceDocument
+        var next = value
+        if let expected, next != nil { next?.revision = expected.revision + 1 }
+        document.personalContext = next
+        guard commitPreferenceDocument(document) else { return false }
+        // A correction/forget must not leak an old profile through follow-ups,
+        // pending callbacks, optional context banks or a stale visible answer.
+        cancelWork(reason: "Personal context updated. Earlier replies cleared.")
+        clearSessionContext()
+        clearLocalConversation()
+        status = next == nil ? "Personal context forgotten on this Mac." : "Personal context saved · local Qwen only."
+        objectWillChange.send()
+        return true
     }
 
     private func commitPreferenceDocument(_ proposed: NativePreferenceDocument) -> Bool {
@@ -1963,6 +4240,34 @@ extension CompanionStore {
         }
     }
 
+    private func bindDocumentDataOwners() {
+        documentMethodToTry = nil
+        documentDataSubscriptions.removeAll()
+        // Token Steward installs its immutable journal before publishing revision.
+        // Read that owner's fresh task projection, not a duplicate feedback store.
+        self.tokenSteward.$revision.sink { [weak self] _ in
+            guard let self else { return }
+            let excluded = HamptonMemoryDependencies.invalidatedReadings(tasks: self.tokenSteward.tasks)
+            self.evolution.setReadingFeedbackExclusions(
+                HamptonMemoryDependencies.withdrawnDevelopmentReadings(tasks: self.tokenSteward.tasks))
+            if !self.localConversationRequestIDs.isDisjoint(with: excluded) {
+                self.invalidateCorrectedReadingContinuation()
+            }
+        }.store(in: &documentDataSubscriptions)
+        self.documentWork.$records.sink { [weak self] records in
+            self?.evolution.setDocumentFeedbackExclusions(Set(records.compactMap { record in
+                guard let feedback = record.feedback, feedback.verdict != .helpful else { return nil }
+                return UUID(uuidString: record.requestID)
+            }))
+        }.store(in: &documentDataSubscriptions)
+        self.documentWork.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &documentDataSubscriptions)
+        self.documentProcedures.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &documentDataSubscriptions)
+        self.readingSources.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &documentDataSubscriptions)
+    }
+
     // Recovery is a file operation followed by admission through these existing
     // owners. The backup view never becomes a second source of companion state.
     var recoveryPreferenceURL: URL { preferenceURL }
@@ -1971,6 +4276,7 @@ extension CompanionStore {
         if isShuttingDown { return "ARCHi is closing. Reopen before managing backups." }
         if isWorking { return "Finish or stop the current reply before managing backups." }
         if voiceInput.isActive { return "Finish or cancel dictation before managing backups." }
+        if pendingDocumentReceipt != nil { return "Save the pending document receipt before managing backups." }
         if connectionStates.values.contains(.connecting) { return "Wait for the current connection attempt to finish." }
         return nil
     }
@@ -1981,7 +4287,10 @@ extension CompanionStore {
         if profileRecoveryBlock == nil, preferences != (preferenceDocument.preferences ?? CompanionPreferences()) {
             return "Save your changed appearance and rhythm settings before restoring."
         }
+        if isImageRegionImportPresented { return "Close the image region draft before restoring." }
+        if pastedDocumentDraft.hasContent { return "Use or discard the pasted text draft before restoring." }
         if lessonDraft != nil { return "Keep or discard the lesson draft before restoring." }
+        if hasOpenKnowledgeDraft { return "Save or discard the knowledge page or connection draft before restoring." }
         if focusGestureDraft != nil { return "Keep or discard the gesture draft before restoring." }
         if voiceInput.phase == .review { return "Use or discard the voice draft before restoring." }
         return nil
@@ -2000,11 +4309,36 @@ extension CompanionStore {
     /// No provider invocation, new identity, or save is performed during reload.
     func admitRestoredProfile() throws {
         let loaded = try NativePreferencePersistence.read(preferenceURL)
+        let restoredWork = DocumentWorkJournal(url: preferenceURL.deletingPathExtension().appendingPathExtension("document-work.json"))
+        let restoredMethods = DocumentProcedureLibrary(url: preferenceURL.deletingPathExtension().appendingPathExtension("document-procedures.json"))
+        let restoredSources = ReadingSourceLibrary(url: preferenceURL.deletingPathExtension().appendingPathExtension("reading-sources.json"))
+        guard restoredWork.loadError == nil, restoredMethods.loadError == nil, restoredSources.loadError == nil else {
+            throw DesktopRecoveryError.blocked("The restored document work could not be loaded.")
+        }
         cancelWork(reason: "Saved profile restored. Earlier replies and references cleared.")
+        clearParticleNavigationForProfileChange()
+        selectedReadingSourceIDs = []
+        selectedKnowledgePageID = nil
+        inspectedKnowledgeRecord = nil
+        selectedKnowledgePages = []
+        knowledgePageMessage = nil
+        documentReadingPreview = nil
+        arc3.resetForProfile()
+        lastARC3Summary = nil
         clearSessionContext()
         compareResults = [:]
         invalidateTextSelection(reason: "Saved profile restored. Select a passage again.")
         requestsRevision = false
+        workingCopyUndo = nil
+        clearPreparedDocumentProcedure()
+        documentProcedureRequests = [:]
+        documentWorkMessage = nil
+        documentReadingMessage = nil
+        documentWork = restoredWork
+        documentProcedures = restoredMethods
+        readingSources = restoredSources
+        bindDocumentDataOwners()
+        evolution.historicalEvidenceUnavailableReason = nil
         stopFocusGesture()
         reactor.stop(reason: "Saved profile restored. Local artwork is active.")
         evolution.persistenceBlockedReason = nil
@@ -2032,11 +4366,25 @@ extension CompanionStore {
 
     func blockProfileForRecovery(_ reason: String) {
         cancelWork(reason: "Profile recovery needs review.")
+        clearParticleNavigationForProfileChange()
         clearSessionContext()
         compareResults = [:]
         profileRecoveryBlock = reason
         preferenceFileReadable = false
         evolution.persistenceBlockedReason = reason
+        documentWork = DocumentWorkJournal(url: preferenceURL.deletingPathExtension().appendingPathExtension("document-work.json"), recoveryBlocked: true)
+        documentProcedures = DocumentProcedureLibrary(url: preferenceURL.deletingPathExtension().appendingPathExtension("document-procedures.json"), recoveryBlocked: true)
+        readingSources = ReadingSourceLibrary(url: preferenceURL.deletingPathExtension().appendingPathExtension("reading-sources.json"), recoveryBlocked: true)
+        bindDocumentDataOwners()
+        evolution.historicalEvidenceUnavailableReason = reason
+        workingCopyUndo = nil
+        clearPreparedDocumentProcedure()
+        selectedReadingSourceIDs = []
+        selectedKnowledgePageID = nil
+        inspectedKnowledgeRecord = nil
+        selectedKnowledgePages = []
+        knowledgePageMessage = nil
+        documentReadingPreview = nil
         status = reason
     }
 
@@ -2192,4 +4540,23 @@ extension CompanionStore {
         }
         return true
     }
+}
+
+// Shared request ownership also owns invalidation after reading-copy changes.
+extension CompanionStore {
+    /// Invalidate the request owner and all indirect transient context too.
+    /// Persistent lessons retain their provenance and become unavailable through
+    /// their exact source-version dependency checks, rather than being erased.
+    func invalidateReadingContext(reason: String) {
+        cancelWork(reason: reason)
+        clearSessionContext()
+        compareResults = [:]
+        documentReadingPreview = nil
+        documentReadingMessage = reason
+        // Keep the exact method binding with any instruction still in the
+        // composer. Its source checks will now block stale use. Clearing only
+        // the binding would turn that instruction into unqualified plain text;
+        // the prepared-method UI provides an explicit Detach action instead.
+    }
+
 }

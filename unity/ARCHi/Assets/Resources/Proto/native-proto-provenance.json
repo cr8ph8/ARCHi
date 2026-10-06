@@ -1,0 +1,12 @@
+{
+  "schema": "archi-native-presentation-art/v1",
+  "authoringDirectory": "desktop/ArtSources/proto-blender-v1",
+  "authorManifestSHA256": "3fdaa291413f37a3359f126f51eb5cfea1f53d34ec6e7e77ba2f3a0b4f4c2949",
+  "artifacts": {
+    "proto-body.png": "c1de08a1afb9532d3cd459f9d166dcc58f4d05852ba3fb98d6c3f4bb3319b338",
+    "proto-character.fbx": "e320fcfeff90727d49e341531db50622d4aa6f03835f20e1138fbe98b9c8a5b9"
+  },
+  "scope": "Explicit Proto body expression for the current KIN individual. Current KIN retains its own Seed/cursor. This does not prescribe the Seed of future companions.",
+  "authority": "Read-only native-selected presentation; no development or canonical-state mutation.",
+  "rendering": "Native PNG portrait plus authored FBX with CompactSeed blendshapes and Rest/Listen/Point clips. Unity uses a luminous opaque material fallback."
+}

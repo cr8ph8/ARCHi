@@ -1,0 +1,83 @@
+# Native Q2E control for document work, reading and ARC3
+
+> Publication note: references marked “local reference” are intentionally omitted from this curated snapshot. Their authored documents and receipts remain preserved in the main workspace; this page does not reproduce their evidence.
+
+19 September 2026 · Historical installed observation and v1 derivation
+
+**Current scope, 5 October 2026:** document revision, reading and ARC3 consume the shared controller and numerical approach policy. Their records, coordinate identities and admission remain separate. See [numerical adaptation](native-numerical-adaptation.md) and the dated consolidation note below. The two-loop account and original formulas that follow preserve the September evidence; they are not a new installed qualification.
+
+Document preparation wording updated 27 September 2026 for [explicit method selection](native-method-finder.md). The original observation and v1 mathematical definitions below are retained; current document numerical updates are described in [numerical adaptation](native-numerical-adaptation.md).
+
+Native ARCHi now has a shared operational controller with two consumers: document revision and bounded ARC3 planning. It computes an approach from actual domain records, freezes that decision before dispatch, and uses subsequent outcomes when deciding the next approach. The lanes have concrete consumers; they are not only diagnostic labels.
+
+The normal build and installer completed, the previous app bundle was preserved, and the installed app opened. With no passage selected, Work together showed **Next approach · Pause and review**, a disabled **Prepare next step**, **Why this approach**, and **Qwen connected · nothing sent yet**. The existing Liminal/Garnet Seed remained visible. This observes the installed prerequisite state; a populated document-control workflow and ARC3 planning episode remain unexercised in this increment. No tests, benchmarks, model calls or games were run. The source and this narrow observation do not establish runtime performance, a trained world model, learned coupling or general intelligence.
+
+## Source derivation and coordinates
+
+`HamptonQ2EController.swift` adapts the donor solver's `src/arc_q2e/qstate_controller.py` and `qstate_coupling_matrix.py`: bounded diagnostic pressures select an authored control lane. The outcome update comes from Qi Experiments' `qi_experiments/critic.py` (`BetaCell`/`TabularBetaCritic`). The ARC compiler labels and heuristic weights are not imported as facts about writing or game semantics; the native policy declares its own operational coordinates.
+
+Policy version: **`hampton-native-qstate-control/v1`**. Let `clip(x)` clamp to `[0,1]`, `S` be retained support, `C` contradictions, `U` unchanged/stalled steps, and `A` currently available alternatives. Counts have domain-specific meanings below.
+
+| Coordinate | Native formula | Unit and meaning |
+|---|---|---|
+| `support` | `(S + 1) / (S + C + 2)` | Dimensionless Beta(1,1) outcome statistic, not calibrated success probability. Unreviewed work supplies no positive or negative review. |
+| `coveragePressure` | `A > 0 ? 1 − support : 1` | Dimensionless need for another available approach. |
+| `verifierPressure` | `clip(0.20·C + 0.15·U)` | Authored pressure from contradictions and stalled observations. |
+| `alternativeCoverage` | `clip(A / 8)` | Dimensionless candidate-count saturation; eight is a policy scale, not a task-success target. |
+| `resourceRemaining` | `remainingBudget / totalBudget` | Fraction of the domain's action budget remaining; not money, tokens or energy. |
+
+Base lane weights are:
+
+```text
+retain = clip(support · (1 − verifierPressure))
+expand = clip(.45·coveragePressure + .25·alternativeCoverage
+              + .15·(1 − support) − .25·verifierPressure)
+repair = clip(verifierPressure + .25·coveragePressure)
+```
+
+For a lane with retained attributed outcomes, its Beta mean is `(helpful + 1) / (helpful + corrections + 2)`, and its weight becomes `clip(baseWeight · (0.5 + mean))`. Both consumers supply these per-lane outcomes with different meanings: document reviews and failed checks, or ARC3 environment-reported progress and refutations/game over. Unknown outcomes leave the lane's critic unchanged. These tables are recomputed from existing records, not stored separately.
+
+Selection uses explicit precedence rather than unconstrained maximum weight: invalid inputs/prerequisites, exhausted budget, no alternatives or eight stalled steps select **stop**. Verifier pressure at least `0.4`, three stalled steps, or a correction with dominant repair weight select **repair**. Positive support with retain weight at least expand weight selects **retain**; otherwise select **expand**. A revisioned decision retains signals, coordinates, weights, lane, reason and binding digest. Coordinate deltas compare with a compatible previous decision, or zero for a new context. They are explanatory differences, not a Lyapunov proof or a learned model update.
+
+## The two execution loops
+
+| Lane | Document consumer | ARC3 consumer |
+|---|---|---|
+| Retain | **Prepare next step** preserves an explicitly selected method and authored draft. With no method attached and an empty draft, prepare an ordinary checked revision. | Reuse the first edge of a bounded observed route to a state with untried actions, then replan. |
+| Expand | With no method attached and an empty draft, prepare one ordinary checked passage revision; otherwise preserve the current method and draft. | Try a legal action not yet observed at this frame. |
+| Repair | Preserve the current method binding and authored draft. With no method attached and an empty draft, prepare a fresh approach that checks the stated requirements. | Prefer another untried action with stronger penalties for refutations, invalidated transitions and game-over outcomes. |
+| Stop | Preparation/controlled local Send does not proceed until prerequisites are resolved. | Retain a planning pause without dispatch or implicit RESET; leave manual controls available. |
+
+**Document loop.** The adapter reads the latest eight records matching the current shorter-text and exact-numbers/links requirements. Helpful checked applied results supply support. A blocked proposal with a known failed mechanical check, permanent procedure counterexample or non-Helpful review supplies correction pressure. Transport failures and uncertain execution remain unknown. Alternatives are the available latest methods plus ordinary revision. The budget is one proposed revision per explicit Send; prerequisites include a current shared selection, current journals and no pending edit receipt.
+
+The visible **Next approach** card explains the lane. **Prepare next step** enables Revise mode and fills only an empty draft with no attached method; it sends nothing. Saved-method choice goes through the [method finder or full-library preview](native-method-finder.md), followed by explicit confirmation that rechecks the current draft, passage, requirements, owners and source support. Helpful history alone does not select a method. A stale attached method remains visible and blocks Send, including after supporting-source withdrawal. **Detach procedure** is an explicit user action; repair does not detach it automatically.
+
+Send captures the current decision for the local Qwen revision lane, and the existing document journal retains it before generation. Cloud lanes receive no local controller payload. Review and Apply still own changes to the working copy. Helpful/correction/withdrawal feedback updates the retained record; the next projection recomputes global and attributed lane outcomes instead of incrementing a second counter. Saved-method version history and outcome ordering remain separate from this recent requirement-scoped controller window.
+
+**ARC3 loop.** `ARC3Planner` reads at most 63 transitions after the current reset/level boundary. Support counts non-invalidated, prediction-supported transitions that changed the visible frame; contradictions count refuted predictions. Stalling counts consecutive steps without reported progress or a newly observed changed state. Alternatives are untried legal candidates plus a reachable observed frontier route. Budget units are environment action dispatches; the explicit batch remains limited to 1–8 actions.
+
+Per-lane ARC3 feedback additionally joins observed planned attempts to their exact before/action/after transition within the current game since RESET. Reported level progress or WIN is positive; prediction refutation or GAME_OVER is negative. Other frame changes remain unrated by this critic. A repeated attempt ID is counted once. Earlier level progress can prioritize a non-coordinate action kind; successful click coordinates are not transferred between levels.
+
+Click candidates use up to 24 visible color-region points plus the existing grid fallback. Region color is not object identity. The partial observation graph excludes no-ops, contradictory/invalidated edges, terminal edges and repeatedly traversed edges. Route search is bounded to six steps, 64 queued states, and the remaining batch/episode budget. Only the first route action executes; the planner observes and replans before another action.
+
+Before transport dispatch, `ARC3SessionStore` rechecks game, level, base frame, dispatch count and chosen legal action, then persists the frozen plan and expected digest with the requested attempt. A response separately records new/revisited/unchanged visible frame, environment level progress, win or game over. Prediction comparison can invalidate a route. Visible change alone is not level completion. Actual transitions therefore change the next plan without admitting a predicted frame as observed state.
+
+## Ownership and limits
+
+Document decisions are optional fields on existing `DocumentWorkRecord` entries; ARC3 plans belong to existing episode attempts/transitions. Older records without a decision receive no invented lane attribution. The controller is a pure computation and owns no independent canonical memory, identity, score database, model weights or execution port. Rebuilding a view cannot create another outcome. Neither consumer awards a skill certificate or changes the companion's appearance.
+
+This completes a bounded native operational control path for these two domains. Remaining work includes learned/calibrated coupling, measured transfer, richer task goals, cross-domain dependency retrieval, general-purpose workflow planning and learned prediction. The authored matrix and Beta updates are useful implementation mechanisms; their presence does not establish beneficial generalization or completion of all Hampton research.
+
+Implementation: [HamptonQ2EController.swift](../desktop/Sources/ARCHiDesktop/HamptonQ2EController.swift), [HamptonDocumentControl.swift](../desktop/Sources/ARCHiDesktop/HamptonDocumentControl.swift), [CompanionStore.swift](../desktop/Sources/ARCHiDesktop/CompanionStore.swift), [DocumentWorkJournal.swift](../desktop/Sources/ARCHiDesktop/DocumentWorkJournal.swift), [ARC3Planner.swift](../desktop/Sources/ARCHiDesktop/ARC3Planner.swift) and [ARC3SessionStore.swift](../desktop/Sources/ARCHiDesktop/ARC3SessionStore.swift). See also [task memory/outcomes](native-task-memory-outcomes.md) and the remaining integration map (local reference).
+
+## 5 October 2026 — Jev comparison and shared approach policy
+
+The current document, reading and ARC3 numerical adapters now call one pure `HamptonApproachNumericalPolicy` in the existing controller file. Their separate evidence admission, coordinate identities, versioned receipts and replay ordering remain in their domain owners. This consolidates a repeated calculation; it does not combine outcomes from different domains.
+
+The user's reference to Jev is consistent with TypeSafe AI's decision model. Its [official API](https://docs.typesafe.ai/api), reviewed 5 October, evaluates supplied state using typed yes/no, finite-choice or rubric-score questions. A choice response includes the selected option, option probabilities and a separate distribution-derived confidence. Those quantities are provider outputs, not ARCHi outcome evidence.
+
+ARCHi already chooses bounded retain/expand/repair/stop lanes and checks prerequisites, budget and current state before execution. Its present policy is deterministic and attributable to retained observations; it is not a Jev model implementation or a calibrated probabilistic classifier. An eventual Jev adapter would propose a choice among current legal alternatives through the existing provider/request owner. The native consumer must still validate allowed choices, exact context/revision, budget and authority. A model score cannot override a hard stop or write memory.
+
+After consolidation, a separately scoped provider experiment can compare against the existing deterministic policy on a small nonprivate, held-out decision set; record actual choice correctness, abstention, calibration, latency and cost, including stale/invalid responses. No Jev SDK, API key, request or second decision store was added in this consolidation.
+
+Lean belongs in optional developer assurance around this existing implementation. Initial proof candidates are hard-stop precedence, the bounded numerical step under explicit real-number assumptions, and duplicate-outcome idempotence. A theorem about a specification does not certify Swift floating-point behavior, persistence, concurrency or beneficial learning. Bind any future proof to its assumptions and source version, and keep runtime checks. No Lean toolchain, theorem or new runtime dependency is included here.

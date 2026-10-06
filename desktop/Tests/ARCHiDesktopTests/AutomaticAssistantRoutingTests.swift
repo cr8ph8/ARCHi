@@ -3,6 +3,328 @@ import XCTest
 
 final class AutomaticAssistantRoutingTests: XCTestCase {
     @MainActor
+    func testChangedReviewWhileConnectingStopsBeforeGeneration() async throws {
+        let f = AutomaticRoutingFixture(), store = f.store
+        defer { f.drain() }
+        store.share(text: "A short synthetic passage.", name: "fixture.txt")
+        store.selectText(range: NSRange(location: 0, length: 26), sourceRevision: store.sourceRevision)
+        store.requestsRevision = true
+        let now = Date(), oldID = UUID().uuidString
+        let digest = WorkingCopyEditReceipt.digest("Earlier applied result")
+        var prior = DocumentWorkRecord(id: oldID + "-Qwen", requestID: oldID, provider: "Qwen",
+            targetID: UUID().uuidString, sourceDigest: WorkingCopyEditReceipt.digest(store.sharedText),
+            sourceRevision: 0, selectionStart: 0, selectionLength: 10,
+            preserveNumbersAndLinks: true, createdAt: now, updatedAt: now, state: .applying,
+            proposedDigest: digest, expectedAfterDigest: digest, actualAfterDigest: digest,
+            afterRevision: 1, checks: [.init(id: "source", title: "Source checked", passed: true)],
+            learning: DocumentWorkLearningContext(requestBinding: .init(inputDigest: digest, contextDigest: digest)))
+        try store.documentWork.save(prior)
+        prior.state = .applied
+        prior.feedback = DocumentWorkFeedback(revision: 1, verdict: .helpful, recordedAt: now)
+        try store.documentWork.save(prior)
+        store.setAssistantRoute(.native)
+        store.prompt = "Make this clearer."
+        XCTAssertEqual(store.documentQ2EDecision.signals.retainedSupport, 1)
+        store.submit()
+        try await wait("Local readiness is pending") { f.local.connectCount == 1 }
+        XCTAssertTrue(store.reviewDocument(id: prior.id, verdict: .withdrawn))
+        XCTAssertEqual(store.documentQ2EDecision.signals.retainedSupport, 0)
+        f.local.resolveConnection(0)
+        try await wait("Changed evidence ends the pending request") { !store.isWorking }
+        XCTAssertTrue(f.local.replies.isEmpty)
+        XCTAssertTrue(f.cloud.replies.isEmpty)
+        XCTAssertEqual(f.cloud.connectCount, 0)
+        XCTAssertEqual(store.documentWork.records.count, 1)
+        XCTAssertEqual(store.compareResults[.qwen]?.receipt?.requestStarted, false)
+    }
+
+    @MainActor
+    func testSameRequestSiblingIsNotHistoricalFeedback() throws {
+        let f = AutomaticRoutingFixture(), store = f.store
+        defer { f.drain() }
+        store.share(text: "A short synthetic passage.", name: "fixture.txt")
+        store.selectText(range: NSRange(location: 0, length: 26), sourceRevision: store.sourceRevision)
+        let captured = store.documentQ2EDecision
+        XCTAssertTrue(captured.isValid)
+        let requestID = UUID().uuidString, now = Date()
+        try store.documentWork.save(DocumentWorkRecord(id: requestID + "-Codex", requestID: requestID,
+            provider: "Codex", targetID: UUID().uuidString,
+            sourceDigest: WorkingCopyEditReceipt.digest(store.sharedText), sourceRevision: store.sourceRevision,
+            selectionStart: 0, selectionLength: 26, preserveNumbersAndLinks: true,
+            createdAt: now, updatedAt: now, state: .proposing))
+        XCTAssertNotEqual(store.documentQ2EDecision, captured)
+        XCTAssertEqual(store.makeDocumentQ2EDecision(excludingRequestID: requestID), captured)
+        XCTAssertEqual(f.local.connectCount, 0)
+        XCTAssertEqual(f.cloud.connectCount, 0)
+    }
+
+    @MainActor
+    func testNativePreparationChecksLocalReadinessWithoutInferenceOrFallback() async throws {
+        for result in [Result<Void, any Error>.success(()), .failure(QwenFailure.unavailable)] {
+            let f = AutomaticRoutingFixture(), store = f.store
+            defer { f.drain() }
+            store.prompt = "An unsent draft must stay unsent."
+            store.prepareNativeAssistant()
+            store.prepareNativeAssistant()
+            XCTAssertEqual(store.route, .native)
+            try await wait("Native preparation checks Qwen once") { f.local.connectCount == 1 }
+            XCTAssertFalse(store.isWorking)
+            f.local.resolveConnection(0, result: result)
+            try await wait("Native readiness check finishes") { store.connection(for: .qwen) != .connecting }
+            XCTAssertEqual(f.local.connectCount, 1)
+            XCTAssertTrue(f.local.replies.isEmpty)
+            XCTAssertEqual(f.cloud.connectCount, 0)
+            XCTAssertTrue(f.cloud.replies.isEmpty)
+            XCTAssertTrue(store.compareResults.isEmpty)
+            XCTAssertEqual(store.prompt, "An unsent draft must stay unsent.")
+        }
+    }
+
+    @MainActor
+    func testNativeLocalSuccessNeverConnectsOrSendsToCodex() async throws {
+        let f = AutomaticRoutingFixture(), store = f.store
+        defer { f.drain() }
+        store.prepareNativeAssistant()
+        try await wait("Native preparation connects Qwen") { f.local.connectCount == 1 }
+        f.local.resolveConnection(0)
+        try await wait("Native Qwen is ready") { store.connection(for: .qwen) == .ready }
+        store.prompt = "Help arrange this local task."
+        store.submit()
+        try await wait("Native Send uses prepared Qwen") { f.local.replies.count == 1 }
+        f.local.emit(0, text: "A completed local answer.")
+        f.local.resolveReply(0)
+        try await wait("Native answer completes") { !store.isWorking }
+        XCTAssertEqual(store.reply, "A completed local answer.")
+        XCTAssertEqual(store.compareResults[.qwen]?.receipt?.route, .native)
+        XCTAssertEqual(store.compareResults[.qwen]?.state, .complete)
+        XCTAssertEqual(store.assistantProvider, .qwen)
+        XCTAssertEqual(f.local.connectCount, 1)
+        XCTAssertEqual(f.cloud.connectCount, 0)
+        XCTAssertTrue(f.cloud.replies.isEmpty)
+        XCTAssertNil(store.compareResults[.codex])
+    }
+
+    @MainActor
+    func testNativeUnavailableConnectFallsBackOnceWithLocalContextRemoved() async throws {
+        let f = AutomaticRoutingFixture(), store = f.store
+        defer { f.drain() }
+        // This plain AssistantClient fixture can complete conversation replies.
+        // Document reading requires a typed Hampton proposal; cover forwarding
+        // of shared source separately with a connection failure before reply.
+        store.beginLessonCorrection()
+        var lesson = try XCTUnwrap(store.lessonDraft)
+        lesson.topic = "selected passage"
+        lesson.text = "PRIVATE-LESSON: Prefer a brief explanation."
+        lesson.source = store.currentLessonSource
+        XCTAssertTrue(store.keepLesson(lesson), store.lessonMessage)
+        let profile = PersonalContext(name: "Synthetic Person", preferredName: "Synthetic", entries: [
+            .init(id: UUID().uuidString, title: "Working style", text: "PRIVATE-PROFILE: Start with a checklist.",
+                  status: .confirmed, source: "Synthetic user preference", useInAssistance: true)
+        ])
+        XCTAssertTrue(store.updatePersonalContext(profile, expected: nil))
+        store.setAssistantRoute(.native)
+        store.prompt = "Explain the selected passage."
+        store.submit()
+        try await wait("Seed conversation connects locally") { f.local.connectCount == 1 }
+        f.local.resolveConnection(0)
+        try await wait("Seed conversation starts locally") { f.local.replies.count == 1 }
+        let first = f.local.replies[0].request
+        XCTAssertEqual(first.localLessons.count, 1)
+        XCTAssertNotNil(first.localProfile)
+        f.local.emit(0, text: "PRIVATE-CONVERSATION: Here is the earlier local answer.")
+        f.local.resolveReply(0)
+        try await wait("Local conversation is retained") { !store.isWorking && store.localConversation.exchanges.count == 1 }
+
+        store.disconnectAssistant(provider: .qwen)
+        store.prompt = "Explain the selected passage once more."
+        let settings = store.nextReplySettings
+        store.submit()
+        try await wait("Native follow-up reconnects locally") { f.local.connectCount == 2 }
+        let localReceipt = try XCTUnwrap(store.compareResults[.qwen]?.receipt)
+        XCTAssertEqual(localReceipt.localLessons.count, 1)
+        XCTAssertEqual(localReceipt.localConversationCount, 1)
+        XCTAssertNotNil(localReceipt.localProfileDigest)
+        f.local.resolveConnection(1, result: .failure(QwenFailure.unavailable))
+        try await wait("Unavailable local service starts one Codex fallback") { f.cloud.connectCount == 1 }
+        XCTAssertTrue(f.cloud.replies.isEmpty, "Account connection precedes any external prompt")
+        f.cloud.resolveConnection(0)
+        try await wait("Fallback starts its external request") { f.cloud.replies.count == 1 }
+        let external = f.cloud.replies[0].request
+        XCTAssertEqual(external.prompt, "Explain the selected passage once more.")
+        XCTAssertEqual(external.sourceName, first.sourceName)
+        XCTAssertEqual(external.sourceText, first.sourceText)
+        XCTAssertEqual(external.sourceRevision, first.sourceRevision)
+        XCTAssertEqual(external.selection, first.selection)
+        XCTAssertEqual(external.settings, settings)
+        XCTAssertTrue(external.localLessons.isEmpty)
+        XCTAssertNil(external.localLessonDigest)
+        XCTAssertTrue(external.localConversation.isEmpty)
+        XCTAssertNil(external.localConversationDigest)
+        XCTAssertNil(external.localProfile)
+        for marker in ["PRIVATE-LESSON", "PRIVATE-PROFILE", "PRIVATE-CONVERSATION"] {
+            XCTAssertFalse(external.codexInput.contains(marker), marker)
+        }
+        let externalReceipt = try XCTUnwrap(store.compareResults[.codex]?.receipt)
+        XCTAssertEqual(externalReceipt.route, .native)
+        XCTAssertEqual(externalReceipt.requestID, localReceipt.requestID)
+        XCTAssertEqual(externalReceipt.localConversationCount, 0)
+        XCTAssertNil(externalReceipt.localProfileDigest)
+        XCTAssertTrue(externalReceipt.localLessons.isEmpty)
+        f.cloud.emit(0, text: "The completed fallback answer.")
+        f.cloud.resolveReply(0)
+        try await wait("Native fallback completes") { !store.isWorking }
+        XCTAssertEqual(store.reply, "The completed fallback answer.")
+        XCTAssertEqual(store.compareResults[.qwen]?.state, .failed)
+        XCTAssertEqual(store.compareResults[.codex]?.state, .complete)
+        XCTAssertEqual(f.local.replies.count, 1)
+        XCTAssertEqual(f.cloud.connectCount, 1)
+        XCTAssertEqual(f.cloud.replies.count, 1)
+    }
+
+    @MainActor
+    func testNativeFallbackPreservesCurrentSharedSourceAndSelection() async throws {
+        let f = AutomaticRoutingFixture(), store = f.store
+        defer { f.drain() }
+        store.share(text: "First. Café is the selected passage.", name: "source.txt")
+        store.selectText(range: NSRange(location: 7, length: 4), sourceRevision: store.sourceRevision)
+        store.setAssistantRoute(.native)
+        store.prompt = "Explain the selected passage."
+        let selected = store.textSelection
+        store.submit()
+        try await wait("Local connection starts") { f.local.connectCount == 1 }
+        f.local.resolveConnection(0, result: .failure(QwenFailure.unavailable))
+        try await wait("Fallback connects once") { f.cloud.connectCount == 1 }
+        f.cloud.resolveConnection(0)
+        try await wait("External request starts") { f.cloud.replies.count == 1 }
+        let external = f.cloud.replies[0].request
+        XCTAssertEqual(external.sourceName, "source.txt")
+        XCTAssertEqual(external.sourceText, store.sharedText)
+        XCTAssertEqual(external.selection, selected)
+        XCTAssertNil(external.localReading)
+        XCTAssertNil(external.localControl)
+        XCTAssertNil(external.localProfile)
+        XCTAssertTrue(external.localLessons.isEmpty)
+        XCTAssertTrue(external.localConversation.isEmpty)
+    }
+
+    @MainActor
+    func testNativeCodexFailureIsTerminalWithoutLocalRetryOrSecondFallback() async throws {
+        for stage in ["connect", "reply"] {
+            let f = AutomaticRoutingFixture(), store = f.store
+            defer { f.drain() }
+            store.setAssistantRoute(.native)
+            store.prompt = "Attempt one bounded fallback."
+            store.submit()
+            try await wait("Native request starts Qwen") { f.local.connectCount == 1 }
+            f.local.resolveConnection(0, result: .failure(QwenFailure.unavailable))
+            try await wait("Codex fallback connects") { f.cloud.connectCount == 1 }
+            if stage == "connect" {
+                f.cloud.resolveConnection(0, result: .failure(AssistantFailure.unavailable))
+            } else {
+                f.cloud.resolveConnection(0)
+                try await wait("Codex fallback starts reply") { f.cloud.replies.count == 1 }
+                f.cloud.emit(0, text: "Incomplete external reply")
+                f.cloud.resolveReply(0, result: .failure(AssistantFailure.timedOut))
+            }
+            try await wait("Failed fallback ends the request") { !store.isWorking }
+            await Task.yield()
+            XCTAssertEqual(store.compareResults[.qwen]?.state, .failed, stage)
+            XCTAssertEqual(store.compareResults[.codex]?.state, .failed, stage)
+            XCTAssertEqual(store.compareResults[.codex]?.text, "", stage)
+            XCTAssertEqual(f.local.connectCount, 1, stage)
+            XCTAssertTrue(f.local.replies.isEmpty, stage)
+            XCTAssertEqual(f.cloud.connectCount, 1, stage)
+            XCTAssertEqual(f.cloud.replies.count, stage == "connect" ? 0 : 1, stage)
+        }
+    }
+
+    @MainActor
+    func testNativeStoppedInvalidAndOversizedRequestsNeverFallBack() async throws {
+        for error in [QwenFailure.stopped, .invalidResponse, .contextLimit] {
+            for stage in ["connect", "reply"] {
+                let f = AutomaticRoutingFixture(), store = f.store
+                defer { f.drain() }
+                store.setAssistantRoute(.native)
+                store.prompt = "A rejected request stays local."
+                store.submit()
+                try await wait("Native request starts Qwen") { f.local.connectCount == 1 }
+                if stage == "connect" {
+                    f.local.resolveConnection(0, result: .failure(error))
+                } else {
+                    f.local.resolveConnection(0)
+                    try await wait("Native local reply starts") { f.local.replies.count == 1 }
+                    f.local.emit(0, text: "Unaccepted local text")
+                    f.local.resolveReply(0, result: .failure(error))
+                }
+                try await wait("Rejected native request finishes") { !store.isWorking }
+                XCTAssertEqual(f.cloud.connectCount, 0, "\(stage): \(error)")
+                XCTAssertTrue(f.cloud.replies.isEmpty, "\(stage): \(error)")
+                XCTAssertNil(store.compareResults[.codex], "\(stage): \(error)")
+                XCTAssertEqual(store.compareResults[.qwen]?.text, "")
+            }
+        }
+    }
+
+    @MainActor
+    func testNativeContextAndRouteChangesRejectLateLocalFailuresWithoutFallback() async throws {
+        for change in ["context", "route"] {
+            for stage in ["connect", "reply"] {
+                let f = AutomaticRoutingFixture(), store = f.store
+                defer { f.drain() }
+                store.setAssistantRoute(.native)
+                store.prompt = "Cancel this before considering fallback."
+                store.submit()
+                try await wait("Native local connection starts") { f.local.connectCount == 1 }
+                if stage == "reply" {
+                    f.local.resolveConnection(0)
+                    try await wait("Native local reply starts") { f.local.replies.count == 1 }
+                }
+                if change == "context" { store.clearSessionContext() }
+                else { store.setAssistantRoute(.automatic) }
+                XCTAssertFalse(store.isWorking)
+                let reply = store.reply, status = store.status, results = store.compareResults
+                if stage == "connect" {
+                    f.local.resolveConnection(0, result: .failure(QwenFailure.unavailable))
+                    try await wait("Late native connection failure drains") { f.local.finishedConnections.contains(0) }
+                } else {
+                    f.local.emit(0, text: "Stale local callback")
+                    f.local.resolveReply(0, result: .failure(QwenFailure.timedOut))
+                    try await wait("Late native reply failure drains") { f.local.finishedReplies.contains(0) }
+                }
+                await Task.yield()
+                XCTAssertEqual(store.reply, reply, "\(change): \(stage)")
+                XCTAssertEqual(store.status, status, "\(change): \(stage)")
+                XCTAssertEqual(store.compareResults, results, "\(change): \(stage)")
+                XCTAssertEqual(f.cloud.connectCount, 0, "\(change): \(stage)")
+                XCTAssertTrue(f.cloud.replies.isEmpty, "\(change): \(stage)")
+                XCTAssertFalse(store.isWorking)
+            }
+        }
+    }
+
+    @MainActor
+    func testNativeContextChangeCancelsPendingFallbackAndRejectsLateCloudConnection() async throws {
+        let f = AutomaticRoutingFixture(), store = f.store
+        defer { f.drain() }
+        store.setAssistantRoute(.native)
+        store.prompt = "Cancel the pending fallback."
+        store.submit()
+        try await wait("Native local connection starts") { f.local.connectCount == 1 }
+        f.local.resolveConnection(0, result: .failure(QwenFailure.unavailable))
+        try await wait("Fallback connection is pending") { f.cloud.connectCount == 1 }
+        store.clearSessionContext()
+        XCTAssertFalse(store.isWorking)
+        let reply = store.reply, results = store.compareResults
+        f.cloud.resolveConnection(0)
+        try await wait("Cancelled fallback connection drains") { f.cloud.finishedConnections.contains(0) }
+        await Task.yield()
+        XCTAssertTrue(f.cloud.replies.isEmpty)
+        XCTAssertEqual(store.reply, reply)
+        XCTAssertEqual(store.compareResults, results)
+        XCTAssertFalse(store.isWorking)
+    }
+
+    @MainActor
     func testManualRoutesStillRequireExplicitReadyConnections() async throws {
         for route in [AssistantRoute.local, .codex, .compare] {
             let f = AutomaticRoutingFixture(), store = f.store
@@ -70,9 +392,11 @@ final class AutomaticAssistantRoutingTests: XCTestCase {
         XCTAssertEqual(store.assistantProvider, .qwen)
         store.setAssistantRoute(.automatic)
         XCTAssertEqual(store.resultProviders, [.qwen])
-        XCTAssertEqual(store.nextCallBudget, "1 local answer call · no external requests")
+        XCTAssertEqual(store.nextCallBudget, "1 local answer attempt · no external requests")
         store.setSessionContextEnabled(true)
-        XCTAssertEqual(store.nextCallBudget, "1 local answer call, plus up to 2 context calls · no external requests")
+        XCTAssertEqual(store.nextCallBudget, "1 local answer attempt, plus up to 2 context calls · no external requests")
+        store.setLocalWorkPreference(.reasoning)
+        XCTAssertEqual(store.nextCallBudget, "1 local answer attempt, plus up to 2 context calls · no external requests")
     }
 
     @MainActor
@@ -248,7 +572,7 @@ final class AutomaticAssistantRoutingTests: XCTestCase {
 
     @MainActor
     func testLocalReplyInvalidationPreventsStaleReplyOrExternalRequest() async throws {
-        for change in ["stop", "source", "placement", "selection", "route", "model", "context model", "clear context", "disable context"] {
+        for change in ["stop", "source", "selection", "route", "model", "context model", "clear context", "disable context"] {
             let f = AutomaticRoutingFixture(), store = f.store
             defer { f.drain() }
             store.share(text: "First. Second.", name: "source.txt")
@@ -258,7 +582,6 @@ final class AutomaticAssistantRoutingTests: XCTestCase {
             switch change {
             case "stop": store.cancelWork()
             case "source": store.share(text: "New shared source.", name: "new.txt")
-            case "placement": store.placed(at: CGPoint(x: 700, y: -120))
             case "selection": store.selectText(range: NSRange(location: 0, length: 6), sourceRevision: store.sourceRevision)
             case "route": store.setAssistantRoute(.local)
             case "model": store.selectQwenModel(try XCTUnwrap(QwenAssistant.supportedModels.first { $0 != store.qwenModel }))

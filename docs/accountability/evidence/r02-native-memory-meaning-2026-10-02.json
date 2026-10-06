@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-02",
+  "publicSummary": true,
+  "scope": "Typed relationships, display meaning and stable knowledge bindings",
+  "evidenceBoundary": "The complete original receipt is retained privately in the authored workspace. This public projection excludes profile records, source bindings, screenshots, personal document content and inference telemetry.",
+  "status": "Source implementation carried into the reconciled draft; use the source-reconciliation receipt for fresh provider-free checks.",
+  "limits": [
+    "This summary is not an independently reproducible installed-profile walkthrough.",
+    "A prepared candidate is not an applied or helpful outcome.",
+    "No general learning, security or release claim follows from source implementation."
+  ]
+}

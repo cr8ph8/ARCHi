@@ -1,0 +1,58 @@
+{
+  "schema": "archi-research-review-receipt/v1",
+  "date": "2026-09-29",
+  "scope": "Source verification and current-code integration map; no runtime or research reproduction",
+  "publicDocuments": {
+    "sources.json": "1f3d748179f565ba1bda0cdb93af31ef0ad43bf1f088c5f75628122a50b62a8b",
+    "math-and-measurement.md": "2e6fd66415bf18638091e1aa140c0b47913a8183c24d60ded1f3f157a6df6196",
+    "README.md": "eb2d102d9c017fb5c7bf67cba1826407c87f498f2a2639c373f14fe79ffe8bd7"
+  },
+  "inspectedCodeHashes": {
+    "desktop/Sources/ARCHiDesktop/KnowledgePage.swift": "8a66100e66b51a4209d2f9c30ba0bd239f058a5fcaceb1be63ce942080d5b7ad",
+    "desktop/Sources/ARCHiDesktop/KnowledgePageGraph.swift": "55eb233e4f9c9b278c05496c986f4c16696c85b3e8b566f4f56a9c747d8cebdd",
+    "desktop/Sources/ARCHiDesktop/KnowledgeRetrieval.swift": "44e8bd07d32480bb3d8de413f1215267e49051b8ca7cb42f38a92ddadb925d09",
+    "desktop/Sources/ARCHiDesktop/KnowledgeRetrievalView.swift": "0840e75ceb11988a79ffe2a405f02d7e0a04dace12086be39f3c4aaf3b324954",
+    "desktop/Sources/ARCHiDesktop/ReadingSourceLibrary.swift": "f592c60576511304148c83b6d6353f2c7fceb38a5d8eaed41743afab3204951a",
+    "desktop/Sources/ARCHiDesktop/KnowledgePageIntegration.swift": "128c717ad24b26e3d6fba1deeb2aa38ef3148b0ce3f465e5bf804f2ac9468fde",
+    "desktop/Sources/ARCHiDesktop/KnowledgeProcedureIntegration.swift": "0a3bed0940053d0252abfc86a79e49e724423934c5d4c5f61d2394e41ab34919",
+    "desktop/Sources/ARCHiDesktop/HamptonMethodOutcomes.swift": "9ae88eca7ca4e64bb1cdaf78bcc66911eaec847a9dca910350f1ee072a9f6b4c",
+    "desktop/Sources/ARCHiDesktop/HamptonMethodResourceOutcomes.swift": "194db48d563046fed360d591836bf7ffb7e1490e960d0f7ab81a935fb4625ec6",
+    "desktop/Sources/ARCHiDesktop/AssistantRouting.swift": "6981b68d5cd9a924ae961e1c9f89e83e700851c186ff35ce68cbebf2e12c4dd7",
+    "desktop/Sources/ARCHiDesktop/LocalExpertPolicy.swift": "37459667273b5fa338dbdd99ab4e44d7e52863a879d432f6db7abb7853e6299c",
+    "desktop/Sources/ARCHiDesktop/HamptonProposalValidation.swift": "b8cc5c48b1849a17571d113c21ba2359524d093b6b963a1c29946e08a89f950f",
+    "desktop/Sources/ARCHiDesktop/NativeAssistantFallback.swift": "6e7801cf8614d82cec1bedad7f94bbba883191f8dd9367a3ad075154407fbe0f",
+    "desktop/Sources/ARCHiDesktop/HamptonQ2EController.swift": "85b0e4a245522d2545df35b87b1fb4d94c827ff5a6e16469017709d727005073",
+    "desktop/Sources/ARCHiDesktop/HamptonDocumentNumericalControl.swift": "0fb3a11c94ee01c1eea66c95276147a459bbd5d59824434cc7957f5a0b801d4e",
+    "desktop/Sources/ARCHiDesktop/QwenAssistant.swift": "513bc9a664c5845d30fcd5af2661e6e6d664e5d0fa1019d2afa6c347ec2bab77",
+    "desktop/Sources/ARCHiDesktop/RecordMeasurementClient.swift": "284ba3e745e8e102008464673e650d526da194dcd25ad5b9ffcbd6d099e0046a",
+    "ios/ARCHi/PhoneIntelligence.swift": "86d6de3947a55881412a01dc8acfe8edd46033aa9d5a7050a98253738a2b6cf3",
+    "ios/ARCHi/PhoneAssistantContext.swift": "a3d1df58af67e018842ebc0af92c757de45df1726889f5e7534be0cdc9ff7fb8",
+    "ios/ARCHi/ChatView.swift": "b3736f17b6b3e8f7b774738437a871b122d47cde5cad2b5d18b17bd1a6011384"
+  },
+  "privateWorkingReviews": {
+    "wiki-attention-review.md": "8afb0905e0995fdf774e77e0939fdaf777d8330bc2657aa544e215ff2de72731",
+    "distillation-review.md": "6cf97e424d07b27c1165f30d0bc22eadfa10f56b6b64f050aeedb9023e8add3e"
+  },
+  "runtimeMap": {
+    "path": "output/research-intake-2026-09-29/runtime-map.md",
+    "sha256": "d50676f40e3c216fe3bec02ead25655ff1d190c791470ed655d3c930bac479c7"
+  },
+  "modelCalls": 0,
+  "puzzleRuns": 0,
+  "trainingRuns": 0,
+  "testsOrBenchmarksRun": 0,
+  "productionCodeChangedByThisIntake": false,
+  "appInstalledByThisIntake": false,
+  "profilesModified": false,
+  "researchMechanismsInstalled": [],
+  "completedHistoricalReceipt": "ios/evidence/2026-09-27/unified-intelligence.json",
+  "githubPublicationPerformed": false,
+  "existingReleaseBlockersPreserved": true,
+  "documentValidation": {
+    "localMarkdownLinksChecked": 30,
+    "inspectedSourceHashesChecked": 20,
+    "jsonParsing": "passed",
+    "brokenLocalLinks": 0,
+    "scope": "Documentation checks only; no runtime tests."
+  }
+}

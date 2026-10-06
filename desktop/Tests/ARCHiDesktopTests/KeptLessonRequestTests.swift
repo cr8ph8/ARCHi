@@ -332,3 +332,35 @@ private final class LessonWireProtocol: URLProtocol, @unchecked Sendable {
         client?.urlProtocolDidFinishLoading(self)
     }
 }
+
+
+@MainActor
+struct PersonalContextReasoningTests {
+    @Test func structuredReasonerReceivesBoundedProfileWithNoSelectorCalls() async throws {
+        let rig = LessonRoleRig(contextEnabled: false)
+        defer { rig.assistant.disconnect() }
+        try await rig.assistant.connect()
+        let snapshot = PersonalContextSnapshot(revision: 1, preferredName: "Tester",
+            facts: [.init(title: "Style", text: "Start with a concrete next step.")])
+        let request = AssistantRequest(prompt: "Help with this task.", sourceName: nil, sourceText: "",
+            sourceRevision: 0, placementRevision: 0, tone: "Warm", replyLength: 0.45, localProfile: snapshot)
+        try await rig.assistant.reply(to: request) { _ in }
+        let reason = try #require(rig.reasoner.requests.first)
+        #expect(reason.input["context"]?["localProfile"] == snapshot.modelInput)
+        #expect(rig.reasoner.requests.count == 1)
+        #expect(rig.selector.requests.isEmpty)
+        #expect(!request.codexInput.contains("Start with a concrete"))
+    }
+
+    @Test func invalidProfileNeverInvokesReasoner() async throws {
+        let rig = LessonRoleRig(contextEnabled: false)
+        defer { rig.assistant.disconnect() }
+        try await rig.assistant.connect()
+        let request = AssistantRequest(prompt: "Test", sourceName: nil, sourceText: "",
+            sourceRevision: 0, placementRevision: 0, tone: "Warm", replyLength: 0.45,
+            localProfile: PersonalContextSnapshot(revision: 0, preferredName: "Tester", facts: []))
+        await #expect(throws: QwenFailure.invalidResponse) { try await rig.assistant.reply(to: request) { _ in } }
+        #expect(rig.reasoner.requests.isEmpty)
+        #expect(rig.selector.requests.isEmpty)
+    }
+}

@@ -1,0 +1,138 @@
+{
+  "schema": "archi-research-document-review/v1",
+  "checkedAt": "2026-09-27T16:38:48.140105+00:00",
+  "scope": "Current-source inspection, source review, archive integrity, document parsing and link validation only.",
+  "conversations": 4,
+  "newPDFs": 4,
+  "reusedPDFs": 1,
+  "unresolvedPDFs": [
+    "albatross-v2"
+  ],
+  "localMarkdownLinksChecked": 19,
+  "brokenLinks": [],
+  "ignoredPrivateFiles": 11,
+  "publicPrivacyFindings": [],
+  "sourceSnapshot": [
+    {
+      "path": "desktop/Sources/ARCHiDesktop/DocumentProcedure.swift",
+      "sha256": "521115d1f6ca0ee2f8ec35221d45914a16ea8d5cd30142df4ea8d52ce13e6c06"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/DocumentReadingPlan.swift",
+      "sha256": "2c89974a575b4a57bfedaa7a993701f66c7e80070ea5bddfe32b8f08804a7ad9"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/HamptonArenaAdvice.swift",
+      "sha256": "3a271bf6644535efa6382c00de3b7f84abc6af98573d9dd03dd1aa2dc6e94dd7"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/HamptonMemoryDependencies.swift",
+      "sha256": "e9720893c4894ce031281ad53cfe0632e5cc012f61f8346f69aecf34f0dc2fb7"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/HamptonMethodOutcomes.swift",
+      "sha256": "0389292019b058941b02fe9240c13b88b6be0cccd0f27e420ccf70894aae910a"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/HamptonNumericalDynamics.swift",
+      "sha256": "51264c93ec0f65ff49867444e3e93a9f9e66a38ee3555e96d78d68ef83315d0d"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/KnowledgeRetrieval.swift",
+      "sha256": "c7c5ff61075ab4b0027adab9f0d94c0ac80b87a18b6fcf29f5304c3bce9d3f31"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/QwenAssistant.swift",
+      "sha256": "513bc9a664c5845d30fcd5af2661e6e6d664e5d0fa1019d2afa6c347ec2bab77"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/ReadingSourceLibrary.swift",
+      "sha256": "42c2c79eddd1b1e2126330c19b58f71899e48bece324083884bd565c4d32019b"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/UnityPresentationConnection.swift",
+      "sha256": "23f76f5b06c5597bc77a21f7883faaa3318369996c469b0481165054cfb2c30c"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/WorldOutcome.swift",
+      "sha256": "931fd80d125dbd6d8f6fd1bfca3ef82ebbd278affc970bb98dd16db188fbb181"
+    },
+    {
+      "path": "desktop/Sources/ARCHiDesktop/WorldOutcomeHistory.swift",
+      "sha256": "72ff348e41912b6f52d954db51bed967fdcf40d4320c4c10932fef78481cdc06"
+    },
+    {
+      "path": "research/representation/gguf/task_reader.py",
+      "sha256": "9b03dff146d8d1cc1abeb5e47caddc1f78048f36971dbffc0e30ea9b0803974e"
+    }
+  ],
+  "archiveSnapshot": [
+    {
+      "path": "private-archive/accumulating-data.pdf",
+      "sha256": "fd4f45b2625c119f94e5c2f05cac38cacf1d0bf4f6a09961a9bb968567bf69e7",
+      "bytes": 5651490
+    },
+    {
+      "path": "private-archive/albatross-access.json",
+      "sha256": "d2bca30b39d54ca03dfa131393f33de89ed81f0778c9018b5f34fb0dadfbb129",
+      "bytes": 14614
+    },
+    {
+      "path": "private-archive/albatross-conversation.json",
+      "sha256": "e76d256614d74d68c1245d2e77f0fbd062f643a42a1bbe327a54770b2604c256",
+      "bytes": 30301
+    },
+    {
+      "path": "private-archive/download-receipt.json",
+      "sha256": "0a7850f087cbb8e1d6b71c5274e12871da5aab5736bc7694d149aef801471402",
+      "bytes": 1350
+    },
+    {
+      "path": "private-archive/generative-primer-v2.pdf",
+      "sha256": "7a88b2ba5c54d7c787f4b569f7b9421524de44974f8e290ff30faef0bf113f32",
+      "bytes": 2194142
+    },
+    {
+      "path": "private-archive/model-collapse-conversation.json",
+      "sha256": "ab17f6d5bbc5279068854e726656ea5d1a4de5410dd3afc654be59e1a27ba926",
+      "bytes": 32600
+    },
+    {
+      "path": "private-archive/model-collapse-correction.pdf",
+      "sha256": "56703cf6817b8c0edb334fe98be298d1708b51c515cd8c9cbd5489d4f1ad4b17",
+      "bytes": 616457
+    },
+    {
+      "path": "private-archive/model-collapse.pdf",
+      "sha256": "474c820b5224b6bfa337e98a0ff942eca4b7808b44236121af828c6122a860ae",
+      "bytes": 1157018
+    },
+    {
+      "path": "private-archive/primary-web-record.json",
+      "sha256": "da5f4b16271bc5a3356002908dab512e6dc857fc83320e01c9f40e8171064230",
+      "bytes": 30399
+    },
+    {
+      "path": "private-archive/primer-conversation.json",
+      "sha256": "4b939bf7bf6798dfa125b99e2f9a7fd8017ff6956af2d7426998be7b65b45cb9",
+      "bytes": 28777
+    },
+    {
+      "path": "private-archive/stair-conversation.json",
+      "sha256": "62665128d31a33eecdee1fa7e2022da4f5b0bc522307b606420357e6eb67cd53",
+      "bytes": 28000
+    }
+  ],
+  "notPerformed": [
+    "Runtime code changes",
+    "App installation",
+    "Model generation",
+    "Puzzle runs",
+    "Weight training",
+    "Scientific replication"
+  ],
+  "limits": [
+    "Cached chat references remain untrusted context; embedded generated attachments were not supplied.",
+    "This receipt is not an audit of the full project ledger or a completion percentage."
+  ]
+}

@@ -29,6 +29,7 @@ struct AssistantSettingsSnapshot: Equatable, Sendable {
 /// One presentation policy shared by grounded and Hampton reasoning requests.
 enum AssistantPreferenceGuidance {
     static let text = """
+    \(PersonalContextSnapshot.guidance)
     The input's tone, length, optional role and optional helpStyle are presentation defaults. The current question takes precedence over these defaults when they conflict.
     Tone controls the voice. Length controls the amount of detail: brief focuses on essentials, moderate includes helpful context, and detailed adds useful explanation, within the response limits.
     An optional role changes emphasis using these meanings:

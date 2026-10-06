@@ -1,6 +1,6 @@
 import Foundation
 
-/// Expressions of KIN's current body, never alternate bodies or upgrades
+/// Expressions of the companion's current body, never alternate bodies or upgrades
 /// to identity, permissions, memory, or model capability.
 enum KinLightMode: String, CaseIterable, Identifiable, Sendable {
     case rest, core, orbit, focus, pulse, delight, hold
@@ -18,7 +18,7 @@ enum KinLightMode: String, CaseIterable, Identifiable, Sendable {
     }
     var colorName: String {
         switch self {
-        case .rest, .core: "KIN gold"
+        case .rest, .core: "Warm gold"
         case .orbit: "Curious violet"
         case .focus: "Clear teal"
         case .pulse: "Warm rose"
@@ -28,10 +28,10 @@ enum KinLightMode: String, CaseIterable, Identifiable, Sendable {
     }
     var rule: String {
         switch self {
-        case .rest: "KIN rests in his current body when no work is active, after Stop, or in Quiet mode."
+        case .rest: "Your companion rests in the current body when no work is active, after Stop, or in Quiet mode."
         case .core: "A gentle glow from his existing core. Preview it here without sending a request."
-        case .orbit: "The orbit gathers light while KIN prepares your reply."
-        case .focus: "Optical petals focus when you ask KIN to focus on a selected passage."
+        case .orbit: "The orbit gathers light while your companion prepares your reply."
+        case .focus: "Optical petals focus when you ask your companion to focus on a selected passage."
         case .pulse: "A soft pulse follows the text arriving in your reply."
         case .delight: "Mint light opens when a completed answer is ready for you."
         case .hold: "Steady amber marks an answer that could not finish."
@@ -43,7 +43,9 @@ struct KinLightExpression: Equatable, Sendable {
     let mode: KinLightMode
     var isPreview = false
     static let resting = Self(mode: .rest)
-    var label: String { (isPreview ? "Preview: " : "") + mode.title + " · " + mode.colorName }
+    var label: String {
+        (isPreview ? "Preview: " : "") + mode.title + (mode == .rest ? "" : " · " + mode.colorName)
+    }
 }
 
 enum KinLightRules {

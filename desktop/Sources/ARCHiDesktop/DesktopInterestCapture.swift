@@ -60,6 +60,14 @@ protocol DesktopInterestReading: AnyObject {
     func target(at point: CGPoint) -> DesktopInterestTarget?
     func read(_ target: DesktopInterestTarget) async throws -> DesktopInterestCapture
     func isCurrent(_ target: DesktopInterestTarget) -> Bool
+    /// Refresh metadata for the explicitly chosen window, never its contents.
+    func refreshedTarget(for target: DesktopInterestTarget) -> DesktopInterestTarget?
+}
+
+extension DesktopInterestReading {
+    func refreshedTarget(for target: DesktopInterestTarget) -> DesktopInterestTarget? {
+        isCurrent(target) ? target : nil
+    }
 }
 
 /// This service observes metadata on hover. Only `read` accesses AX text or pixels.
@@ -75,6 +83,11 @@ final class NativeDesktopInterestReader: DesktopInterestReading {
     func isCurrent(_ target: DesktopInterestTarget) -> Bool {
         guard let desktop = desktopGeometry else { return false }
         return DesktopInterestWindowCatalog.isCurrent(target, in: desktop)
+    }
+
+    func refreshedTarget(for target: DesktopInterestTarget) -> DesktopInterestTarget? {
+        guard let desktop = desktopGeometry else { return nil }
+        return DesktopInterestWindowCatalog.refreshedTarget(for: target, in: desktop)
     }
 
     func read(_ target: DesktopInterestTarget) async throws -> DesktopInterestCapture {
@@ -139,6 +152,12 @@ struct DesktopInterestGeometry: Sendable {
         let scale = min(2, 1_600 / max(frame.width, frame.height))
         return CGSize(width: max(1, floor(frame.width * scale)), height: max(1, floor(frame.height * scale)))
     }
+
+    /// A minimized sliver or malformed window is not a desktop attraction target.
+    /// This geometry qualification grants no permission to capture its contents.
+    static func validAttractionFrame(_ frame: CGRect) -> Bool {
+        frame.width >= 80 && frame.height >= 60 && screenshotSize(for: frame) != nil
+    }
 }
 
 enum DesktopInterestWindowCatalog {
@@ -177,6 +196,25 @@ enum DesktopInterestWindowCatalog {
                 && DesktopInterestGeometry.sameFrame($0.frame, target.frame)
                 && (target.title.isEmpty || $0.title == target.title)
         }
+    }
+
+    static func refreshedTarget(for target: DesktopInterestTarget,
+                                in desktop: DesktopInterestGeometry) -> DesktopInterestTarget? {
+        refreshedTarget(for: target, candidates: windows(in: desktop))
+    }
+
+    /// Keep the selected process/window identity. Geometry may change; title or
+    /// app changes require a new explicit choice, including from an old review.
+    static func refreshedTarget(for target: DesktopInterestTarget,
+                                candidates: [DesktopInterestTarget]) -> DesktopInterestTarget? {
+        guard target.windowID != 0, target.processID > 0 else { return nil }
+        let matches = candidates.filter { $0.windowID == target.windowID && $0.processID == target.processID }
+        guard matches.count == 1, let current = matches.first,
+              current.appName == target.appName, current.title == target.title,
+              !current.appName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              current.observedAt.timeIntervalSince1970.isFinite,
+              DesktopInterestGeometry.validAttractionFrame(current.frame) else { return nil }
+        return current
     }
 }
 

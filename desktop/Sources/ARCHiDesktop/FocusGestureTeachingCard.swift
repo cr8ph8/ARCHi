@@ -118,7 +118,7 @@ struct FocusGestureTeachingCard: View {
             CompanionPresenceArt(form: store.presentationForm, family: store.presentationFamily,
                 size: 116, reduceMotion: true, treatment: store.preferences.visualTreatment,
                 recipe: store.presentationRecipe, naturalVariation: store.presentationNaturalVariation,
-                equipment: previewEquipment)
+                equipment: previewEquipment, seedColor: store.preferences.seedColor)
             if let playback = store.focusGesturePlayback, playback.purpose == .preview {
                 FocusStaffGestureOverlay(playback: playback, size: 116, reduceMotion: staticCue)
             }

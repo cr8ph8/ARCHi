@@ -53,6 +53,43 @@ struct DesktopInterestCaptureTests {
         #expect(DesktopInterestGeometry.screenshotSize(for: CGRect(x: 0, y: 0, width: 20_000, height: 500)) == nil)
     }
 
+    @Test func metadataRefreshFollowsOnlyExactProcessWindowAndTitleWhileAllowingMovement() throws {
+        let initial = try #require(DesktopInterestWindowCatalog.targets(from: [record(id: 7)], in: desktop,
+            observedAt: Date(timeIntervalSince1970: 10)).first)
+        var moved = record(id: 7)
+        moved[kCGWindowBounds as String] = ["X": -900, "Y": 400, "Width": 700, "Height": 500]
+        let current = DesktopInterestWindowCatalog.targets(from: [record(id: 8), moved], in: desktop,
+            observedAt: Date(timeIntervalSince1970: 20))
+        let refreshed = try #require(DesktopInterestWindowCatalog.refreshedTarget(for: initial, candidates: current))
+        #expect(refreshed.windowID == initial.windowID)
+        #expect(refreshed.processID == initial.processID)
+        #expect(refreshed.frame == CGRect(x: -900, y: 180, width: 700, height: 500))
+        #expect(refreshed.observedAt == Date(timeIntervalSince1970: 20))
+        #expect(!DesktopInterestGeometry.sameFrame(refreshed.frame, initial.frame))
+        #expect(DesktopInterestWindowCatalog.refreshedTarget(for: initial, candidates: [refreshed, refreshed]) == nil)
+        var renamed = moved
+        renamed[kCGWindowName as String] = "Another document"
+        let changed = DesktopInterestWindowCatalog.targets(from: [renamed], in: desktop, observedAt: Date())
+        #expect(DesktopInterestWindowCatalog.refreshedTarget(for: initial, candidates: changed) == nil)
+        let otherProcess = DesktopInterestWindowCatalog.targets(from: [record(id: 7, pid: 88)], in: desktop, observedAt: Date())
+        #expect(DesktopInterestWindowCatalog.refreshedTarget(for: initial, candidates: otherProcess) == nil)
+    }
+
+    @Test func metadataRefreshRejectsClosedOffscreenTinyAndMalformedFrames() throws {
+        let initial = try #require(DesktopInterestWindowCatalog.targets(from: [record(id: 7)], in: desktop, observedAt: Date()).first)
+        var offscreen = record(id: 7), tiny = record(id: 7), malformed = record(id: 7)
+        offscreen[kCGWindowBounds as String] = ["X": 50_000, "Y": 0, "Width": 600, "Height": 300]
+        tiny[kCGWindowBounds as String] = ["X": 100, "Y": 100, "Width": 79, "Height": 60]
+        malformed[kCGWindowBounds as String] = ["X": 100, "Y": 100, "Width": Double.nan, "Height": 300]
+        for entries in [[], [record(id: 7, onScreen: false)], [offscreen], [tiny], [malformed]] {
+            let current = DesktopInterestWindowCatalog.targets(from: entries, in: desktop, observedAt: Date())
+            #expect(DesktopInterestWindowCatalog.refreshedTarget(for: initial, candidates: current) == nil)
+        }
+        #expect(!DesktopInterestGeometry.validAttractionFrame(CGRect(x: 0, y: 0, width: 80, height: 59)))
+        #expect(!DesktopInterestGeometry.validAttractionFrame(CGRect(x: 0, y: 0, width: 20_000, height: 300)))
+        #expect(DesktopInterestGeometry.validAttractionFrame(CGRect(x: -100, y: -100, width: 80, height: 60)))
+    }
+
     @Test func screenshotAllocationIsBoundedAndPreservesTheWindowAspectRatio() throws {
         let wide = try #require(DesktopInterestGeometry.screenshotSize(for: CGRect(x: -100, y: -200, width: 4_000, height: 2_000)))
         #expect(wide == CGSize(width: 1_600, height: 800))

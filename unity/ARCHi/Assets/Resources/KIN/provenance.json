@@ -1,20 +1,20 @@
 {
-  "schema": "archi-unity-bundled-art/v1",
   "assets": [
     {
       "asset": "kin-core-seed-blender-v2.png",
-      "source": "desktop/Sources/ARCHiDesktop/Resources/CompanionArt/kin-core-seed-blender-v2.png",
-      "sha256": "d88ba7b233a09142b8353b6cdc646100d0da0fcbe2789b8b2071e828ba481707",
-      "bytes": 271709,
-      "purpose": "Existing authored artwork, with File text metadata removed in the public export; image payload unchanged. Rendering preview only."
+      "bytes": 271242,
+      "purpose": "Existing authored art copied exactly for Unity port preview; not an imported companion save.",
+      "sha256": "02066c89c597edf6b0f9d3c9f5706323cfefa8163c94b8407ec48cd7e57bf5e6",
+      "source": "desktop/Sources/ARCHiDesktop/Resources/CompanionArt/kin-core-seed-blender-v2.png"
     },
     {
       "asset": "kin-first-light-blender-v1.png",
-      "source": "desktop/Sources/ARCHiDesktop/Resources/CompanionArt/kin-first-light-blender-v1.png",
-      "sha256": "ba5d05407117740796bf3bc6b949a4ffca3178a6b6f8598c5bbcd24b4f82eba0",
-      "bytes": 229015,
-      "purpose": "Existing authored artwork, with File text metadata removed in the public export; image payload unchanged. Rendering preview only."
+      "bytes": 228503,
+      "purpose": "Existing authored art copied exactly for Unity port preview; not an imported companion save.",
+      "sha256": "96dcfec5654287a22c5d53357dcc47dc7a6a92cd4458da381c45fe074f32de2d",
+      "source": "desktop/Sources/ARCHiDesktop/Resources/CompanionArt/kin-first-light-blender-v1.png"
     }
   ],
+  "schema": "archi-unity-bundled-art/v1",
   "scope": "Rendering only. No identity, memory, entitlement, or new evolution claim."
 }

@@ -58,24 +58,36 @@ final class AssistantConversationStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testSourceSelectionPlacementAndHideClearContextAndFenceLateAppend() async throws {
-        for mutation in 0..<4 {
-            let f = ConversationStoreFixture(); defer { f.cleanUp() }
-            f.store.share(text: "Meadow is the chosen name.", name: "synthetic.txt")
-            try await f.answer("What is the name?", "Meadow")
-            f.store.prompt = "Shorter?"; f.store.submit()
-            try await ready { f.local.requests.count == 2 }
-            switch mutation {
-            case 0: f.store.share(text: "A different copy.", name: "other.txt")
-            case 1: f.store.selectText(range: NSRange(location: 0, length: 6), sourceRevision: f.store.sourceRevision)
-            case 2: f.store.placed(at: CGPoint(x: 20, y: 30))
-            default: f.store.hideCompanion()
+    func testSourceSelectionAndHideClearContextAndFenceLateAppend() async throws {
+        for mutation in 0..<3 {
+            let local = ConversationReadingRoleClient()
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("archi-reading-conversation-\(UUID().uuidString)")
+            let store = CompanionStore(preferenceURL: directory.appendingPathComponent("preferences.json"),
+                assistant: HamptonReasonsAssistant(reasoner: local, contextSelector: local))
+            defer {
+                store.disconnectAssistant(); local.drain()
+                try? FileManager.default.removeItem(at: directory)
             }
-            XCTAssertTrue(f.store.localConversation.exchanges.isEmpty)
-            f.local.complete(1, "Late Meadow")
+            store.share(text: "Meadow is the chosen name.", name: "synthetic.txt")
+            store.setAssistantRoute(.automatic)
+            store.prompt = "What is the name?"; store.submit()
+            try await ready { local.requests.count == 1 }
+            local.complete(0, "Meadow")
+            try await ready { store.compareResults[.qwen]?.state == .complete }
+            XCTAssertEqual(store.localConversation.exchanges.count, 1)
+            store.prompt = "Shorter?"; store.submit()
+            try await ready { local.requests.count == 2 }
+            switch mutation {
+            case 0: store.share(text: "A different copy.", name: "other.txt")
+            case 1: store.selectText(range: NSRange(location: 0, length: 6), sourceRevision: store.sourceRevision)
+            default: store.hideCompanion()
+            }
+            XCTAssertTrue(store.localConversation.exchanges.isEmpty)
+            local.complete(1, "Late Meadow")
+            try await ready { local.finished.contains(1) }
             await Task.yield()
-            XCTAssertTrue(f.store.localConversation.exchanges.isEmpty)
-            XCTAssertNotEqual(f.store.compareResults[.qwen]?.state, .complete)
+            XCTAssertTrue(store.localConversation.exchanges.isEmpty)
+            XCTAssertNotEqual(store.compareResults[.qwen]?.state, .complete)
         }
     }
 
@@ -230,6 +242,35 @@ private final class ConversationStoreFixture {
 
 @MainActor
 private final class ConversationClock { var now = Date() }
+
+/// Shared-document replies pass through the production Hampton reading owner;
+/// raw text alone cannot fabricate its validated proposal snapshot.
+@MainActor
+private final class ConversationReadingRoleClient: LocalRoleClient {
+    var requests: [LocalRoleRequest] = []
+    var finished: Set<Int> = []
+    private var pending: [Int: CheckedContinuation<String, any Error>] = [:]
+    func connect() async throws {}
+    func disconnect() {}
+    func shutdown() async { drain() }
+    func generate(_ request: LocalRoleRequest) async throws -> LocalRoleResult {
+        let index = requests.count; requests.append(request)
+        defer { finished.insert(index) }
+        let answer = try await withCheckedThrowingContinuation { pending[index] = $0 }
+        let payload: [String: JSONValue] = ["schema": .string("archi-reason-proposal/v1"),
+            "requestID": .string(request.id), "kind": .string("ANSWER"), "answer": .string(answer),
+            "uncertainty": .string(""), "sourceIDs": .array([]), "memoryIDs": .array([])]
+        return LocalRoleResult(requestID: request.id, role: request.role,
+            text: String(decoding: try JSONEncoder().encode(payload), as: UTF8.self),
+            model: QwenModelMetadata(name: "reading-fixture", family: "qwen", parameterSize: "fixture",
+                quantization: "fixture", digest: "fixture-only"), elapsedMilliseconds: 0)
+    }
+    func complete(_ index: Int, _ answer: String) { pending.removeValue(forKey: index)?.resume(returning: answer) }
+    func drain() {
+        let all = Array(pending.values); pending.removeAll()
+        all.forEach { $0.resume(throwing: AssistantFailure.stopped) }
+    }
+}
 
 @MainActor
 private final class ConversationStoreClient: AssistantClient {

@@ -1,0 +1,125 @@
+{
+  "schema": "archi-method-memory/v1",
+  "date": "2026-10-02",
+  "status": "BUILT_SIGNED_STAGED_NOT_INSTALLED",
+  "sourceBaseCommit": "bc9fcec72ad9844d94d198b1cc609747bb130cc5",
+  "sourceScope": "Curated desktop increment; focused patch reconciled into authored tree without replacing unrelated work.",
+  "features": [
+    "Exact-version saved methods in Memory map and Home",
+    "Origin and supersession links; retained uses join exact methods",
+    "Visit-only owner-bound inspection; restart follow-through uses existing method history",
+    "Bounded number/link inventory and actual provider-envelope limits"
+  ],
+  "verification": {
+    "focusedRun": {
+      "selected": 56,
+      "passed": 52,
+      "skipped": 4,
+      "failed": 0,
+      "logSHA256": "f9938bae6f280c658acc3a2b10fa65533a730fbf0e90d479d1bc6293e7878588"
+    },
+    "exactOriginFollowup": {
+      "selected": 10,
+      "passed": 10,
+      "skipped": 0,
+      "failed": 0,
+      "logSHA256": "2601cdb00848f06d34652fde255c34657aa4e3bafe2549ef7b554c47dc40248b"
+    },
+    "counting": "Sets overlap; 53 unique provider-free checks passed. The separately executed live model expectation failed.",
+    "nativeFixtureRender": {
+      "scope": "Hidden nonactivating native panels with disposable scripted records; profile files unchanged",
+      "inspectorSHA256": "5bba1781cd02bff99a2bdbc8cad8df4ce367392efaae19582036cbbf2b1a9a3c",
+      "mapSHA256": "740932eee96ed4ea13741deb83b59aa8af829c30006d5b9e40ae619b0f21a387",
+      "visualInspection": "Inspected method details and selected particle map. Not an installed personal-method walkthrough."
+    }
+  },
+  "localRevision": {
+    "applied": false,
+    "attemptedInvocations": [
+      "REASONING"
+    ],
+    "canApply": false,
+    "caveatPreserved": true,
+    "cloudCalls": 0,
+    "elapsedSeconds": 11.7571120262146,
+    "extraEvents": 0,
+    "failure": null,
+    "helpfulFeedback": false,
+    "mechanicalChecks": [
+      {
+        "id": "proposal",
+        "passed": true
+      },
+      {
+        "id": "source",
+        "passed": true
+      },
+      {
+        "id": "revision",
+        "passed": true
+      },
+      {
+        "id": "size",
+        "passed": true
+      },
+      {
+        "id": "selection",
+        "passed": true
+      },
+      {
+        "id": "shorter",
+        "passed": true
+      },
+      {
+        "id": "numbers",
+        "passed": true
+      },
+      {
+        "id": "links",
+        "passed": false
+      }
+    ],
+    "methodSaved": false,
+    "models": [
+      {
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "name": "qwen3.5:9b"
+      }
+    ],
+    "nextActionLast": true,
+    "prompt": "Shorten this synthetic update. Keep this sentence verbatim in the replacement: These observations do not establish general intelligence or improved performance. Keep the next action last. Preserve the numeric and URL tokens exactly.",
+    "replacement": "In this synthetic project update, we have 4 source records and 6 saved methods. These observations do not establish general intelligence or improved performance. The next action is to review https://example.test/records.",
+    "scope": "One synthetic local proposal; no owner usefulness or learning credit",
+    "source": "In this synthetic project update, we currently have 4 source records and 6 saved methods available for review. These observations do not establish general intelligence or improved performance. The next action is to review https://example.test/records ."
+  },
+  "localRevisionAssessment": "One qwen3.5:9b reasoning call preserved digits, caveat and action order but attached terminal period to the URL. Exact-link check blocked Apply. No retry, cloud call, owner Helpful, method saving or learning credit.",
+  "delivery": {
+    "candidateExecutableSHA256": "f9f6d93bb5fdb42fc9d1c9b8460f6645ca0766be139598344d92bd34a308b788",
+    "compiledProgram": {
+      "textSHA256": "78ea64636868ef6caadc1b017b7849c9d0bf1b6ef48c30a175899f9eecafcb69",
+      "uuid": "6a0ba159-0a21-3284-b34b-eaa1b9693209"
+    },
+    "candidateProgramMatches": true,
+    "signaturePassed": true,
+    "resourceFileCount": 435,
+    "resourcesMatchInstalledBaseline": true,
+    "profileFileCount": 23,
+    "profilesUnchanged": true,
+    "installed": false,
+    "launchedCandidate": false,
+    "guardedUpdaterRefusedOpenSession": true,
+    "pending": "Normal Quit is not responding to native automation; user handoff requested. Existing installation unchanged."
+  },
+  "phone": {
+    "freshDeviceReadback": "0.6.2 (7)",
+    "modified": false,
+    "candidate063Installed": false
+  },
+  "notCompleted": [
+    "Owner-authored task, Apply, judgment, saved method, restart and useful reuse",
+    "Semantic fidelity and URL punctuation reliability",
+    "Installed native walkthrough of this candidate",
+    "Account-wide task provenance recovery without rewinding budgets or newer records",
+    "Phone/WikiOS continuity, general representation qualification and existing beta gates"
+  ]
+}

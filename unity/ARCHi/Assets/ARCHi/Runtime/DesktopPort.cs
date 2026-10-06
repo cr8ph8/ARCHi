@@ -8,7 +8,7 @@ namespace ARCHi.Port
     /// A session-only Unity presentation of the existing KIN artwork and bundled item.
     /// This component does not load, grant, export, or write companion authority.
     /// </summary>
-    public sealed class DesktopPort : MonoBehaviour
+    public sealed partial class DesktopPort : MonoBehaviour
     {
         public const string PreviewNotice = "Port preview · not connected to saved companion";
         private static readonly Color Background = Hex(0x0B1419);
@@ -54,6 +54,8 @@ namespace ARCHi.Port
         private bool reduceMotion;
         private bool cueActive;
         private float cueEnd;
+        private ArenaWorkspace arena;
+        public ArenaWorkspace Arena => arena;
 
         [Serializable]
         public sealed class DiagnosticSnapshot
@@ -95,6 +97,11 @@ namespace ARCHi.Port
 
         private void OnEnable()
         {
+            // A companion window must continue its bounded native heartbeat when
+            // unfocused. Display-sync waits can stall macOS Metal presentation;
+            // use the existing explicit frame budget rather than monitor refresh.
+            if (!Application.isEditor) { QualitySettings.vSyncCount = 0; Application.targetFrameRate = 30; }
+
             seedTexture = Resources.Load<Texture2D>("KIN/kin-core-seed-blender-v2");
             lightTexture = Resources.Load<Texture2D>("KIN/kin-first-light-blender-v1");
             brandTexture = Resources.Load<Texture2D>("Branding/QuotientMark");
@@ -111,6 +118,9 @@ namespace ARCHi.Port
 
         private void OnDisable()
         {
+            if (nativePoints != null) { Destroy(nativePoints.gameObject); nativePoints = null; }
+            if (arena != null) Destroy(arena.gameObject);
+            arena = null;
             cueActive = false;
             if (relay.FocusPreview) relay.Apply(RelayAction.RestoreBase);
             cueTimer?.Pause();
@@ -155,6 +165,7 @@ namespace ARCHi.Port
             wordmark.style.marginLeft = 12;
             identity.Add(wordmark);
             var subtitle = Text("DESKTOP PREVIEW", 10, Muted);
+            subtitle.name = "port-mode-title";
             subtitle.style.marginLeft = 17;
             identity.Add(subtitle);
             header.Add(identity);
@@ -174,6 +185,7 @@ namespace ARCHi.Port
             navigation.Add(companionTab);
             navigation.Add(itemsTab);
             navigation.Add(practiceTab);
+            navigation.Add(MakeButton("Battle + Becoming", OpenArena, "nav-arena"));
             navigation.Add(Fill());
             var previewTag = Text("Explore at your own pace", 12, Muted);
             navigation.Add(previewTag);
@@ -201,11 +213,15 @@ namespace ARCHi.Port
             stageHeading.style.flexShrink = 0;
             stageHeading.style.alignItems = Align.Center;
             var introduction = new VisualElement();
-            introduction.Add(Text("Hello, I’m KIN.", 30, Ink, true));
+            var greeting = Text("Hello, I’m KIN.", 30, Ink, true);
+            greeting.name = "kin-greeting";
+            introduction.Add(greeting);
             introduction.Add(Text("A little light, close by.", 14, Muted));
             stageHeading.Add(introduction);
             stageHeading.Add(Fill());
-            stageHeading.Add(Pill("BODY PREVIEW", Gold));
+            var bodyMode = Pill("BODY PREVIEW", Gold);
+            bodyMode.name = "body-mode-label";
+            stageHeading.Add(bodyMode);
             stage.Add(stageHeading);
 
             var artFrame = new VisualElement { name = "kin-body-preview" };
@@ -215,6 +231,21 @@ namespace ARCHi.Port
             artFrame.style.minHeight = 80;
             artFrame.style.marginTop = 6;
             artFrame.style.marginBottom = 6;
+            artFrame.style.alignItems = Align.Center;
+            artFrame.style.justifyContent = Justify.Center;
+            // Keep the texture, source-point picking surface and equipment in
+            // one square, instead of stretching them across a large window.
+            var presentationFrame = new VisualElement { name = "companion-art-frame", pickingMode = PickingMode.Ignore };
+            presentationFrame.style.flexShrink = 0;
+            presentationFrame.style.width = 0;
+            presentationFrame.style.height = 0;
+            artFrame.Add(presentationFrame);
+            artFrame.RegisterCallback<GeometryChangedEvent>(evt => {
+                float available = Mathf.Min(evt.newRect.width, evt.newRect.height);
+                float side = float.IsNaN(available) || float.IsInfinity(available) ? 0 : Mathf.Clamp(available - 32, 0, 640);
+                presentationFrame.style.width = side;
+                presentationFrame.style.height = side;
+            });
             cueHalo = new VisualElement { name = "bounded-cue-halo", pickingMode = PickingMode.Ignore };
             cueHalo.style.position = Position.Absolute;
             cueHalo.style.left = Length.Percent(20);
@@ -224,14 +255,14 @@ namespace ARCHi.Port
             Border(cueHalo, Accent, 2);
             Round(cueHalo, 300);
             cueHalo.style.opacity = 0;
-            artFrame.Add(cueHalo);
+            presentationFrame.Add(cueHalo);
             bodyImage = new Image { name = "kin-body-image", scaleMode = ScaleMode.ScaleToFit, pickingMode = PickingMode.Ignore };
             bodyImage.style.position = Position.Absolute;
             bodyImage.style.left = 0;
             bodyImage.style.right = 0;
             bodyImage.style.top = 0;
             bodyImage.style.bottom = 0;
-            artFrame.Add(bodyImage);
+            presentationFrame.Add(bodyImage);
             staff = StaffArt();
             staff.name = "equipped-focus-staff";
             staff.style.position = Position.Absolute;
@@ -239,7 +270,7 @@ namespace ARCHi.Port
             staff.style.top = Length.Percent(27);
             staff.style.bottom = Length.Percent(12);
             staff.style.width = 28;
-            artFrame.Add(staff);
+            presentationFrame.Add(staff);
             stage.Add(artFrame);
 
             var bodyRow = Row();
@@ -254,6 +285,7 @@ namespace ARCHi.Port
             bodyRow.Add(lightButton);
             stage.Add(bodyRow);
             var previewExplanation = Text("Appearance preview · no saved evolution changes", 11, Muted);
+            previewExplanation.name = "body-preview-explanation";
             previewExplanation.style.marginTop = 8;
             previewExplanation.style.marginBottom = 13;
             stage.Add(previewExplanation);
@@ -333,6 +365,7 @@ namespace ARCHi.Port
             noticeRow.style.flexShrink = 0;
             noticeRow.style.flexWrap = Wrap.Wrap;
             var notice = Text(PreviewNotice, 11, Accent);
+            notice.name = "port-connection-notice";
             notice.style.marginRight = 20;
             noticeRow.Add(notice);
             noticeRow.Add(Text("Unity companion & play · native assistance stays in ARCHi", 11, Muted));
@@ -348,20 +381,44 @@ namespace ARCHi.Port
             root.RegisterCallback<GeometryChangedEvent>(OnGeometryChanged);
             cueTimer = root.schedule.Execute(TickCue).Every(50);
             cueTimer.Pause();
+            ConfigureNativeView();
             RefreshAll();
             companionTab.Focus();
         }
 
         public void SelectTab(string tab)
         {
+            if (NativeBound && tab != "Companion") return;
             if (tab != "Companion" && tab != "Items" && tab != "Practice")
                 throw new ArgumentOutOfRangeException(nameof(tab));
             activeTab = tab;
             RefreshAll();
         }
 
+        public void OpenArena()
+        {
+            if (arena != null || root == null || (NativeBound && !NativeArenaAvailable)) return;
+            if (!NativeBound) StopCue();
+            var area = new GameObject("Battle + Becoming workspace");
+            area.transform.SetParent(transform, false);
+            arena = area.AddComponent<ArenaWorkspace>();
+            arena.Initialize(root, quiet || reduceMotion, () => {
+                arena = null;
+                nativePoints?.UseRoom();
+                nativePoints?.Freeze(NativeStaticMotion);
+                if (nativeStage != null) nativeStage.gameObject.SetActive(true);
+            });
+            if (NativeBound) {
+                arena.SetPointRenderer(nativePoints);
+                arena.ApplyNativePresentation(nativeSnapshot, NativeStaticMotion);
+                nativeBridge.ObserveWorldActions(arena);
+                if (nativeStage != null) nativeStage.gameObject.SetActive(false);
+            }
+        }
+
         public void PreviewSeed()
         {
+            if (NativeBound) return;
             firstLight = false;
             StopCue();
             SetStatus("Core Seed body preview. The Seed reference badge remains visible.");
@@ -370,6 +427,7 @@ namespace ARCHi.Port
 
         public void PreviewFirstLight()
         {
+            if (NativeBound) return;
             firstLight = true;
             StopCue();
             SetStatus("First Light body preview. No evolution or saved companion state changed.");
@@ -378,6 +436,7 @@ namespace ARCHi.Port
 
         public void ToggleFocusStaff()
         {
+            if (NativeBound) return;
             equipped = !equipped;
             StopCue();
             SetStatus(equipped ? "Focus Staff equipped for this preview session." : "Focus Staff removed from this preview session.");
@@ -386,7 +445,7 @@ namespace ARCHi.Port
 
         public bool StartCue()
         {
-            if (!equipped || root == null || !isActiveAndEnabled) return false;
+            if (NativeBound || !equipped || root == null || !isActiveAndEnabled) return false;
             cueActive = true;
             cueEnd = Time.unscaledTime + 3f;
             cueTimer?.Resume();
@@ -397,6 +456,7 @@ namespace ARCHi.Port
 
         public void StopCue()
         {
+            if (NativeBound) { StopNativeMotion(); return; }
             cueActive = false;
             cueTimer?.Pause();
             if (relay.FocusPreview)
@@ -410,6 +470,7 @@ namespace ARCHi.Port
 
         public void SetQuiet(bool value)
         {
+            if (NativeBound) return;
             quiet = value;
             SetStatus(value ? "Quiet on. Cue previews use a static light." : "Quiet off. This preview does not play audio.");
             RefreshAll();
@@ -417,6 +478,7 @@ namespace ARCHi.Port
 
         public void SetReduceMotion(bool value)
         {
+            if (NativeBound) return;
             reduceMotion = value;
             SetStatus(value ? "Reduce motion on. Cue previews use a static light." : "Reduce motion off. Only an explicitly started cue animates.");
             RefreshAll();
@@ -424,6 +486,7 @@ namespace ARCHi.Port
 
         public void ApplyPractice(RelayAction action, int? node = null, char? id = null)
         {
+            if (NativeBound) return;
             relay.Apply(action, node, id);
             SetStatus(relay.Done ? "Relay restored in local practice. No saved growth or rewards were granted." : "Local relay practice · " + relay.Feedback);
             RefreshAll();
@@ -447,10 +510,12 @@ namespace ARCHi.Port
             MarkSelected(motionButton, reduceMotion);
             detail.Clear();
             cueLabel = null;
-            if (activeTab == "Items") BuildItems();
+            if (NativeBound) BuildNativeCompanion();
+            else if (activeTab == "Items") BuildItems();
             else if (activeTab == "Practice") BuildPractice();
             else BuildCompanion();
             RefreshCue();
+            RefreshNativeVisuals();
             if (!string.IsNullOrEmpty(focusedName)) root.Q<VisualElement>(focusedName)?.Focus();
         }
 
@@ -589,6 +654,14 @@ namespace ARCHi.Port
 
         private void OnKeyDown(KeyDownEvent evt)
         {
+            if (evt.commandKey || evt.ctrlKey || evt.altKey) return;
+            if (NativeBound && arena == null && (evt.keyCode == KeyCode.I
+                || evt.keyCode == KeyCode.Escape && nativePoints?.Inspection == true))
+            {
+                ToggleNativePointInspection();
+                evt.StopPropagation();
+                return;
+            }
             if (evt.keyCode != KeyCode.Escape) return;
             StopCue();
             evt.StopPropagation();
@@ -616,11 +689,12 @@ namespace ARCHi.Port
             var validLayout = ValidateLayout(out var layoutReason);
             return new DiagnosticSnapshot
             {
-                notice = PreviewNotice, activeTab = activeTab,
-                bodyPreview = firstLight ? "First Light" : "Core Seed", cursorPresentation = "Core Seed",
+                notice = NativeBound ? nativeState : PreviewNotice, activeTab = activeTab,
+                bodyPreview = nativeSnapshot?.LocalPractice == true ? "Local roster" : firstLight ? "First Light" : "Core Seed",
+                cursorPresentation = nativeSnapshot?.LocalPractice == true ? "none" : "Core Seed",
                 item = equipped ? "focus-staff/v1" : "none", itemProvenance = "Bundled design",
                 status = status, cueActive = cueActive, quiet = quiet, reduceMotion = reduceMotion,
-                staticPresentation = !cueActive || quiet || reduceMotion,
+                staticPresentation = NativeBound ? NativeStaticMotion : !cueActive || quiet || reduceMotion,
                 seedAssetAvailable = seedTexture != null, bodyAssetAvailable = lightTexture != null,
                 brandAssetAvailable = brandTexture != null,
                 seedCursorVisible = cursor != null && cursor.resolvedStyle.display != DisplayStyle.None && cursor.worldBound.width > 0 && cursor.worldBound.height > 0,
@@ -628,7 +702,7 @@ namespace ARCHi.Port
                 bakedPanelAssigned = presentationPanel != null && document != null && document.panelSettings == presentationPanel,
                 panelWidth = root == null ? 0 : root.resolvedStyle.width,
                 panelHeight = root == null ? 0 : root.resolvedStyle.height,
-                connectedToSavedCompanion = false, writesCompanionState = false,
+                connectedToSavedCompanion = NativeBound && nativeFresh && nativeSnapshot?.LocalPractice != true, writesCompanionState = false,
                 practicePhase = relay.Phase.ToString(), protectedSteps = relay.ProtectedSteps, practiceDone = relay.Done,
                 practiceFocusPreview = relay.FocusPreview,
                 comfortBounds = Bounds("comfort-controls"), comfortControlsBounds = Bounds("comfort-buttons"),
@@ -650,10 +724,11 @@ namespace ARCHi.Port
             var footer = Bounds("port-footer");
             var viewport = Bounds("detail-viewport");
             var body = Bounds("companion-stage");
+            bool localRoster = nativeSnapshot?.LocalPractice == true;
             var seed = Bounds("persistent-seed-cursor");
             var notice = Bounds("port-notice");
             var statusBounds = Bounds("port-session-status");
-            foreach (var bounds in new[] { comfort, footer, viewport, body })
+            foreach (var bounds in localRoster ? new[] { comfort, footer, viewport } : new[] { comfort, footer, viewport, body })
             {
                 if (!Inside(bounds, panel)) { reason = "A visible panel extends outside the player window."; return false; }
             }
@@ -661,9 +736,9 @@ namespace ARCHi.Port
             { reason = "Comfort controls or their text extend outside their card."; return false; }
             if (title.yMax > buttons.yMin + 1 || buttons.yMax > note.yMin + 1)
             { reason = "Comfort buttons overlap their heading or explanatory text."; return false; }
-            if (viewport.yMax > comfort.yMin + 1 || comfort.yMax > footer.yMin + 1 || body.yMax > footer.yMin + 1)
+            if (viewport.yMax > comfort.yMin + 1 || comfort.yMax > footer.yMin + 1 || (!localRoster && body.yMax > footer.yMin + 1))
             { reason = "Scrollable details, comfort controls, or the stage overlap the footer."; return false; }
-            if (!Inside(seed, body) || !Inside(notice, footer) || !Inside(statusBounds, footer) || notice.yMax > statusBounds.yMin + 1)
+            if ((!localRoster && !Inside(seed, body)) || !Inside(notice, footer) || !Inside(statusBounds, footer) || notice.yMax > statusBounds.yMin + 1)
             { reason = "The Seed badge or footer text is clipped or overlapping."; return false; }
             reason = "Stage, scroll viewport, comfort controls, Seed badge, and footer fit without overlap.";
             return true;
@@ -692,7 +767,7 @@ namespace ARCHi.Port
             if (brandTexture == null) { reason = "The existing Quotient brand mark is missing."; return false; }
             if (root == null || root.Q("persistent-seed-cursor") == null) { reason = "The persistent Seed presentation is missing."; return false; }
             if (cueActive && !equipped) { reason = "An unequipped item cannot run a staff cue."; return false; }
-            reason = "Session preview is coherent; no saved companion authority is connected.";
+            reason = NativeBound ? "Native presentation is read-only; the desktop retains companion authority." : "Session preview is coherent; no saved companion authority is connected.";
             return true;
         }
 

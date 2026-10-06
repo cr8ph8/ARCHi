@@ -33,6 +33,7 @@ struct KinLightEffectsFrame: View {
     let expression: KinLightExpression
     let phase: Double
     var centerY: Double = 0.5
+    var emissionPhase: Double? = nil
 
     var body: some View {
         Canvas { context, canvas in
@@ -41,6 +42,7 @@ struct KinLightEffectsFrame: View {
             let phase = LightFormGeometry.normalizedPhase(self.phase)
             let center = CGPoint(x: canvas.width / 2, y: canvas.height / 2 + (centerY - 0.5) * unit)
             let palette = KinLightPalette(mode: expression.mode)
+            let emission = KinLightEmission.intensity(mode: expression.mode, phase: emissionPhase ?? phase)
             context.clip(to: Path(CGRect(origin: .zero, size: canvas)))
 
             let breath = 1 + sin(phase) * (expression.mode == .pulse ? 0.025 : 0.012)
@@ -67,7 +69,7 @@ struct KinLightEffectsFrame: View {
                 drawHold(context: &context, center: center, unit: unit, palette: palette)
             }
             drawMotes(context: &context, center: center, unit: unit, phase: phase, palette: palette,
-                sparse: expression.mode == .core || expression.mode == .hold)
+                sparse: expression.mode == .core || expression.mode == .hold, emission: emission)
         }
         .mask {
             GeometryReader { geometry in
@@ -178,27 +180,50 @@ struct KinLightEffectsFrame: View {
     }
 
     private func drawMotes(context: inout GraphicsContext, center: CGPoint, unit: CGFloat,
-                           phase: Double, palette: KinLightPalette, sparse: Bool) {
+                           phase: Double, palette: KinLightPalette, sparse: Bool, emission: Double) {
         // These modes already have sparse motes traveling on their own tracks.
         // Do not pile the generic outer dust field on top of that circulation.
         guard ![KinLightMode.orbit, .focus, .delight].contains(expression.mode) else { return }
         for (index, particle) in LightFormGeometry.motes(phase: phase).enumerated() {
             if sparse && !index.isMultiple(of: 4) { continue }
             mote(context: &context, at: CGPoint(x: center.x + particle.x * unit, y: center.y + particle.y * unit),
-                 radius: max(0.4, unit * particle.radius), opacity: particle.opacity * 0.74, palette: palette)
+                 radius: max(0.4, unit * particle.radius), opacity: particle.opacity * (0.60 + emission * 0.32), palette: palette)
         }
     }
 
     private func mote(context: inout GraphicsContext, at point: CGPoint, radius: CGFloat,
                       opacity: Double, palette: KinLightPalette) {
-        context.fill(circle(point, radius: radius * 4), with: .radialGradient(
-            Gradient(colors: [palette.accent.opacity(opacity * 0.45), .clear]),
-            center: point, startRadius: 0, endRadius: radius * 4))
+        context.fill(circle(point, radius: radius * 5), with: .radialGradient(
+            Gradient(colors: [palette.accent.opacity(opacity * 0.20), .clear]),
+            center: point, startRadius: 0, endRadius: radius * 5))
+        context.fill(circle(point, radius: radius * 2.4), with: .radialGradient(
+            Gradient(colors: [palette.accent.opacity(opacity * 0.58), .clear]),
+            center: point, startRadius: 0, endRadius: radius * 2.4))
         context.fill(circle(point, radius: radius), with: .color(palette.highlight.opacity(opacity)))
     }
 
     private func circle(_ center: CGPoint, radius: CGFloat) -> Path {
         Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
+    }
+}
+
+/// Presentation of already supplied activity/preview modes. It does not infer
+/// emotion or update identity. Hold is steady; callers supply phase zero for
+/// Quiet/Reduce Motion. The slow, shallow pulse never flashes fully off/on.
+enum KinLightEmission {
+    static func intensity(mode: KinLightMode, phase: Double) -> Double {
+        let strength: Double
+        switch mode {
+        case .rest: return 0
+        case .core: strength = 0.22
+        case .orbit: strength = 0.30
+        case .focus: strength = 0.20
+        case .pulse: strength = 0.38
+        case .delight: strength = 0.34
+        case .hold: return 0.18
+        }
+        let wave = (1 + sin(LightFormGeometry.normalizedPhase(phase))) * 0.5
+        return strength * (0.72 + wave * 0.28)
     }
 }
 
@@ -279,7 +304,8 @@ enum KinLightEffectsGeometry {
     }
 }
 
-private struct KinLightPalette {
+/// Shared expression colors for KIN and his desktop focus boundary.
+struct KinLightPalette {
     let accent: Color
     let highlight: Color
     let shadow: Color

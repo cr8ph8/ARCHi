@@ -1,0 +1,192 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "R27-ARENA-NUMERICAL-ADVICE-2026-09-27",
+  "milestoneId": "R27-ARENA-NUMERICAL-ADVICE",
+  "asOf": "2026-09-27",
+  "recordedAt": "2026-09-27T08:02:15.089713+00:00",
+  "evidenceClass": "installed-bounded-native-adaptation-and-attribution",
+  "authority": "project-evidence-only",
+  "result": "PASS",
+  "resultScope": "19 focused cases and installed manual-input suggestion/match/export/cleanup walkthrough; no causal performance or release claim.",
+  "sealed": true,
+  "draft": false,
+  "source": {
+    "branch": "codex/archi-encounter-composition-v1",
+    "baseCommit": "15544acf37152a400045e627a7def753e272c4ad",
+    "dirty": true,
+    "checkpointCommit": null,
+    "checkpointTree": null,
+    "cleanSource": false,
+    "sourceSurfaceDigest": "sha256:129812be51fb49de87a495feb2722b56d4c1e083cf186b394965dff9c6c63eda",
+    "inventory": "output/arena-advice-2026-09-27/source-inventory.json",
+    "inventorySHA256": "sha256:20b549453cfcbb25e691a81bd0ed159eda539997641bd29a2f989e8ca9939e3e",
+    "scope": "Native Arena numerical advice, attributable manual outcomes, attached Save sheet and focused evidence; primary authored checkout stays dirty."
+  },
+  "checks": [
+    {
+      "id": "advice-report-owner",
+      "command": "swift test --filter HamptonArenaAdviceTests|ArenaPracticeReportTests|UnityPresentationTests.testWorldOutcomesRequireSeparateCapabilityAndClearWithSession",
+      "result": "PASS",
+      "exitCode": 0,
+      "detail": "19 scoped cases; original renamed-limitation assertion failure retained and corrected."
+    },
+    {
+      "id": "install-preservation",
+      "command": "guarded install; strict signature; 23 profile and 12 helper hashes",
+      "result": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "native-advice-match-export-cleanup",
+      "command": "CUA explicit solo inputs, Track, Return to Arena, inspect match, native Save and End session; inspect saved schema-2 JSON",
+      "result": "PASS",
+      "exitCode": 0,
+      "detail": "0.5078125 Pulse suggestion; next manual Pulse 7 dealt / 10 taken. No efficacy claim."
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "R27-ARENA-NUMERICAL-ADVICE-ARTIFACT-1",
+      "path": "output/arena-advice-2026-09-27/source-inventory.json",
+      "digest": "sha256:20b549453cfcbb25e691a81bd0ed159eda539997641bd29a2f989e8ca9939e3e",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-NUMERICAL-ADVICE-ARTIFACT-2",
+      "path": "output/arena-advice-2026-09-27/RESULT.md",
+      "digest": "sha256:d033855676dcc67964ab893c6213da608064b14aa00f3be3adf254278eb84cd8",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-NUMERICAL-ADVICE-ARTIFACT-3",
+      "path": "output/arena-advice-2026-09-27/installation-final.json",
+      "digest": "sha256:c10c4b17f420a5d1cad2869969ad3ebc2650f3056eaaf30e468f330aa73ef3ef",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-NUMERICAL-ADVICE-ARTIFACT-4",
+      "path": "output/arena-advice-2026-09-27/native-walkthrough.json",
+      "digest": "sha256:8f45c73cb8ed0ad33dc325a7a703ee7c11851b9145a5cff4b4d3a6d70bfbfabf",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-NUMERICAL-ADVICE-ARTIFACT-5",
+      "path": "output/arena-advice-2026-09-27/matched-practice-report.json",
+      "digest": "sha256:4bba934b0f3f79eeee54284ab77568e4c01138128382713960e87175103ea8af",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-NUMERICAL-ADVICE-ARTIFACT-6",
+      "path": "output/arena-advice-2026-09-27/profiles-before.json",
+      "digest": "sha256:00f320ae6158cfd9a7fe58b2ff2b6a1b38432e42f6e2cd4f640ada5e21bf6243",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-NUMERICAL-ADVICE-ARTIFACT-7",
+      "path": "output/arena-advice-2026-09-27/profiles-after-native.json",
+      "digest": "sha256:00f320ae6158cfd9a7fe58b2ff2b6a1b38432e42f6e2cd4f640ada5e21bf6243",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-NUMERICAL-ADVICE-ARTIFACT-8",
+      "path": "output/arena-advice-2026-09-27/installed-before.json",
+      "digest": "sha256:5379d0e9688bb592bcbb304c899dc2f2d5decd876b095377ae3de46f0f59fdc6",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-NUMERICAL-ADVICE-ARTIFACT-9",
+      "path": "output/arena-advice-2026-09-27/handoff-checks.log",
+      "digest": "sha256:b44eb33440f361bf1edbd285c2de34d5cd829149b4f0b57be4a053668e196fa6",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-NUMERICAL-ADVICE-ARTIFACT-10",
+      "path": "output/arena-advice-2026-09-27/install-workspace-sheet.log",
+      "digest": "sha256:39b44b84e8f3ce482630a9978bb23b783aebb8f703541084ad5850ef1ccb171d",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-NUMERICAL-ADVICE-ARTIFACT-11",
+      "path": "output/arena-advice-2026-09-27/prior-ui-followthrough.json",
+      "digest": "sha256:d7ae0278ff7640f307b880b8484012fabc050df4db81f748b38500dccf6faf6b",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-NUMERICAL-ADVICE-ARTIFACT-12",
+      "path": "output/arena-advice-2026-09-27/save-sheet-observation.json",
+      "digest": "sha256:9e785a88c323d0b114dfe9724e36c45304899181c554c486ab5d9b3ab3543297",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-NUMERICAL-ADVICE-ARTIFACT-13",
+      "path": "output/arena-advice-2026-09-27/native-handoff-observation.json",
+      "digest": "sha256:511e7f2b0e071b068659096f20c67088829f34ff26caff7df0fde16c007f25d5",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-NUMERICAL-ADVICE-ARTIFACT-14",
+      "path": "output/arena-advice-2026-09-27/focused-checks.log",
+      "digest": "sha256:625471d56d03c70cdaa38cc8064fa82402702ea095a0c1a6068b295371882544",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    },
+    {
+      "id": "R27-ARENA-NUMERICAL-ADVICE-ARTIFACT-15",
+      "path": "output/arena-advice-2026-09-27/focused-checks-final.log",
+      "digest": "sha256:d3e6feba8ccf56fbf81d8c5725ea5f7b2f943accb4d2db35393b68ba347a875b",
+      "result": "PASS",
+      "verifyDigest": true,
+      "requiredAtCheck": true,
+      "retained": true
+    }
+  ],
+  "limitations": [
+    "Conditional advice follows the last observed round; the Unity wire has no current-bout command cursor. No automatic actions are dispatched.",
+    "The target, gains and diagonal coupling are authored. Matching an input does not prove causal benefit, better gameplay, general learning or whole-stack/patent efficacy.",
+    "Replay covers at most 32 retained same-field actions; it does not persist lifetime play, grant skills or change companion growth.",
+    "Paired/physics outcome consumers, useful owner-reviewed method transfer, remote participation and beta release remain unfinished.",
+    "Historical R18 receipt digest mismatch remains failed and unchanged."
+  ],
+  "nextPromotionCondition": "Retain useful owner-reviewed method outcomes; add a fresh active-bout context and explicit native command contract before automatic world actions. Keep comparisons separate from integration evidence."
+}
