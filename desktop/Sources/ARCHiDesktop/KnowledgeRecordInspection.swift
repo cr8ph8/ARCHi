@@ -104,6 +104,10 @@ struct KnowledgeRecordInspectionView: View {
             }
             Text(page.body).textSelection(.enabled)
                 .accessibilityIdentifier("knowledge.inspect-record.page-body")
+            if let relationship = page.relationship {
+                Text(relationship.markdownLines.joined(separator: "\n"))
+                    .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            }
             KnowledgePageEvidence(store: store, anchors: page.anchors)
         case .source(let source):
             Text(source.title).font(.title2.bold()).textSelection(.enabled)
@@ -114,6 +118,10 @@ struct KnowledgeRecordInspectionView: View {
             if let provenance = source.provenance {
                 Text("Declared origin: \(provenance.origin.title) · \(provenance.acquisition.title)")
                     .font(.caption).foregroundStyle(.secondary)
+                if !provenance.attribution.isEmpty {
+                    Text("Declared attribution: \(provenance.attribution)")
+                        .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                }
             }
             Text(source.text).textSelection(.enabled)
                 .accessibilityIdentifier("knowledge.inspect-record.source-body")
