@@ -25,6 +25,18 @@ struct CompanionParticleActivity: Equatable {
 
 @MainActor
 extension CompanionStore {
+    /// Drawing reuses the bounded scene projection. Context, request receipts
+    /// and method ownership still pass through their existing current checks;
+    /// this never authorizes a selection, attachment or outcome admission.
+    func desktopParticlePresentationActivity(in scene: CompanionParticleScene,
+        atUptime now: Double = ProcessInfo.processInfo.systemUptime) -> CompanionParticleActivity {
+        guard !isShuttingDown, profileRecoveryBlock == nil,
+              scene.sessionID == liminalStructureSessionID,
+              let current = desktopParticlePresentationScene(atUptime: now),
+              scene.motionID == current.motionID else { return .empty }
+        return particleActivity(in: current.graph, memoryNodeIDs: Set(current.graph.nodes.map(\.id)))
+    }
+
     /// Reuses the native request/context owners without changing selection,
     /// attachments, source files, dispatch or reviewed development.
     func companionParticleActivity(in scene: CompanionParticleScene) -> CompanionParticleActivity {

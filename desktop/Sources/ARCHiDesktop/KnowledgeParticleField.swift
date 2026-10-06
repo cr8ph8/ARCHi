@@ -60,14 +60,14 @@ struct KnowledgeParticleField {
               [target.origin.x, target.origin.y, target.size.width, target.size.height, canvas.width, canvas.height].allSatisfy(\.isFinite),
               target.size.width > 0, target.size.height > 0, canvas.width > 36, canvas.height > 36,
               CGRect(origin: .zero, size: canvas).contains(target) else { return base }
-        let u = progress.isFinite ? min(1, max(0, progress)) : 0
-        let t = u * u * (3 - 2 * u)
         func bounded(_ p: Vector) -> Vector {
             // Keep both the selection ring and reviewed-support satellites in frame.
             .init(x: min(canvas.width - 18, max(18, p.x)), y: min(canvas.height - 18, max(18, p.y)))
         }
         return base.reduce(into: [:]) { result, pair in
             let (id, start) = pair
+            let u = progress.isFinite ? min(1, max(0, progress)) : 0
+            let t = u * u * (3 - 2 * u)
             let angle = fraction(id, salt: "region-anchor") * 2 * .pi
             let end = bounded(.init(x: target.midX + cos(angle) * (target.width / 2 + 22),
                                     y: target.midY + sin(angle) * (target.height / 2 + 22)))
@@ -177,13 +177,17 @@ struct KnowledgeParticleField {
     /// The Seed overlay and expanded map share this exact projection. Display
     /// filtering changes visibility only; use the complete field for framing.
     static func displayPositions(particles: [Particle], frame: Frame, spread: Double,
-                                 reduceMotion: Bool, width: Double, height: Double) -> [String: Vector] {
+                                 reduceMotion: Bool, width: Double, height: Double,
+                                 motionOffsets: [String: Vector] = [:]) -> [String: Vector] {
         let width = width.isFinite ? max(0, width) : 0
         let height = height.isFinite ? max(0, height) : 0
         let scale = max(0, min(width, height) * 0.43 - 12)
         let center = Vector(x: width / 2, y: height / 2)
         return particles.reduce(into: [:]) { points, particle in
-            let point = frame.normalize(position(particle, spread: spread, reduceMotion: reduceMotion))
+            let t = spread.isFinite ? min(1, max(0, spread)) : 1
+            let offset = motionOffsets[particle.nodeID].flatMap(finitePosition) ?? .zero
+            let point = frame.normalize(position(particle, spread: spread, reduceMotion: reduceMotion)
+                + offset * (0.4 + 0.6 * t))
             points[particle.nodeID] = center + point * scale
         }
     }

@@ -25,6 +25,10 @@ struct LiminalGraphMorphSource {
     var requestIDs: Set<String> = []
     let expression: KinLightExpression
     var seedAppearance: CompanionParticleAppearance? = nil
+    var motionSceneDigest: String? = nil
+    var motionEnabled = true
+    var compact = false
+    var includesSeedEquipment = true
     let onSelect: (String) -> Void
 
     private struct Key: Equatable {
@@ -47,7 +51,10 @@ struct LiminalGraphMorphSource {
     @State private var failed = false
     @State private var readyKey: Key?
     @State private var displayedProgress = 0.0
+    @State private var displayedMotion = CompanionParticleMotion.Frame.still
+    @State private var windowVisible = false
     @State private var presented = false
+    @Environment(\.companionParticleMotionEnabled) private var sharedMotionEnabled
 
     var body: some View {
         GeometryReader { proxy in
@@ -61,7 +68,9 @@ struct LiminalGraphMorphSource {
                     // While Metal is ready, its completed frame owns the opacity.
                     let shown = readyKey == key && prepared?.key == key ? displayedProgress
                         : LiminalGraphMorph.boundedProgress(progress)
-                    seedAppearance.art(size: min(proxy.size.width, proxy.size.height), reduceMotion: reduceMotion)
+                    seedAppearance.art(size: min(proxy.size.width, proxy.size.height),
+                        reduceMotion: reduceMotion || !presented || !windowVisible || !motionEnabled || !sharedMotionEnabled || shown >= 0,
+                        includesEquipment: includesSeedEquipment)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .opacity(max(0, -shown))
                 }
@@ -72,14 +81,16 @@ struct LiminalGraphMorphSource {
                         // ARCHi hosts this view in an AppKit NSHostingView, which
                         // has no SwiftUI Scene to publish an active scenePhase.
                         // Metal already checks its real window and occlusion.
-                        isVisible: presented && prepared.key == key,
+                        isVisible: presented && windowVisible && prepared.key == key,
                         ready: readyKey == key && prepared.key == key,
                         growthByRecordID: growthByRecordID, preparedIDs: preparedIDs, requestIDs: requestIDs,
                         expression: expression,
-                        displayedProgress: displayedProgress,
-                        onDisplayedProgress: {
+                        displayedProgress: displayedProgress, displayedMotion: displayedMotion,
+                        motionSceneDigest: motionSceneDigest, motionEnabled: motionEnabled, compact: compact,
+                        onDisplayedFrame: { progress, motionFrame in
                             guard self.prepared?.key == key, prepared.key == key else { return }
-                            displayedProgress = LiminalGraphMorph.boundedProgress($0)
+                            displayedProgress = LiminalGraphMorph.boundedProgress(progress)
+                            displayedMotion = motionFrame
                         },
                         onAvailability: { ready in
                             guard self.prepared?.key == key, prepared.key == key else { return }
@@ -93,8 +104,8 @@ struct LiminalGraphMorphSource {
                         spread: 1 + min(0, LiminalGraphMorph.boundedProgress(progress)),
                         pulses: false, reduceMotion: true, tint: seedColor.accent, expression: expression,
                         preparedIDs: preparedIDs, requestIDs: requestIDs, focusIDs: focusIDs,
-                        growthByRecordID: growthByRecordID, onSelect: onSelect)
-                    if failed || prepared?.key == key {
+                        growthByRecordID: growthByRecordID, motionSceneDigest: motionSceneDigest, onSelect: onSelect)
+                    if failed {
                         Text("Point form is not available yet. Your records remain in the map.")
                             .font(.caption).padding(8).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
                             .allowsHitTesting(false)
@@ -125,6 +136,7 @@ struct LiminalGraphMorphSource {
                 } catch { if !Task.isCancelled { failed = true } }
             }
         }
+        .background(ParticlePresentationVisibility { windowVisible = $0 }.frame(width: 0, height: 0))
         .onAppear { presented = true }
         .onDisappear { presented = false }
         .accessibilityIdentifier("companion-graph.liminal-morph")
@@ -150,24 +162,45 @@ struct LiminalGraphMorphSource {
     let requestIDs: Set<String>
     let expression: KinLightExpression
     let displayedProgress: Double
-    let onDisplayedProgress: (Double) -> Void
+    let displayedMotion: CompanionParticleMotion.Frame
+    let motionSceneDigest: String?
+    let motionEnabled: Bool
+    let compact: Bool
+    let onDisplayedFrame: (Double, CompanionParticleMotion.Frame) -> Void
     let onAvailability: (Bool) -> Void
     let onSelect: (String) -> Void
+    @Environment(\.companionParticleMotionEnabled) private var sharedMotionEnabled
+    @Environment(\.companionParticleMotion) private var motion
+    @State private var draggedID: String?
+    @State private var dragSceneDigest: String?
+    @State private var dragStart = KnowledgeParticleField.Vector.zero
+    @State private var clock = ParticlePresentationClock()
     var animatableData: Double {
         get { progress }
         set { progress = newValue }
     }
 
     var body: some View {
-        let points = morph.anchorPositions(asset: asset, frame: frame, progress: displayedProgress)
+        let moving = isVisible && motionEnabled && sharedMotionEnabled && !reduceMotion
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: !moving)) { tick in
+            let sample = motionFrame(moving: moving, time: clock.time(for: tick.date))
+            surface(motionFrame: sample)
+        }
+        .onDisappear { endDrag() }
+        .onChange(of: motionSceneDigest) { _, _ in endDrag() }
+        .onChange(of: moving) { _, moving in if !moving { endDrag() } }
+    }
+
+    private func surface(motionFrame: CompanionParticleMotion.Frame) -> some View {
+        let points = morph.anchorPositions(asset: asset, frame: frame, progress: displayedProgress, motion: displayedMotion)
         let weight = Double(abs(LiminalGraphMorph.signedSmoothstep(displayedProgress)))
-        ZStack {
+        return ZStack {
             LiminalMetalView(asset: asset, progress: LiminalGraphMorph.targetProgress,
                 reduceMotion: reduceMotion, isVisible: isVisible, seedColor: seedColor,
                 lightExpression: expression,
-                inspection: true, graphMorph: morph, graphMorphProgress: progress,
+                inspection: true, graphMorph: morph, graphMorphProgress: progress, graphMotion: motionFrame,
                 onGraphMorphAvailability: onAvailability,
-                onGraphMorphDisplayedProgress: onDisplayedProgress)
+                onGraphMorphDisplayedMotion: onDisplayedFrame)
                 .allowsHitTesting(false)
             if ready {
                 Canvas { context, _ in
@@ -212,14 +245,29 @@ struct LiminalGraphMorphSource {
                     if let point = points[node.id] {
                         Button { onSelect(node.id) } label: {
                             Circle().fill(.clear).frame(width: 24, height: 24).contentShape(Circle())
-                        }.buttonStyle(.plain).position(point)
+                        }.buttonStyle(.plain)
+                            .simultaneousGesture(DragGesture(minimumDistance: 4, coordinateSpace: .named("memory-morph"))
+                                .onChanged { value in
+                                    let scale = morph.motionPointScale(progress: displayedProgress)
+                                    guard isVisible, !reduceMotion, motionEnabled, sharedMotionEnabled, let motion, let motionSceneDigest,
+                                          ready, scale > 0 else { return }
+                                    if draggedID != node.id {
+                                        endDrag(); draggedID = node.id
+                                        dragSceneDigest = motionSceneDigest
+                                        dragStart = displayedMotion.offsets[node.id] ?? .zero
+                                    }
+                                    _ = motion.grab(nodeID: node.id, offset: dragStart + .init(
+                                        x: value.translation.width / scale, y: value.translation.height / scale),
+                                        sceneDigest: motionSceneDigest)
+                                }.onEnded { _ in endDrag() })
+                            .position(point)
                             .help("\(node.title) · \(node.status)")
                             .accessibilityLabel("\(node.kind.title): \(node.title). \(node.status)")
                             .accessibilityValue(MemoryParticleContextCue.description(prepared: preparedIDs.contains(node.id),
                                 requested: requestIDs.contains(node.id)))
                             .accessibilityAddTraits(node.id == selectedID ? [.isSelected] : [])
                             .accessibilityIdentifier("companion-graph.form-particle.\(node.id)")
-                        if node.id == selectedID || preparedIDs.contains(node.id) || node.kind == .companion && weight < 0.5 {
+                        if !compact && (node.id == selectedID || preparedIDs.contains(node.id) || node.kind == .companion && weight < 0.5) {
                             Text(node.kind == .companion ? node.title + " · " + expression.label : node.title)
                                 .font(.system(size: 10, weight: .medium)).lineLimit(2)
                                 .padding(5).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 5))
@@ -229,6 +277,17 @@ struct LiminalGraphMorphSource {
                     }
                 }
             }
-        }
+        }.coordinateSpace(name: "memory-morph")
+    }
+
+    private func motionFrame(moving: Bool, time: Double) -> CompanionParticleMotion.Frame {
+        guard let motion, let motionSceneDigest else { return .still }
+        return moving ? motion.sample(sceneDigest: motionSceneDigest, time: time,
+            active: true, reduceMotion: false) : motion.snapshot(sceneDigest: motionSceneDigest)
+    }
+
+    private func endDrag() {
+        if let draggedID, let dragSceneDigest { motion?.release(nodeID: draggedID, sceneDigest: dragSceneDigest) }
+        draggedID = nil; dragSceneDigest = nil
     }
 }

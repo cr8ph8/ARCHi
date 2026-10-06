@@ -101,6 +101,12 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
     private var chatBubble: CompanionChatBubbleController?
     private let interestOutline = DesktopInterestOutline()
     private var interestTracking: Task<Void, Never>?
+    private var attractionLease: UUID?
+    private var attractionScene: String?
+    private var attractionOverlay: CGRect?
+    private var attractionPresentation: DesktopParticleAttraction?
+    private var attractionReturnDeadline: Double?
+    private var attractionUpdatedAt: Double?
     var chatWindow: NSPanel? { chatBubble?.window }
 
     init(store: CompanionStore) {
@@ -174,20 +180,24 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
                 self?.store.desktopInterest.cancel()
             }
         }.store(in: &subscriptions)
-        store.desktopInterest.$phase.receive(on: RunLoop.main).sink { [weak self] _ in
+        store.desktopInterest.$phase.combineLatest(store.desktopInterest.$attracting,
+            store.desktopInterest.$areaMarking, store.desktopInterest.$markedArea).receive(on: RunLoop.main).sink { [weak self] _ in
             guard let self else { return }
             // Read the owned session after delivery. An earlier queued phase
             // must not restart tracking after Stop or a newer acquisition.
-            let phase = self.store.desktopInterest.phase
             self.refreshInterestPresentation()
             self.interestTracking?.cancel(); self.interestTracking = nil
-            guard phase == .aiming || phase == .targeted || phase == .reading else {
+            guard self.needsInterestTracking else {
                 self.interestOutline.hide(); return
             }
             self.interestTracking = Task { [weak self] in
                 while !Task.isCancelled {
                     guard self != nil else { return }
                     self?.refreshInterestTarget()
+                    guard self?.needsInterestTracking == true else {
+                        self?.interestTracking = nil
+                        return
+                    }
                     try? await Task.sleep(for: .milliseconds(180))
                 }
             }
@@ -196,9 +206,18 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
             .receive(on: RunLoop.main).sink { [weak self] _ in
                 self?.refreshInterestPresentation()
             }.store(in: &subscriptions)
+        store.$memoryParticleMotionEnabled.receive(on: RunLoop.main).sink { [weak self] _ in
+            self?.refreshInterestPresentation()
+        }.store(in: &subscriptions)
         NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification)
             .receive(on: RunLoop.main).sink { [weak self] _ in
                 self?.refreshInterestPresentation()
+            }.store(in: &subscriptions)
+        NotificationCenter.default.publisher(for: NSApplication.didHideNotification)
+            .receive(on: RunLoop.main).sink { [weak self] _ in
+                self?.store.desktopInterest.cancel(reason: "ARCHi hidden. Point again when ready.")
+                self?.releaseParticleAttraction()
+                self?.interestOutline.hide()
             }.store(in: &subscriptions)
         store.$presentedSection.removeDuplicates().dropFirst().sink { [weak self] _ in
             self?.dismissChatBubble()
@@ -315,25 +334,149 @@ final class CompanionPanelController: NSObject, NSWindowDelegate {
     }
 
     private func recoverPlacement() { move(to: window.frame) }
+    private var needsInterestTracking: Bool {
+        let session = store.desktopInterest
+        return session.phase == .aiming || session.phase == .targeted || session.phase == .reading
+            || session.attracting || session.areaMarking != nil || session.markedArea != nil
+            || attractionReturnDeadline != nil
+    }
+
     private func refreshInterestTarget() {
         let session = store.desktopInterest
         guard window.isVisible, window.isOnActiveSpace, store.isVisible, !store.isShuttingDown else {
-            session.cancel(); interestOutline.hide(); return
+            session.cancel(); releaseParticleAttraction(); interestOutline.hide(); return
         }
+        if session.areaMarking != nil {
+            session.refreshMarkingBoundary(); refreshInterestPresentation(); return
+        }
+        // The read boundary remains unchanged. A released field returns using
+        // existing offsets; it is no longer following or reading the window.
+        if !session.attracting, attractionReturnDeadline != nil { refreshInterestPresentation(); return }
         if session.phase == .aiming {
             session.hover(at: CGPoint(x: window.frame.midX, y: window.frame.midY + window.frame.height * 0.12))
-        } else { session.refreshBoundary() }
+        } else if session.attracting { _ = session.refreshAttraction() }
+        else { session.refreshBoundary() }
         refreshInterestPresentation()
     }
 
     private func refreshInterestPresentation(preferences incoming: CompanionPreferences? = nil) {
         let preferences = incoming ?? store.preferences
-        interaction.setAccessibilityValue(store.cursorAccessibilityValue(for: preferences))
+        // Accessibility resolves its value on demand. Geometry polling must not
+        // rebuild the entire source graph just to set an unused cached label.
         guard !presentedInHabitat, window.isVisible, window.isOnActiveSpace,
-              store.isVisible, !store.isShuttingDown else { interestOutline.hide(); return }
-        interestOutline.show(cue: store.desktopInterest.cue, quiet: preferences.quiet,
+              store.isVisible, !store.isShuttingDown else { releaseParticleAttraction(); interestOutline.hide(); return }
+        if let marking = store.desktopInterest.areaMarking {
+            releaseParticleAttraction()
+            interestOutline.showMarking(marking, onCommit: { [weak self] region in
+                _ = self?.store.desktopInterest.completeMarkingArea(region, markingID: marking.id)
+            }, onCancel: { [weak self] in
+                guard let session = self?.store.desktopInterest, session.areaMarking?.id == marking.id else { return }
+                session.cancelMarkingArea()
+            })
+            return
+        }
+        let attraction = particleAttraction(preferences: preferences)
+        if store.desktopParticleOverlayVisible != (attraction != nil) {
+            store.desktopParticleOverlayVisible = attraction != nil
+        }
+        let cue = (attraction == nil ? store.desktopInterest.attractionTarget ?? store.desktopInterest.areaTarget
+            : store.desktopInterest.attractionTarget ?? store.desktopInterest.target).map { DesktopInterestCue(phase: .targeted, target: $0) }
+            ?? store.desktopInterest.cue
+        let markedFrame = store.desktopInterest.markedArea.flatMap { region in
+            store.desktopInterest.areaTarget.flatMap { ParticleAttractionProjection.desktopAreaFrame(region, in: $0.frame) }
+        }
+        interestOutline.show(cue: cue, quiet: preferences.quiet,
             reduceMotion: preferences.reduceMotion,
-            systemReduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+            systemReduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+            attraction: attraction, motion: store.particleMotion, markedFrame: markedFrame)
+    }
+
+    private func releaseParticleAttraction(keepPresentation: Bool = false) {
+        if let attractionLease { store.particleMotion.endAttraction(lease: attractionLease) }
+        attractionLease = nil; attractionScene = nil
+        attractionUpdatedAt = nil
+        if !keepPresentation {
+            attractionOverlay = nil; attractionPresentation = nil; attractionReturnDeadline = nil
+            if store.desktopParticleOverlayVisible { store.desktopParticleOverlayVisible = false }
+        }
+    }
+
+    private func particleAttraction(preferences: CompanionPreferences) -> DesktopParticleAttraction? {
+        let session = store.desktopInterest
+        guard !preferences.quiet, !preferences.reduceMotion, store.memoryParticleMotionEnabled,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            releaseParticleAttraction()
+            if session.attracting { session.stopAttraction(reason: "Particle following stopped because motion is paused.") }
+            return nil
+        }
+        guard session.attracting || attractionPresentation != nil else { return nil }
+        guard session.phase == .targeted || session.phase == .review else { releaseParticleAttraction(); return nil }
+        guard let scene = store.desktopParticlePresentationScene(atUptime: ProcessInfo.processInfo.systemUptime) else {
+            releaseParticleAttraction()
+            if session.attracting { session.stopAttraction(reason: "Particle following needs the current memory avatar. Reopen the current profile and try again.") }
+            return nil
+        }
+        if !session.attracting {
+            guard let presentation = attractionPresentation, presentation.scene.motionID == scene.motionID else {
+                releaseParticleAttraction(); return nil
+            }
+            let now = ProcessInfo.processInfo.systemUptime
+            if attractionReturnDeadline == nil {
+                releaseParticleAttraction(keepPresentation: true)
+                attractionReturnDeadline = now + 5
+            }
+            let sample = store.particleMotion.snapshot(sceneDigest: scene.motionID)
+            // The deadline only bounds drawing ownership; actual offsets drive
+            // every return frame. Quiet/hide/source changes retire it earlier.
+            guard now < (attractionReturnDeadline ?? now), sample.offsets.values.contains(where: {
+                $0.length * presentation.pointsPerUnit > 0.75
+            }) else { releaseParticleAttraction(); return nil }
+            return .init(scene: scene, overlay: presentation.overlay, origin: presentation.origin,
+                target: .zero, pointsPerUnit: presentation.pointsPerUnit)
+        }
+        if let attractionScene, attractionScene != scene.motionID {
+            releaseParticleAttraction(); session.stopAttraction(reason: "Particle following stopped because the memory scene changed. Choose Attract again."); return nil
+        }
+        guard let target = session.attractionTarget else {
+            releaseParticleAttraction(); session.stopAttraction(reason: "Particle following has no current selected window. Point again."); return nil
+        }
+        if attractionLease == nil {
+            attractionLease = store.particleMotion.beginAttraction(sceneDigest: scene.motionID)
+            attractionScene = scene.motionID
+            attractionOverlay = ParticleAttractionProjection.desktopOverlay(displayFrames: NSScreen.screens.map(\.frame))
+            attractionReturnDeadline = nil
+        }
+        guard let overlay = attractionOverlay else {
+            releaseParticleAttraction(); session.stopAttraction(reason: "The current desktop geometry is unavailable. Point again after arranging displays."); return nil
+        }
+        // The body's content occupies the area above the 34-point title strip.
+        let bodySize = min(window.frame.width, window.frame.height * 128 / 154) * 0.89
+        let bodyFrame = CGRect(x: window.frame.midX - bodySize / 2,
+            y: window.frame.minY + 34 + (window.frame.height - 34 - bodySize) / 2, width: bodySize, height: bodySize)
+        let desktop = overlay.insetBy(dx: 26, dy: 26)
+        let pointsPerUnit = ParticleAttractionProjection.scale(for: desktop.size)
+        guard let origin = ParticleAttractionProjection.localFrame(bodyFrame, in: overlay),
+              let selectedFrame = ParticleAttractionProjection.desktopAreaFrame(session.markedArea, in: target.frame),
+              let targetFrame = ParticleAttractionProjection.localFrame(selectedFrame.intersection(desktop), in: overlay) else {
+            releaseParticleAttraction(); session.stopAttraction(reason: "The selected window is outside the visible desktop. Point again."); return nil
+        }
+        guard let lease = attractionLease, store.particleMotion.isAttractionCurrent(lease: lease, sceneDigest: scene.motionID) else {
+            releaseParticleAttraction(); session.stopAttraction(reason: "Particle following stopped because this target is no longer active. Choose Attract again."); return nil
+        }
+        let offsets = ParticleAttractionProjection.offsets(scene: scene, canvas: overlay.size,
+            target: targetFrame, origin: origin, pointsPerUnit: pointsPerUnit)
+        let now = ProcessInfo.processInfo.systemUptime
+        guard store.particleMotion.updateAttraction(lease: lease, sceneDigest: scene.motionID, offsets: offsets, time: now) else {
+            let elapsed = attractionUpdatedAt.map { String(format: "%.2f", now - $0) }
+            releaseParticleAttraction()
+            session.stopAttraction(reason: elapsed.map { "Particle following stopped after \($0) seconds without a fresh update (limit: 0.50 seconds). Choose Attract again." }
+                ?? "Particle following is unavailable for the current memory map. Reopen the map and try again.")
+            return nil
+        }
+        attractionUpdatedAt = now
+        let presentation = DesktopParticleAttraction(scene: scene, overlay: overlay, origin: origin, target: targetFrame, pointsPerUnit: pointsPerUnit)
+        attractionPresentation = presentation
+        return presentation
     }
     @objc private func displaysChanged(_ notification: Notification) {
         interaction.cancelPointerGesture()

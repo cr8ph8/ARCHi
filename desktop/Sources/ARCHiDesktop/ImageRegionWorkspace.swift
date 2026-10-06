@@ -226,7 +226,9 @@ struct ImageRegionMemoryView: View {
     @State private var hits: [KnowledgeRetrievalHit] = []
     @State private var selectedID: String?
     @State private var message: String?
-    @State private var progress = 0.0
+    @State private var attractionLease: UUID?
+    @State private var attractionScene: String?
+    @State private var canvas = CGSize(width: 500, height: 330)
     @State private var showsInspector = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     init(store: CompanionStore, image: ImageRegionImage, region: ImageRegionRect?,
@@ -234,6 +236,7 @@ struct ImageRegionMemoryView: View {
         self.store = store; self.image = image; self.region = region; library = store.readingSources
         self.onSelect = onSelect
     }
+    private var paused: Bool { reduceMotion || store.preferences.reduceMotion || store.preferences.quiet || !store.memoryParticleMotionEnabled }
     var body: some View {
         let scene = store.companionParticleScene()
         let valid = hits.filter { hit in
@@ -249,11 +252,15 @@ struct ImageRegionMemoryView: View {
                     ImageRegionCanvas(image: image, region: region, onSelect: onSelect)
                     if let scene, let region, !nodes.isEmpty {
                         KnowledgeParticleView(field: scene.field, nodes: nodes, selectedID: selectedID,
-                            spread: 1, pulses: false, reduceMotion: reduceMotion, tint: WorkspaceTheme.accent,
+                            spread: 1, pulses: !paused, reduceMotion: paused, tint: WorkspaceTheme.accent,
                             showsLabels: false, compact: true, growthByRecordID: scene.growthByRecordID,
-                            regionTarget: region.displayed(in: frame), regionProgress: progress, onSelect: { selectedID = $0 })
+                            regionTarget: region.displayed(in: frame), usesPhysicalAttraction: true,
+                            motionSceneDigest: scene.motionID, onSelect: { selectedID = $0 })
+                            .environment(\.companionParticleMotion, store.particleMotion)
+                            .environment(\.companionParticleMotionEnabled, store.memoryParticleMotionEnabled)
                     }
-                }
+                }.onAppear { canvas = geometry.size }
+                    .onChange(of: geometry.size) { _, value in canvas = value }
             }.frame(height: 330)
             HStack {
                 TextField("Find related memory", text: $query).textFieldStyle(.roundedBorder).onSubmit(search)
@@ -264,6 +271,15 @@ struct ImageRegionMemoryView: View {
                     Text(nodes.first(where: { $0.id == selectedID })?.title ?? "Select a memory particle to inspect its source.")
                         .font(.caption).lineLimit(2)
                     Spacer()
+                    Button(attractionLease == nil ? "Gather particles" : "Release particles") {
+                        if attractionLease != nil { release() }
+                        else {
+                            store.desktopInterest.stopAttraction()
+                            attractionLease = store.particleMotion.beginAttraction(sceneDigest: scene.motionID)
+                            attractionScene = scene.motionID
+                            updateAttraction()
+                        }
+                    }.disabled(paused)
                     Button("Inspect memory") { showsInspector = true }
                         .disabled(!nodes.contains(where: { $0.id == selectedID }))
                         .popover(isPresented: $showsInspector) {
@@ -279,16 +295,36 @@ struct ImageRegionMemoryView: View {
             .onChange(of: library.sources) { _, _ in reset() }
             .onChange(of: library.knowledgePages) { _, _ in reset() }
             .onChange(of: library.knowledgeLinks) { _, _ in reset() }
-            .task(id: hits.map(\.id)) {
-                guard !hits.isEmpty else { return }
-                // Mount the existing anchors at their graph positions before
-                // animating this view-only attention arc to the region.
-                try? await Task.sleep(for: .milliseconds(30))
-                guard !Task.isCancelled else { return }
-                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.8)) { progress = 1 }
+            .onChange(of: scene?.motionID) { _, _ in release() }
+            .onChange(of: paused) { _, value in if value { release() } }
+            .onDisappear { release() }
+            .background(ParticlePresentationVisibility { if !$0 { release() } }.frame(width: 0, height: 0))
+            .task {
+                while !Task.isCancelled {
+                    updateAttraction()
+                    try? await Task.sleep(for: .milliseconds(120))
+                }
             }
     }
-    private func reset() { hits = []; selectedID = nil; progress = 0; message = nil; showsInspector = false }
+    private func release() {
+        if let attractionLease { store.particleMotion.endAttraction(lease: attractionLease) }
+        attractionLease = nil; attractionScene = nil
+    }
+    private func updateAttraction() {
+        guard let attractionLease, let attractionScene else { return }
+        guard !paused, let region, let scene = store.companionParticleScene(), scene.motionID == attractionScene else { release(); return }
+        let ids = Set(hits.compactMap { hit -> String? in
+            guard let binding = hit.pageBinding, store.knowledgeDependenciesAreCurrent([binding]),
+                  hit.viaLink.map({ library.availability(of: $0) == nil }) ?? true else { return nil }
+            return KnowledgePageGraph.nodeID(binding)
+        })
+        let frame = ImageRegionCanvas.imageFrame(pixelWidth: image.pixelWidth, pixelHeight: image.pixelHeight, in: canvas)
+        let offsets = ParticleAttractionProjection.offsets(scene: scene, canvas: canvas,
+            target: region.displayed(in: frame)).filter { ids.contains($0.key) }
+        guard !offsets.isEmpty, store.particleMotion.updateAttraction(lease: attractionLease,
+            sceneDigest: attractionScene, offsets: offsets, time: ProcessInfo.processInfo.systemUptime) else { release(); return }
+    }
+    private func reset() { release(); hits = []; selectedID = nil; message = nil; showsInspector = false }
     private func search() {
         guard region != nil else { return }
         do {
@@ -296,9 +332,7 @@ struct ImageRegionMemoryView: View {
                 pages: library.knowledgePages, links: library.knowledgeLinks,
                 libraryIsCurrent: library.isCurrentOnDisk, maximumResults: 6, pagesOnly: true)
             let nextHits = result.hits.filter { $0.pageBinding != nil }
-            // Repeating the same query must not rewind a completed arc: the
-            // identity-keyed animation task restarts only when IDs change.
-            if nextHits.map(\.id) != hits.map(\.id) { progress = 0 }
+            if nextHits.map(\.id) != hits.map(\.id) { release() }
             hits = nextHits; selectedID = nil
             message = hits.isEmpty ? "No reviewed concepts matched. Your existing memories are unchanged."
                 : "\(hits.count) concept matches · select to inspect · no connection saved"

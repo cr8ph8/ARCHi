@@ -231,8 +231,24 @@ struct CompanionGraphView: View {
     @State private var zoom: CGFloat = 1
     @State private var fitRevision = 0
     // One presentation coordinate: Seed (-1), memory map (0), QiMon body (1).
-    @State private var formProgress = 0.0
-    @State private var particlePulses = true
+    @State private var localFormProgress = 0.0
+    private var sharedFormProgress: Binding<Double>?
+    private var formProgress: Double {
+        get { sharedFormProgress?.wrappedValue ?? localFormProgress }
+        nonmutating set {
+            if let sharedFormProgress { sharedFormProgress.wrappedValue = newValue }
+            else { localFormProgress = newValue }
+        }
+    }
+    @State private var localParticlePulses = true
+    private var sharedParticlePulses: Binding<Bool>?
+    private var particlePulses: Bool {
+        get { sharedParticlePulses?.wrappedValue ?? localParticlePulses }
+        nonmutating set {
+            if let sharedParticlePulses { sharedParticlePulses.wrappedValue = newValue }
+            else { localParticlePulses = newValue }
+        }
+    }
     @State private var particleExportMessage: String?
     @State private var isShowcase = false
     @State private var showsViewOptions = false
@@ -248,6 +264,8 @@ struct CompanionGraphView: View {
          onCreateMethod: ((CompanionGraphNode) -> Void)? = nil,
          canCreateMethod: @escaping (CompanionGraphNode) -> Bool = { _ in false },
          particleScene: CompanionParticleScene? = nil,
+         formProgress: Binding<Double>? = nil,
+         particleMotionEnabled: Binding<Bool>? = nil,
          seedAppearance: CompanionParticleAppearance? = nil,
          liminalGraphSource: LiminalGraphMorphSource? = nil,
          selectionID: String? = nil,
@@ -262,6 +280,8 @@ struct CompanionGraphView: View {
         self.lightExpression = lightExpression; self.preparedNodeIDs = preparedNodeIDs
         self.requestNodeIDs = requestNodeIDs
         self.onCreateMethod = onCreateMethod; self.canCreateMethod = canCreateMethod
+        self.sharedFormProgress = formProgress
+        self.sharedParticlePulses = particleMotionEnabled
         self.particleScene = particleScene; self.seedAppearance = seedAppearance
         self.liminalGraphSource = liminalGraphSource
         self.selectionID = selectionID; self.onSelectionChange = onSelectionChange
@@ -568,7 +588,7 @@ struct CompanionGraphView: View {
                     formButton("Liminal · QiMon", symbol: "pawprint", value: 1)
                 }
             }
-            Slider(value: $formProgress, in: -1...(liminalGraphSource == nil ? 0 : 1))
+            Slider(value: Binding(get: { formProgress }, set: { formProgress = $0 }), in: -1...(liminalGraphSource == nil ? 0 : 1))
                 .accessibilityLabel(liminalGraphSource == nil ? "Companion form: Seed to memory map"
                     : "Companion form: Seed through memory map to Liminal")
                 .accessibilityValue(formProgress < -0.9 ? "Seed" : formProgress > 0.9 ? "Liminal"
@@ -631,7 +651,7 @@ struct CompanionGraphView: View {
             } else if layout == .particles {
                 Divider()
                 if liminalGraphSource == nil {
-                    Toggle("Pulse particles", isOn: $particlePulses).toggleStyle(.checkbox)
+                    Toggle("Animate particles", isOn: Binding(get: { particlePulses }, set: { particlePulses = $0 })).toggleStyle(.checkbox)
                         .accessibilityIdentifier("companion-graph.particle-pulse")
                 }
                 if reduceMotion || systemReduceMotion {
@@ -681,6 +701,7 @@ struct CompanionGraphView: View {
                                 growthByRecordID: particleScene?.growthByRecordID ?? [:], preparedIDs: preparedNodeIDs,
                                 requestIDs: requestNodeIDs,
                                 expression: lightExpression, seedAppearance: seedAppearance,
+                                motionSceneDigest: particleScene?.motionID, motionEnabled: particlePulses,
                                 onSelect: { selectNode($0) })
                         } else {
                         if let seedAppearance {
@@ -697,6 +718,7 @@ struct CompanionGraphView: View {
                                 query: "", kindFilter: nil, focusID: focusID).map(\.id)),
                             compact: seedAppearance != nil && particleSpread == 0,
                             growthByRecordID: particleScene?.growthByRecordID ?? [:],
+                            motionSceneDigest: particleScene?.motionID,
                             onSelect: { selectNode($0) })
                             .animation(reduceMotion || systemReduceMotion ? nil : .easeInOut(duration: 0.65), value: particleSpread)
                         }

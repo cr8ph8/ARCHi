@@ -25,17 +25,27 @@ struct KnowledgeParticleView: View, @MainActor Animatable {
     /// Transient image-space attention. This never changes record bindings.
     var regionTarget: CGRect?
     var regionProgress: Double = 1
+    var usesPhysicalAttraction = false
+    var presentationOrigin: CGRect?
+    var attractionPointsPerUnit: Double?
     /// AppKit's floating host supplies real window visibility; scene-based views
     /// retain their ordinary SwiftUI lifecycle. This controls drawing only.
     var animationVisible: Bool? = nil
+    var motionSceneDigest: String? = nil
     let onSelect: (String) -> Void
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
-    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.companionParticleMotionEnabled) private var sharedMotionEnabled
+    @Environment(\.companionParticleMotion) private var motion
     @State private var hoveredID: String?
     @State private var isPresented = false
+    @State private var windowVisible = false
+    @State private var draggedID: String?
+    @State private var dragSceneDigest: String?
+    @State private var dragStart = KnowledgeParticleField.Vector.zero
+    @State private var clock = ParticlePresentationClock()
 
     var body: some View {
-        let still = reduceMotion || systemReduceMotion
+        let still = reduceMotion || systemReduceMotion || !sharedMotionEnabled
         let visible = Set(nodes.map(\.id))
         let particles = field.particles.filter { visible.contains($0.nodeID) }
         let edges = field.edges.filter { visible.contains($0.source) && visible.contains($0.target) }
@@ -45,48 +55,96 @@ struct KnowledgeParticleView: View, @MainActor Animatable {
         let framing = KnowledgeParticleField.framing(particles: field.particles, spread: spread,
             reduceMotion: still, focusIDs: focusIDs)
         GeometryReader { proxy in
-            let scale = max(0, min(proxy.size.width, proxy.size.height) * 0.43 - 12)
-            let center = CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
-            let basePoints = KnowledgeParticleField.displayPositions(particles: particles, frame: framing,
-                spread: spread, reduceMotion: still, width: proxy.size.width, height: proxy.size.height)
-            let points = KnowledgeParticleField.regionPositions(base: basePoints, target: regionTarget,
-                canvas: proxy.size, progress: still ? 1 : regionProgress)
-                .mapValues { CGPoint(x: $0.x, y: $0.y) }
-            ZStack {
-                if still || !pulses {
-                    // ImageRenderer can capture this deterministic Canvas directly.
-                    // A paused TimelineView may omit its subtree in a snapshot.
-                    particleCanvas(particles: particles, edges: edges, points: points,
-                        center: center, scale: scale, active: active, neighbours: neighbours,
-                        time: 0, still: still)
-                        .allowsHitTesting(false)
-                } else {
-                    TimelineView(.animation(minimumInterval: 1 / 15,
-                        paused: !pulses || !(animationVisible ?? (scenePhase == .active)) || !isPresented)) { tick in
-                        particleCanvas(particles: particles, edges: edges, points: points,
-                            center: center, scale: scale, active: active, neighbours: neighbours,
-                            time: pulses ? tick.date.timeIntervalSinceReferenceDate : 0, still: false)
-                    }.allowsHitTesting(false)
+            let moving = !still && pulses && isPresented && (animationVisible ?? windowVisible)
+            if still || !pulses || motionSceneDigest == nil && motion == nil {
+                frameContent(size: proxy.size, particles: particles, edges: edges, framing: framing,
+                    active: active, neighbours: neighbours, time: 0, still: still, moving: false)
+            } else {
+                TimelineView(.animation(minimumInterval: 1 / 30, paused: !moving)) { tick in
+                    frameContent(size: proxy.size, particles: particles, edges: edges, framing: framing,
+                        active: active, neighbours: neighbours,
+                        time: tick.date.timeIntervalSinceReferenceDate, still: still, moving: moving)
                 }
-                ForEach(nodes) { node in
-                    if let position = points[node.id] {
-                        if interactive { nodeButton(node).position(position) }
-                        // Nearby records can overlap; name the focused record and keep all titles in List.
-                        if !compact && showsLabels && (node.id == active || node.kind == .companion || preparedIDs.contains(node.id)) {
-                            Text(node.kind == .companion ? node.title + " · " + expression.label : node.title)
-                                .font(.system(size: 10, weight: .medium)).lineLimit(2)
-                                .padding(.horizontal, 5).padding(.vertical, 3)
-                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 5))
-                                .frame(maxWidth: 145).position(x: position.x, y: position.y + 23)
-                                .allowsHitTesting(false).accessibilityHidden(true)
-                        }
+            }
+        }
+        .background(ParticlePresentationVisibility { windowVisible = $0 }.frame(width: 0, height: 0))
+        .accessibilityIdentifier("companion-graph.particles")
+        .allowsHitTesting(interactive)
+        .onAppear { isPresented = true }
+        .onDisappear { isPresented = false; endDrag() }
+        .onChange(of: motionSceneDigest) { _, _ in endDrag() }
+        .onChange(of: animationVisible ?? windowVisible) { _, visible in if !visible { endDrag() } }
+        .onChange(of: still || !pulses) { _, paused in if paused { endDrag() } }
+    }
+
+    /// Canvas, labels and hit targets are built from one sampled simulation frame.
+    /// The shared runtime advances once, even when the map and avatar both draw.
+    private func frameContent(size: CGSize, particles: [KnowledgeParticleField.Particle],
+                              edges: [CompanionGraphEdge], framing: KnowledgeParticleField.Frame,
+                              active: String?, neighbours: Set<String>, time: Double,
+                              still: Bool, moving: Bool) -> some View {
+        let sample = motionFrame(moving: moving, time: clock.time(for: Date(timeIntervalSinceReferenceDate: time)))
+        let scale = max(0, min(size.width, size.height) * 0.43 - 12)
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let basePoints = usesPhysicalAttraction
+            ? ParticleAttractionProjection.base(field: field, canvas: size, origin: presentationOrigin)
+            : KnowledgeParticleField.displayPositions(particles: particles, frame: framing,
+            spread: spread, reduceMotion: still, width: size.width, height: size.height,
+            motionOffsets: sample.offsets)
+        let points = (usesPhysicalAttraction
+            ? ParticleAttractionProjection.positions(base: basePoints, offsets: sample.offsets,
+                pointsPerUnit: attractionPointsPerUnit ?? ParticleAttractionProjection.scale(for: size))
+            : KnowledgeParticleField.regionPositions(base: basePoints, target: regionTarget,
+                canvas: size, progress: still ? 1 : regionProgress))
+            .mapValues { CGPoint(x: $0.x, y: $0.y) }
+        let t = spread.isFinite ? min(1, max(0, spread)) : 1
+        let motionScale = scale / framing.halfExtent * (0.4 + 0.6 * t)
+        return ZStack {
+            particleCanvas(particles: particles, edges: edges, points: points,
+                center: center, scale: scale, active: active, neighbours: neighbours,
+                time: time, still: still).allowsHitTesting(false)
+            ForEach(nodes) { node in
+                if let position = points[node.id] {
+                    if interactive {
+                        nodeButton(node)
+                            .simultaneousGesture(DragGesture(minimumDistance: 4, coordinateSpace: .named("memory-particles"))
+                                .onChanged { value in
+                                    guard moving, !still, pulses, regionTarget == nil,
+                                          let motion, let motionSceneDigest, motionScale > 0 else { return }
+                                    if draggedID != node.id {
+                                        endDrag()
+                                        draggedID = node.id
+                                        dragSceneDigest = motionSceneDigest
+                                        dragStart = sample.offsets[node.id] ?? .zero
+                                    }
+                                    _ = motion.grab(nodeID: node.id, offset: dragStart + .init(
+                                        x: value.translation.width / motionScale,
+                                        y: value.translation.height / motionScale), sceneDigest: motionSceneDigest)
+                                }.onEnded { _ in endDrag() })
+                            .position(position)
+                    }
+                    if !compact && showsLabels && (node.id == active || node.kind == .companion || preparedIDs.contains(node.id)) {
+                        Text(node.kind == .companion ? node.title + " · " + expression.label : node.title)
+                            .font(.system(size: 10, weight: .medium)).lineLimit(2)
+                            .padding(.horizontal, 5).padding(.vertical, 3)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 5))
+                            .frame(maxWidth: 145).position(x: position.x, y: position.y + 23)
+                            .allowsHitTesting(false).accessibilityHidden(true)
                     }
                 }
             }
-        }.accessibilityIdentifier("companion-graph.particles")
-            .allowsHitTesting(interactive)
-            .onAppear { isPresented = true }
-            .onDisappear { isPresented = false }
+        }.coordinateSpace(name: "memory-particles")
+    }
+
+    private func motionFrame(moving: Bool, time: Double) -> CompanionParticleMotion.Frame {
+        guard let motion, let motionSceneDigest else { return .still }
+        return moving ? motion.sample(sceneDigest: motionSceneDigest, time: time,
+            active: true, reduceMotion: false) : motion.snapshot(sceneDigest: motionSceneDigest)
+    }
+
+    private func endDrag() {
+        if let draggedID, let dragSceneDigest { motion?.release(nodeID: draggedID, sceneDigest: dragSceneDigest) }
+        draggedID = nil; dragSceneDigest = nil
     }
 
     private func particleCanvas(particles: [KnowledgeParticleField.Particle], edges: [CompanionGraphEdge],

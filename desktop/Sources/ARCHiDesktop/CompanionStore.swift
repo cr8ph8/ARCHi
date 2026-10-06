@@ -153,6 +153,13 @@ final class CompanionStore: ObservableObject {
     @Published private(set) var memoryParticleSelection: CompanionParticleSelection?
     /// Disposable projection cache; rebuilt whenever owner evidence changes.
     var particleSceneCache: CompanionParticleScene?
+    var desktopParticleSceneCheck: (motionID: String, uptime: Double)?
+    /// One transient motion runtime shared by all native particle presentations.
+    let particleMotion = CompanionParticleMotion()
+    /// Shared native presentation only; never saved as growth or identity.
+    @Published var memoryParticleFormProgress = 0.0
+    @Published var memoryParticleMotionEnabled = true
+    @Published var desktopParticleOverlayVisible = false
     @Published var inspectedDocumentMethod: DocumentMethodInspectionSelection?
     @Published var inspectedKnowledgeRecord: KnowledgeRecordInspectionSelection?
     /// Chosen method for the document-side preview; never persisted or sent.
@@ -1013,6 +1020,10 @@ final class CompanionStore: ObservableObject {
         selectedGraphNodeID = nil
         memoryParticleSelection = nil
         particleSceneCache = nil
+        desktopParticleSceneCheck = nil
+        particleMotion.reset()
+        memoryParticleFormProgress = 0
+        memoryParticleMotionEnabled = true
         liminalKnowledgeBindings = nil
         liminalKnowledgeIdentity = nil
         liminalStructureSessionID = UUID().uuidString

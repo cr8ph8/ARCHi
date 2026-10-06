@@ -139,7 +139,7 @@ struct LiminalPointStructure: Codable, Equatable, Sendable {
     /// An Arena session receives the same anchors with its own replay boundary.
     func liminalKnowledgePresentation(asset: LiminalPointAsset, sessionID: String? = nil,
                                      at date: Date = Date(), forMemoryMap: Bool = false)
-        -> (sidecar: LiminalKnowledgeBindings.Sidecar, structure: LiminalPointStructure?, inspectionUnavailableReason: String?)? {
+        -> (sidecar: LiminalKnowledgeBindings.Sidecar, structure: LiminalPointStructure?, inspectionUnavailableReason: String?, graph: CompanionGraphSnapshot)? {
         // The memory map may preview the authenticated body without replacing
         // the saved companion appearance or creating another allocation owner.
         guard preferences.visualTreatment == .liminalV008 || forMemoryMap,
@@ -162,7 +162,7 @@ struct LiminalPointStructure: Codable, Equatable, Sendable {
             let sidecar = try projection.sidecar.forSession(sessionID ?? liminalStructureSessionID)
             let structure = LiminalPointStructure.make(development, graph: graph, bindings: sidecar,
                                                        lowDetailIDs: asset.lowDetailIDs)
-            return (sidecar, structure, projection.inspectionUnavailableReason)
+            return (sidecar, structure, projection.inspectionUnavailableReason, graph)
         } catch { return nil }
     }
 
@@ -188,25 +188,29 @@ extension EnvironmentValues {
     @ObservedObject var store: CompanionStore
     var refreshEnabled = true
     var includesPointStructure = true
-    @State private var recheckedAt = Date()
+    @State private var refresh = (date: Date(), uptime: ProcessInfo.processInfo.systemUptime)
     func body(content: Content) -> some View {
-        let scene = store.companionParticleScene(at: recheckedAt)
+        // Read the tick even when no authored point structure is requested;
+        // otherwise an idle cursor would stop observing file-backed changes.
+        let scene = store.desktopParticlePresentationScene(atUptime: max(refresh.uptime, ProcessInfo.processInfo.systemUptime))
         let structure = (includesPointStructure || scene == nil ? LiminalV008Runtime.asset : nil).flatMap {
-            store.liminalKnowledgePresentation(asset: $0, at: recheckedAt)?.structure
+            store.liminalKnowledgePresentation(asset: $0, at: refresh.date)?.structure
         }
         // Keep the artwork in the ordinary view tree so explicit ImageRenderer
         // snapshots never capture a TimelineView placeholder. The task expires
         // with this presentation and refreshes file-backed support while visible.
         content.environment(\.companionParticleScene, scene)
+            .environment(\.companionParticleMotion, store.particleMotion)
+            .environment(\.companionParticleMotionEnabled, store.memoryParticleMotionEnabled)
             .environment(\.companionParticleSelection, store.memoryParticleSelection)
             .environment(\.liminalPointStructure, structure)
             .task(id: refreshEnabled) {
                 guard refreshEnabled else { return }
-                recheckedAt = Date()
+                refresh = (Date(), ProcessInfo.processInfo.systemUptime)
                 while !Task.isCancelled {
                     do { try await Task.sleep(for: .seconds(2)) } catch { return }
                     guard !Task.isCancelled else { return }
-                    recheckedAt = Date()
+                    refresh = (Date(), ProcessInfo.processInfo.systemUptime)
                 }
             }
     }

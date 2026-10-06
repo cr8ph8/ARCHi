@@ -26,8 +26,22 @@ struct LessonSource: Codable, Equatable, Sendable {
     }
 
     static func digest(of text: String) -> String {
-        SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+        lowercaseHex(SHA256.hash(data: Data(text.utf8)))
     }
+
+    /// Byte-identical lowercase SHA-256 presentation without invoking Foundation
+    /// formatting once per byte in frequently revalidated source bindings.
+    static func lowercaseHex<Bytes: Sequence>(_ bytes: Bytes) -> String where Bytes.Element == UInt8 {
+        var encoded: [UInt8] = []
+        encoded.reserveCapacity(64)
+        for byte in bytes {
+            encoded.append(hexDigits[Int(byte >> 4)])
+            encoded.append(hexDigits[Int(byte & 0x0f)])
+        }
+        return String(decoding: encoded, as: UTF8.self)
+    }
+
+    private static let hexDigits = Array("0123456789abcdef".utf8)
 }
 
 struct LessonOrigin: Codable, Equatable, Sendable {

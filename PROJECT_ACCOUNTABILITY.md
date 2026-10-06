@@ -1,3 +1,13 @@
+## 6 October 2026 — Shared particle physics and desktop area attention
+
+The Memory Map, floating companion and authenticated Liminal clusters use one session-bound particle-motion owner. Explicit window or normalized-area selection supplies temporary bounded attraction goals; release returns the same records through the shared simulation. Metadata following does not read window content, save a memory or award growth. Selected-image region drawing uses the same affine projection. Camera experiments are preserved outside the active application and are not shipped by this change.
+
+The final focused native run passes **113 cases** (104 XCTest + nine Swift Testing), zero skips/failures, including actual Metal completion/picking, reviewed experience wiring, stale targets/sessions, coordinate boundaries and timestamp-only metadata. Native trials exposed immediate target rejection and repeated graph reconstruction; repairs preserve current action validation while sharing bounded presentation reads and avoiding redundant publications. Earlier failures remain in local receipts rather than being recast as acceptance.
+
+Local installation of **0.7.0 (356.80.17)** passes strict/deep installed/rollback signatures and byte-preserves 33 profile files and 86 authenticated asset files. The final walkthrough is blocked by a locked Mac, so visible area gather/return is still pending. Full presentation FPS, dense accessibility, custom sprite import/launch, semantic recognition and spatial AR remain unfinished. No live model calls, new persistent owner, storage credit, mobile or Unity development. [Public qualification summary](docs/accountability/evidence/r06-desktop-particles-2026-10-06.json).
+
+The scoped source parity check passes. Generic fresh-release preflight remains blocked, including 25 metadata findings in two unchanged, already tracked PNGs and outstanding release review. No asset blob is changed in this cohort; draft delivery does not clear those release findings.
+
 ## 6 October 2026 — Shared memory-avatar task cues and selection continuity
 
 The native avatar, Memory Map and authored-body overlay now use one read-only prepared/current-request projection over canonical memory anchors. Dashed rings mark prepared local context; double rings mark exact references in the currently owned, started local request. Source/page/method bindings remain exact; historical request aliases stay inspectable without receiving extra memory rings. Generic profiles preserve map context cues. These cues do not establish model attention, citations or learning; existing reviewed outcomes alone supply growth motifs.

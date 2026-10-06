@@ -75,15 +75,25 @@ struct LiveCompanionPresence: View {
     var body: some View {
         let form = store.presentationForm(for: store.preferences, role: role)
         Group {
-            if role == .cursor, let particleScene {
+            if role == .cursor, store.desktopParticleOverlayVisible {
+                // The click-through desktop surface temporarily draws these
+                // exact records. Retain equipment and input here, not a second
+                // copy of the moving constellation.
+                CompanionEquipmentArt(equipment: store.preferences.equipment, size: size,
+                    activated: false, reduceMotion: store.preferences.reduceMotion || systemReduceMotion || store.preferences.quiet)
+            } else if role == .cursor, let particleScene {
                 CompanionMemoryAvatar(scene: particleScene, size: size,
                     reduceMotion: store.preferences.reduceMotion || systemReduceMotion || store.preferences.quiet,
                     seedColor: store.preferences.seedColor, equipment: store.preferences.equipment,
                     expression: store.kinLightExpression,
                     animationVisible: store.isVisible && !store.isShuttingDown ? cursorWindowVisible : false,
                     selectedID: selection?.selectedID(in: particleScene),
-                    activity: store.companionParticleActivity(in: particleScene))
-            } else if !store.hasPersonalQiMon,
+                    activity: store.desktopParticlePresentationActivity(in: particleScene),
+                    formProgress: store.memoryParticleFormProgress,
+                    liminalGraphSource: store.memoryParticleFormProgress > 0
+                        ? store.liminalGraphMorphSource(scene: particleScene) : nil,
+                    seedAppearance: CompanionParticleAppearance(store: store))
+            } else if particleScene == nil, !store.hasPersonalQiMon,
                !store.preferences.quiet && !store.preferences.reduceMotion && !systemReduceMotion,
                store.reactorReferenceMatchesCurrentAppearance,
                let image = store.reactor.frameImage {

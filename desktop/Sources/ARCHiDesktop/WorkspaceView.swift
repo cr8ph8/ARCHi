@@ -885,7 +885,7 @@ private struct ConnectionsWorkspace: View {
                 Divider().padding(.vertical, 12)
                 ConnectionRow(icon: "doc.text", title: "Local documents", detail: "Share one UTF-8 text file with this workspace.", status: "Available", available: true)
                 Divider().padding(.vertical, 12)
-                ConnectionRow(icon: "camera", title: "Camera & AR", detail: "Bring ARCHi into a camera view with anchored highlights.", status: "Planned", available: false)
+                ConnectionRow(icon: "camera", title: "Camera & AR", detail: "Deferred while desktop particle following is qualified.", status: "Deferred", available: false)
             }
         }
     }

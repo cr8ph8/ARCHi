@@ -58,6 +58,7 @@ struct CompanionGraphWorkspace: View {
     @State private var attachmentMessage: String?
     @State private var methodAuthoring: KnowledgeMapMethodSelection?
     @State private var showsWork = false
+    @State private var windowVisible = false
     @State private var imageRegionContext: PastedDocumentImportContext?
 
     init(store: CompanionStore, initialShowcase: Bool = false) {
@@ -80,6 +81,11 @@ struct CompanionGraphWorkspace: View {
                 }.pickerStyle(.segmented).frame(width: 226)
                     .accessibilityIdentifier("memory-map.scope")
                 Spacer(minLength: 0)
+                Button("Follow window", systemImage: "viewfinder") {
+                    store.beginDesktopInterest()
+                }
+                    .buttonStyle(.borderless).font(.system(size: 11))
+                    .accessibilityIdentifier("memory-map.follow-object")
                 Button("Image region…", systemImage: "photo.badge.magnifyingglass") {
                     imageRegionContext = store.beginPastedDocumentImport()
                 }.buttonStyle(.borderless).font(.system(size: 11))
@@ -113,7 +119,7 @@ struct CompanionGraphWorkspace: View {
             HSplitView {
                 // Keep this host mounted while Ask opens or closes, preserving
                 // map selection, filters and focus. The store owns all requests.
-                TimelineView(.periodic(from: .now, by: 2)) { context in
+                TimelineView(.animation(minimumInterval: 2, paused: !windowVisible)) { context in
                     let presentationSessionID = store.liminalStructureSessionID
                     let companionScene = store.companionParticleScene(at: context.date)
                     let particleScene = includesActivity ? nil : companionScene
@@ -148,14 +154,10 @@ struct CompanionGraphWorkspace: View {
                             methodAuthoring = selection
                         }, canCreateMethod: { store.beginKnowledgeMapMethod(node: $0) != nil },
                         particleScene: particleScene,
+                        formProgress: particleScene == nil ? nil : $store.memoryParticleFormProgress,
+                        particleMotionEnabled: particleScene == nil ? nil : $store.memoryParticleMotionEnabled,
                         seedAppearance: particleScene == nil ? nil : CompanionParticleAppearance(store: store),
-                        liminalGraphSource: particleScene.flatMap { scene in
-                            guard let asset = LiminalV008Runtime.asset,
-                                  let presentation = store.liminalKnowledgePresentation(asset: asset, at: context.date, forMemoryMap: true),
-                                  presentation.sidecar.originDigest == scene.originDigest else { return nil }
-                            return LiminalGraphMorphSource(asset: asset, bindings: presentation.sidecar,
-                                fullGraph: store.companionGraphSnapshot(at: context.date), originDigest: scene.originDigest)
-                        },
+                        liminalGraphSource: particleScene.flatMap { store.liminalGraphMorphSource(scene: $0, at: context.date) },
                         selectionID: store.selectedGraphNodeID,
                         onSelectionChange: { id in
                             store.selectGraphRecord(id, in: snapshot, particleScene: particleScene, memoryOnly: !includesActivity,
@@ -165,6 +167,8 @@ struct CompanionGraphWorkspace: View {
                         }, canPlayNote: { node in
                             store.canPreviewResonance(nodeID: node.id, in: snapshot, particleScene: particleScene, capturedOriginDigest: companionScene?.originDigest)
                         })
+                        .environment(\.companionParticleMotion, store.particleMotion)
+                        .environment(\.companionParticleMotionEnabled, store.memoryParticleMotionEnabled)
                         .id(ObjectIdentifier(store.readingSources))
                 }
                 .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
@@ -184,6 +188,7 @@ struct CompanionGraphWorkspace: View {
                 }
             }
         }
+        .background(ParticlePresentationVisibility { windowVisible = $0 }.frame(width: 0, height: 0))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("node-lab.workspace")
         .sheet(item: $store.inspectedDocumentMethod) { selection in

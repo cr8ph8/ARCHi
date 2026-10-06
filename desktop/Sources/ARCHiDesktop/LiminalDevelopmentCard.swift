@@ -58,6 +58,8 @@ struct LiminalDevelopmentCard: View {
                         else { inspectionNotice = "That record changed. Select its current light again." }
                     })
             }.frame(width: 280, height: 280)
+                .environment(\.companionParticleMotion, store.particleMotion)
+            .environment(\.companionParticleMotionEnabled, store.memoryParticleMotionEnabled)
             Text("Your Seed holds the same \(scene.graph.nodes.count) records as your memory map, including their sources and saved methods.")
                 .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
             Button("Unfold memory map", systemImage: "point.3.connected.trianglepath.dotted") { store.open(.nodeLab) }

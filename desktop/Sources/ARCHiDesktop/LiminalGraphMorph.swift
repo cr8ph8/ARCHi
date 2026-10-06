@@ -33,6 +33,11 @@ struct LiminalGraphMorph: Equatable, Sendable {
     /// xy = map endpoint, z = visible(1), hidden(-1), decorative(0); w is unused.
     let mapTargetsByRank: [Int: SIMD4<Float>]
     let seedTargetsByRank: [Int: SIMD4<Float>]
+    /// Screen points per unit of the shared field displacement. Keep these
+    /// separate: the compact Seed and focused map have different static frames.
+    private let mapMotionScale: Double
+    private let seedMotionScale: Double
+    private let clusterRanksByNodeID: [String: [Int]]
     private let finishDigest: String?
 
     var anchorArtIDsByNodeID: [String: UInt32] {
@@ -98,6 +103,7 @@ struct LiminalGraphMorph: Equatable, Sendable {
         let seedPositions = KnowledgeParticleField.displayPositions(particles: field.particles, frame: seedFrame,
             spread: 0, reduceMotion: true, width: viewport.width, height: viewport.height)
         var targets: [Int: SIMD4<Float>] = [:], seedTargets: [Int: SIMD4<Float>] = [:], anchors: [Anchor] = []
+        var clusterRanks: [String: [Int]] = [:]
         for binding in bindings.bindings.sorted(by: { $0.nodeID < $1.nodeID }) where mapIDs.contains(binding.nodeID) {
             guard let point = mapPoints[binding.nodeID], let clip = clipPosition(point: point, viewport: viewport),
                   let seed = seedPositions[binding.nodeID],
@@ -109,6 +115,7 @@ struct LiminalGraphMorph: Equatable, Sendable {
                                  seedClip: seedClip, isVisible: visible))
             for id in binding.particleIDs {
                 guard let rank = ranks[id] else { return nil }
+                clusterRanks[binding.nodeID, default: []].append(rank)
                 let offset = clusterOffset(artID: id, anchorID: binding.anchorID)
                 let shifted = CGPoint(x: point.x + CGFloat(offset.x), y: point.y + CGFloat(offset.y))
                 guard let target = clipPosition(point: shifted, viewport: viewport) else { return nil }
@@ -133,6 +140,9 @@ struct LiminalGraphMorph: Equatable, Sendable {
                      graphDigest: bindings.graphDigest, mapGraphDigest: mapDigest, viewport: viewport,
                      anchors: anchors, mapPoints: mapPoints, mapTargetsByRank: targets,
                      seedTargetsByRank: seedTargets,
+                     mapMotionScale: max(0, min(viewport.width, viewport.height) * 0.43 - 12) / frame.halfExtent,
+                     seedMotionScale: max(0, min(viewport.width, viewport.height) * 0.43 - 12) / seedFrame.halfExtent * 0.4,
+                     clusterRanksByNodeID: clusterRanks,
                      finishDigest: asset.finish?.digest)
     }
 
@@ -144,6 +154,53 @@ struct LiminalGraphMorph: Equatable, Sendable {
 
     func seedTargets(count: Int) -> [SIMD4<Float>] {
         paddedTargets(seedTargetsByRank, count: count)
+    }
+
+    /// A read-only projection of the shared transient displacement. xy is the
+    /// map offset; zw is the Seed offset. The body uses xy * 0.08 in Metal and
+    /// CPU picking. Authenticated samples and the correspondence digest stay fixed.
+    func motionClipOffsets(nodeID: String, motion: CompanionParticleMotion.Frame) -> SIMD4<Float> {
+        guard clusterRanksByNodeID[nodeID] != nil, let offset = motion.offsets[nodeID],
+              offset.x.isFinite, offset.y.isFinite else { return .zero }
+        let result = SIMD4(Float(offset.x * mapMotionScale * 2 / viewport.width),
+                           Float(-offset.y * mapMotionScale * 2 / viewport.height),
+                           Float(offset.x * seedMotionScale * 2 / viewport.width),
+                           Float(-offset.y * seedMotionScale * 2 / viewport.height))
+        return result.x.isFinite && result.y.isFinite && result.z.isFinite && result.w.isFinite ? result : .zero
+    }
+
+    /// Same scalar projection for direct manipulation in screen points. The
+    /// corresponding frame remains responsible for spring bounds and ownership.
+    func motionPointScale(progress: Double) -> Double {
+        let t = Double(Self.signedSmoothstep(progress))
+        return t < 0 ? mapMotionScale * (1 + t) - seedMotionScale * t
+                     : mapMotionScale * (1 - t) + mapMotionScale * 0.08 * t
+    }
+
+    /// Bounded by the already validated low-detail correspondence. No file reads,
+    /// new allocation of record IDs, topology changes or geometry authentication.
+    func motionTargets(count: Int, motion: CompanionParticleMotion.Frame = .still) -> [SIMD4<Float>] {
+        guard count > 0, count <= LiminalPointAsset.Detail.high.rawValue,
+              mapTargetsByRank.keys.allSatisfy({ $0 >= 0 && $0 < count }) else { return [] }
+        var targets = [SIMD4<Float>](repeating: .zero, count: count)
+        for (nodeID, ranks) in clusterRanksByNodeID {
+            let offset = motionClipOffsets(nodeID: nodeID, motion: motion)
+            for rank in ranks { targets[rank] = offset }
+        }
+        return targets
+    }
+
+    /// This operation order is shared with liminal_vertex and Metal picking.
+    static func displacedClip(seed: SIMD2<Float>, map: SIMD2<Float>, body: SIMD2<Float>,
+                              offsets: SIMD4<Float>, amount: Float) -> SIMD2<Float> {
+        let mapPoint = map + SIMD2(offsets.x, offsets.y)
+        let seedPoint = seed + SIMD2(offsets.z, offsets.w)
+        let bodyPoint = body + SIMD2(offsets.x, offsets.y) * 0.08
+        if amount == -1 { return seedPoint }
+        if amount == 0 { return mapPoint }
+        if amount == 1 { return bodyPoint }
+        return amount < 0 ? mapPoint * (1 + amount) - seedPoint * amount
+                          : mapPoint * (1 - amount) + bodyPoint * amount
     }
 
     private func paddedTargets(_ targets: [Int: SIMD4<Float>], count: Int) -> [SIMD4<Float>] {
@@ -206,7 +263,7 @@ struct LiminalGraphMorph: Equatable, Sendable {
     /// Bounded CPU picking/overlay geometry from the exact loaded target frame.
     /// Rebuild the descriptor when viewport, graph, filters or owner changes.
     func anchorPositions(asset: LiminalPointAsset, frame: LiminalPointAsset.Frame,
-                         progress: Double) -> [String: CGPoint] {
+                         progress: Double, motion: CompanionParticleMotion.Frame = .still) -> [String: CGPoint] {
         guard asset.manifestSHA256 == manifestSHA256, asset.finish?.digest == finishDigest,
               frame.frame == Self.targetFrame, frame.pointCount > 0,
               frame.pointCount <= LiminalPointAsset.Detail.high.rawValue,
@@ -217,8 +274,9 @@ struct LiminalGraphMorph: Equatable, Sendable {
         for anchor in anchors where anchor.isVisible {
             guard let source = frame.sample(at: anchor.rank) else { return [:] }
             let finished = asset.finish?.display(source, rank: anchor.rank, frame: frame.frame) ?? source
-            guard let body = Self.bodyClipPosition(position: finished.position, asset: asset, frame: frame.frame, viewport: viewport),
-                  let clip = Self.interpolate(seed: anchor.seedClip, map: anchor.mapClip, body: body, progress: progress) else { return [:] }
+            guard let body = Self.bodyClipPosition(position: finished.position, asset: asset, frame: frame.frame, viewport: viewport) else { return [:] }
+            let clip = Self.displacedClip(seed: anchor.seedClip, map: anchor.mapClip, body: body,
+                offsets: motionClipOffsets(nodeID: anchor.nodeID, motion: motion), amount: Self.signedSmoothstep(progress))
             points[anchor.nodeID] = Self.screenPosition(clip: clip, viewport: viewport)
         }
         return points

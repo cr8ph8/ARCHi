@@ -5,6 +5,53 @@ import XCTest
 /// Production owners with suspended in-process clients. No model or personal profile.
 @MainActor
 final class CompanionParticleActivityTests: XCTestCase {
+    func testDesktopPresentationActivityReusesSceneButStillRechecksSourceContext() throws {
+        let fixture = try ActivityFixture()
+        defer { fixture.clean() }
+        let (source, page) = try fixture.page()
+        let store = fixture.store
+        XCTAssertTrue(store.useKnowledgePageInChat(page, openAssistant: false))
+        let scene = try XCTUnwrap(store.desktopParticlePresentationScene(atUptime: 100))
+        XCTAssertEqual(store.desktopParticlePresentationActivity(in: scene, atUptime: 100.01).preparedNodeIDs,
+            try fixture.ids(page: page, source: source, in: scene))
+
+        let other = ReadingSourceLibrary(url: fixture.profile.deletingPathExtension().appendingPathExtension("reading-sources.json"))
+        try other.replace(id: source.id, title: source.title, text: "A corrected synthetic supporting passage.")
+        let files = try fixture.files()
+        // The drawing cache remains reusable, but invalid request context may
+        // not keep a prepared ring lit for those now-stale source bindings.
+        XCTAssertEqual(store.desktopParticlePresentationActivity(in: scene, atUptime: 100.18), .empty)
+        XCTAssertEqual(store.particleSceneCache, scene)
+        XCTAssertEqual(store.desktopParticleSceneCheck?.uptime, 100)
+        XCTAssertEqual(store.selectedKnowledgePages, [page.binding])
+        XCTAssertEqual(store.desktopParticlePresentationActivity(in: scene, atUptime: 102), .empty)
+        XCTAssertNotEqual(store.particleSceneCache?.motionID, scene.motionID)
+        XCTAssertEqual(try fixture.files(), files)
+        XCTAssertEqual(fixture.local.calls, 0)
+    }
+
+    func testDesktopPresentationActivityRejectsPreviousSessionAndRecoveryImmediately() throws {
+        let fixture = try ActivityFixture()
+        defer { fixture.clean() }
+        let (_, page) = try fixture.page()
+        let store = fixture.store
+        XCTAssertTrue(store.useKnowledgePageInChat(page, openAssistant: false))
+        let scene = try XCTUnwrap(store.desktopParticlePresentationScene(atUptime: 100))
+        let files = try fixture.files()
+        try store.admitRestoredProfile()
+        let currentPage = try XCTUnwrap(store.readingSources.latestKnowledgePages.first)
+        XCTAssertTrue(store.useKnowledgePageInChat(currentPage, openAssistant: false))
+        let current = try XCTUnwrap(store.desktopParticlePresentationScene(atUptime: 100.01))
+        XCTAssertEqual(current.digest, scene.digest)
+        XCTAssertNotEqual(current.sessionID, scene.sessionID)
+        XCTAssertFalse(store.desktopParticlePresentationActivity(in: current, atUptime: 100.02).preparedNodeIDs.isEmpty)
+        XCTAssertEqual(store.desktopParticlePresentationActivity(in: scene, atUptime: 100.02), .empty)
+        store.blockProfileForRecovery("Synthetic recovery boundary")
+        XCTAssertEqual(store.desktopParticlePresentationActivity(in: current, atUptime: 100.03), .empty)
+        XCTAssertEqual(try fixture.files(), files)
+        XCTAssertEqual(fixture.local.calls, 0)
+    }
+
     func testPreparedPageAndSourcesPreserveSelectionDraftAndFilesWithoutDispatch() throws {
         let fixture = try ActivityFixture()
         defer { fixture.clean() }

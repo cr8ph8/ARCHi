@@ -50,7 +50,7 @@ struct CompanionMemoryParticleField: View {
         KnowledgeParticleView(field: scene.field, nodes: scene.graph.nodes, selectedID: selectedID,
             spread: 0, pulses: !reduceMotion, reduceMotion: reduceMotion, tint: seedColor.accent,
             showsLabels: false, compact: true, interactive: onSelect != nil,
-            growthByRecordID: scene.growthByRecordID, onSelect: { onSelect?($0) })
+            growthByRecordID: scene.growthByRecordID, motionSceneDigest: scene.motionID, onSelect: { onSelect?($0) })
     }
 }
 
@@ -67,20 +67,45 @@ struct CompanionMemoryAvatar: View {
     var animationVisible: Bool? = nil
     var selectedID: String?
     var activity: CompanionParticleActivity = .empty
+    var formProgress = 0.0
+    var liminalGraphSource: LiminalGraphMorphSource?
+    var seedAppearance: CompanionParticleAppearance?
+    @Environment(\.companionParticleMotionEnabled) private var sharedMotionEnabled
 
     var body: some View {
         ZStack {
-            KnowledgeParticleView(field: scene.field, nodes: scene.graph.nodes, selectedID: selectedID,
-                spread: 1, pulses: !reduceMotion, reduceMotion: reduceMotion, tint: seedColor.accent,
-                showsLabels: false, expression: expression, preparedIDs: activity.preparedNodeIDs,
-                requestIDs: activity.requestNodeIDs, interactive: false,
-                growthByRecordID: scene.growthByRecordID, animationVisible: animationVisible, onSelect: { _ in })
-                .frame(width: 256, height: 256)
-                .scaleEffect(size / 256)
-                .frame(width: size, height: size)
+            Group {
+                if let liminalGraphSource {
+                    LiminalGraphMorphView(source: liminalGraphSource, graph: scene.graph, field: scene.field,
+                        nodes: scene.graph.nodes, selectedID: selectedID, progress: formProgress,
+                        reduceMotion: reduceMotion, seedColor: seedColor, focusIDs: nil,
+                        growthByRecordID: scene.growthByRecordID, preparedIDs: activity.preparedNodeIDs,
+                        requestIDs: activity.requestNodeIDs, expression: expression, seedAppearance: seedAppearance,
+                        motionSceneDigest: scene.motionID, motionEnabled: animationVisible ?? true,
+                        compact: true, includesSeedEquipment: false, onSelect: { _ in })
+                } else {
+                    ZStack {
+                        if let seedAppearance {
+                            seedAppearance.art(size: 256,
+                                reduceMotion: reduceMotion || animationVisible == false || !sharedMotionEnabled || formProgress >= 0,
+                                includesEquipment: false)
+                                .opacity(max(0, -formProgress))
+                        }
+                        KnowledgeParticleView(field: scene.field, nodes: scene.graph.nodes, selectedID: selectedID,
+                            spread: 1 + min(0, formProgress), pulses: !reduceMotion, reduceMotion: reduceMotion, tint: seedColor.accent,
+                            showsLabels: false, expression: expression, preparedIDs: activity.preparedNodeIDs,
+                            requestIDs: activity.requestNodeIDs, interactive: false,
+                            growthByRecordID: scene.growthByRecordID, animationVisible: animationVisible,
+                            motionSceneDigest: scene.motionID, onSelect: { _ in })
+                    }
+                }
+            }
+            .frame(width: 256, height: 256)
+            .scaleEffect(size / 256)
+            .frame(width: size, height: size)
             if !equipment.isEmpty {
                 CompanionEquipmentArt(equipment: equipment, size: size, activated: false,
-                    reduceMotion: reduceMotion)
+                    reduceMotion: reduceMotion || animationVisible == false || !sharedMotionEnabled)
             }
         }
         .frame(width: size, height: size)
@@ -113,10 +138,10 @@ struct CompanionParticleAppearance {
         seedColor = store.preferences.seedColor
     }
 
-    @MainActor func art(size: CGFloat, reduceMotion: Bool) -> some View {
+    @MainActor func art(size: CGFloat, reduceMotion: Bool, includesEquipment: Bool = true) -> some View {
         CompanionPresenceArt(form: form, family: family, size: size, reduceMotion: reduceMotion,
             treatment: treatment, recipe: recipe, naturalVariation: naturalVariation,
-            equipment: equipment, seedColor: seedColor)
+            equipment: includesEquipment ? equipment : .empty, seedColor: seedColor)
             .environment(\.companionParticleScene, nil)
             .environment(\.liminalPointStructure, nil)
             .environment(\.liminalPointProgress, LiminalV008Runtime.orbProgress)
@@ -124,9 +149,19 @@ struct CompanionParticleAppearance {
     }
 }
 
+private struct CompanionParticleMotionEnabledKey: EnvironmentKey { static let defaultValue = true }
+private struct CompanionParticleMotionKey: EnvironmentKey { static let defaultValue: CompanionParticleMotion? = nil }
 private struct CompanionParticleSceneKey: EnvironmentKey { static let defaultValue: CompanionParticleScene? = nil }
 private struct CompanionParticleSelectionKey: EnvironmentKey { static let defaultValue: CompanionParticleSelection? = nil }
 extension EnvironmentValues {
+    var companionParticleMotionEnabled: Bool {
+        get { self[CompanionParticleMotionEnabledKey.self] }
+        set { self[CompanionParticleMotionEnabledKey.self] = newValue }
+    }
+    var companionParticleMotion: CompanionParticleMotion? {
+        get { self[CompanionParticleMotionKey.self] }
+        set { self[CompanionParticleMotionKey.self] = newValue }
+    }
     var companionParticleScene: CompanionParticleScene? {
         get { self[CompanionParticleSceneKey.self] }
         set { self[CompanionParticleSceneKey.self] = newValue }
@@ -138,16 +173,52 @@ extension EnvironmentValues {
 }
 
 @MainActor extension CompanionStore {
+    func liminalGraphMorphSource(scene: CompanionParticleScene, at date: Date = Date()) -> LiminalGraphMorphSource? {
+        guard let asset = LiminalV008Runtime.asset else { return nil }
+        return liminalGraphMorphSource(scene: scene, asset: asset, at: date)
+    }
+
+    /// The sidecar and its complete graph come from one current owner read. A
+    /// second full graph walk repeated source/lineage hashing and could observe
+    /// different owner bytes than the exact graph already bound by the sidecar.
+    func liminalGraphMorphSource(scene: CompanionParticleScene, asset: LiminalPointAsset,
+                                at date: Date = Date()) -> LiminalGraphMorphSource? {
+        guard let presentation = liminalKnowledgePresentation(asset: asset, at: date, forMemoryMap: true),
+              presentation.sidecar.originDigest == scene.originDigest else { return nil }
+        return LiminalGraphMorphSource(asset: asset, bindings: presentation.sidecar,
+            fullGraph: presentation.graph, originDigest: scene.originDigest)
+    }
+
+    /// Geometry polling must not rebuild every source and backlink on the main
+    /// thread. Reuse the canonical presentation cache for at most two seconds,
+    /// matching the visible avatar's existing support refresh. Profile/session
+    /// replacement retires it immediately; file-backed changes retire it on the
+    /// next refresh. This accessor is only for drawing, never record admission,
+    /// reading a window, sending context or applying a reviewed outcome.
+    func desktopParticlePresentationScene(atUptime now: Double = ProcessInfo.processInfo.systemUptime) -> CompanionParticleScene? {
+        guard now.isFinite, now >= 0 else { desktopParticleSceneCheck = nil; return nil }
+        if let scene = particleSceneCache, scene.sessionID == liminalStructureSessionID,
+           let checked = desktopParticleSceneCheck, checked.motionID == scene.motionID,
+           now >= checked.uptime, now - checked.uptime < 2 {
+            return scene
+        }
+        guard let scene = companionParticleScene() else { desktopParticleSceneCheck = nil; return nil }
+        desktopParticleSceneCheck = (scene.motionID, now)
+        return scene
+    }
+
     func companionParticleScene(at date: Date = Date()) -> CompanionParticleScene? {
-        guard let development = liminalFormDevelopment(at: date) else { particleSceneCache = nil; return nil }
+        guard let development = liminalFormDevelopment(at: date) else { particleSceneCache = nil; particleMotion.reset(); return nil }
         let graph = memoryMapSnapshot(at: date)
         guard let digest = CompanionParticleScene.fingerprint(originDigest: development.originDigest,
-            graph: graph, development: development) else { particleSceneCache = nil; return nil }
+            graph: graph, development: development) else { particleSceneCache = nil; particleMotion.reset(); return nil }
         if particleSceneCache?.digest == digest, particleSceneCache?.sessionID == liminalStructureSessionID {
             return particleSceneCache
         }
         particleSceneCache = CompanionParticleScene.build(originDigest: development.originDigest,
             graph: graph, development: development, sessionID: liminalStructureSessionID)
+        if let scene = particleSceneCache { particleMotion.reconcile(scene: scene) }
+        else { particleMotion.reset() }
         return particleSceneCache
     }
 
