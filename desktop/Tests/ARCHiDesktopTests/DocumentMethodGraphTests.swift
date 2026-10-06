@@ -111,12 +111,42 @@ final class DocumentMethodGraphTests: XCTestCase {
             requirements: .init(mustBeShorter: false, preserveNumbersAndLinks: true)))
         let method = try XCTUnwrap(fixture.store.documentProcedures.latestProcedures.first)
         let before = fixture.store.memoryMapSnapshot()
-        let origin = try XCTUnwrap(before.nodes.first { $0.target == .knowledgePage(id: page.id) })
+        let origin = try XCTUnwrap(before.nodes.first { $0.target == .knowledgePage(page.binding) })
         XCTAssertTrue(before.edges.contains { $0.source == DocumentMethodGraph.nodeID(method.binding) && $0.target == origin.id })
         try library.forget(id: source.id)
         let after = fixture.store.memoryMapSnapshot()
         XCTAssertEqual(after.nodes.first { $0.kind == .method }?.status, "Unavailable for reuse")
         XCTAssertTrue(after.edges.contains { $0.source == DocumentMethodGraph.nodeID(method.binding) && $0.target == origin.id })
+    }
+
+    func testHistoricalMethodOriginOpensItsRetainedPageInsteadOfLatestRevision() throws {
+        let fixture = Fixture(); defer { fixture.clean() }
+        let library = fixture.store.readingSources
+        let source = try library.keep(title: "Source", text: "Retain attribution.")
+        let anchor = try library.makeAnchor(sourceID: source.id,
+            range: NSRange(location: 0, length: source.text.utf16.count))
+        let draft = try library.saveKnowledgePage(title: "Original concept", body: "Original interpretation.",
+            kind: .concept, anchors: [anchor])
+        let origin = try library.reviewKnowledgePage(id: draft.id, expectedRevision: draft.revision)
+        XCTAssertTrue(fixture.store.keepKnowledgeProcedure(page: origin, title: "Attribute claims",
+            instruction: "Keep attribution.", requirements: .init()))
+        let method = try XCTUnwrap(fixture.store.documentProcedures.latestProcedures.first)
+        _ = try library.saveKnowledgePage(id: origin.id, expectedRevision: origin.revision,
+            title: "Later concept", body: "Changed interpretation.", kind: .concept, anchors: [anchor])
+        let graph = fixture.store.memoryMapSnapshot()
+        let edge = try XCTUnwrap(graph.edges.first {
+            $0.source == DocumentMethodGraph.nodeID(method.binding) && $0.label == "authored from concept"
+        })
+        let node = try XCTUnwrap(graph.nodes.first { $0.id == edge.target })
+        XCTAssertEqual(node.target, .knowledgePage(origin.binding))
+        fixture.store.openGraphTarget(try XCTUnwrap(node.target))
+        let selection = try XCTUnwrap(fixture.store.inspectedKnowledgeRecord)
+        guard case .page(let inspected) = fixture.store.knowledgeRecordForInspection(selection) else {
+            return XCTFail("The exact retained origin must remain inspectable.")
+        }
+        XCTAssertEqual(inspected, origin)
+        XCTAssertNotEqual(inspected, library.latestKnowledgePages.first)
+        XCTAssertNotNil(library.availability(of: inspected))
     }
 
     func testActivityMethodOriginDoesNotReuseOlderCapturedPageReference() throws {
@@ -142,7 +172,7 @@ final class DocumentMethodGraphTests: XCTestCase {
         let method = try XCTUnwrap(fixture.store.documentProcedures.latestProcedures.first)
         let graph = fixture.store.companionGraphSnapshot()
         let captured = try XCTUnwrap(graph.nodes.first {
-            $0.target == .knowledgePage(id: earlier.id) && $0.status == "Historical reference"
+            $0.target == .knowledgePage(earlier.binding) && $0.status == "Historical reference"
                 && $0.details.contains(.init(label: "Revision", value: String(earlier.revision)))
         })
         let origin = try XCTUnwrap(graph.nodes.first { $0.id == KnowledgePageGraph.nodeID(current.binding) })

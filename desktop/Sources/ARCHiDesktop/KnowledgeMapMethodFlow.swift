@@ -13,9 +13,9 @@ struct KnowledgeMapMethodSelection: Identifiable {
 @MainActor
 extension CompanionStore {
     func beginKnowledgeMapMethod(node: CompanionGraphNode) -> KnowledgeMapMethodSelection? {
-        guard case .knowledgePage(let id) = node.target,
+        guard case .knowledgePage(let binding) = node.target,
               let page = readingSources.latestKnowledgePages.first(where: {
-                  $0.id == id && KnowledgePageGraph.nodeID($0.binding) == node.id
+                  $0.binding == binding && KnowledgePageGraph.nodeID($0.binding) == node.id
               }) else { return nil }
         let selection = KnowledgeMapMethodSelection(page: page,
             sourceOwner: ObjectIdentifier(readingSources), methodOwner: ObjectIdentifier(documentProcedures),

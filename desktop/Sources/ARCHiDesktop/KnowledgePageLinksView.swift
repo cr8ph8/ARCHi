@@ -68,12 +68,9 @@ struct KnowledgePageLinksView: View {
             Text("\(retained?.title ?? "Unavailable page") · v\(binding.revision)").font(.caption)
             Spacer()
             Button("Open page") {
-                guard store.knowledgeDependenciesAreCurrent([binding]) else {
-                    store.knowledgePageMessage = "This endpoint changed. Revise the connection and choose its current reviewed page."; return
-                }
-                store.selectedKnowledgePageID = binding.id
+                store.inspectKnowledgeRecord(.page(binding))
             }.buttonStyle(.borderless).font(.caption)
-                .disabled(!store.knowledgeDependenciesAreCurrent([binding]))
+                .disabled(store.hasOpenKnowledgeDraft || store.isShuttingDown)
         }
     }
 

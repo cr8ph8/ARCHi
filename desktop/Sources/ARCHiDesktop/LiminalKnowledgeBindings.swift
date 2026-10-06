@@ -170,6 +170,8 @@ struct LiminalKnowledgeBindings {
             guard target.allSatisfy(textFits), target.dropFirst().allSatisfy(validIdentifier),
                   node.evidenceTrail.count <= 32 else { throw BindingError.invalidGraph }
             if case let .documentMethod(binding) = node.target, !binding.isValid { throw BindingError.invalidGraph }
+            if case let .knowledgePage(binding) = node.target, !binding.isValid { throw BindingError.invalidGraph }
+            if case let .readingSource(binding) = node.target, !binding.isValid { throw BindingError.invalidGraph }
             for evidence in node.evidenceTrail {
                 guard validIdentifier(evidence.id),
                       evidence.relatedNodeID.map(validIdentifier) ?? true,
@@ -196,7 +198,8 @@ struct LiminalKnowledgeBindings {
         case .interactiveARC: ["interactiveARC"]
         case let .arcEvidence(proposalHash): ["arcEvidence", proposalHash]
         case let .stewardTask(taskID): ["stewardTask", taskID]
-        case let .knowledgePage(id): ["knowledgePage", id]
+        case let .knowledgePage(binding): ["knowledgePage", binding.id, String(binding.revision), binding.digest]
+        case let .readingSource(binding): ["readingSource", binding.id, String(binding.revision), binding.digest, binding.provenanceDigest ?? "none"]
         case let .documentMethod(binding): ["documentMethod", binding.id, String(binding.revision), binding.digest]
         }
     }

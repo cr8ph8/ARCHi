@@ -1,3 +1,11 @@
+## 5 October 2026 — Exact memory record inspection
+
+Memory Map source and page targets now retain their full revision, content digest and source provenance binding. One read-only inspector shows the selected retained page or current exact source, including historical method origins and linked page endpoints. Replaced or forgotten source text shows an unavailable state; it is never reconstructed or silently replaced with a newer copy. Opening and closing the inspector preserves the map selection and current work. Inspection does not attach context, call models, write memory or award development. Particle selection digests now include the complete navigation reference; existing current-only reuse checks remain intact.
+
+Real local Swift compilation and 64 focused native regression checks passed. A separate opt-in native-window test passed using disposable records and accessibility actions: earlier-page inspection, nested method-origin inspection, return-state preservation and unavailable-source handling. No installed app or personal profile was used. NSView bitmap captures record view-layer layout; full compositor colors, contrast, keyboard/VoiceOver and installed-candidate acceptance remain open. Reproduce the interaction check with `ARCHI_GRAPH_NATIVE_ACTIONS=1` and `ARCHI_GRAPH_RENDER_DIR` set to a local evidence directory, filtering `KnowledgeRecordInspectionPresentationTests` in the existing scratch cache.
+
+This reviewed source change does not install an app or qualify desktop 1.0. The historical accountability mismatches, independent backup/donor reconciliation and populated work/review/reuse/restore gates remain open. No new state owner or persistence format was introduced.
+
 ## 5 October 2026 — Consolidated source, bounded policy and traceable builds
 
 The desktop remains the active product target. The reviewed source cohort aligns memory/Seed/QiMon presentation and resonance, retains local play entry points, and shares one pure numerical approach policy across document, reading and ARC3 adapters. Domain records still own evidence, admission and replay. Lean remains optional developer assurance; Jev remains a proposed typed-choice provider behind existing request and admission owners. Neither is an installed dependency.

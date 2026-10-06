@@ -224,6 +224,7 @@ private struct DocumentProcedureVersionDetails: View {
     @ObservedObject var store: CompanionStore
     let procedure: DocumentProcedure
     var isHistorical = false
+    @State private var sourceInspection: KnowledgeRecordInspectionSelection?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -277,12 +278,15 @@ private struct DocumentProcedureVersionDetails: View {
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("document.procedure-knowledge-origin.\(identifier)")
                 Button("Show source") {
-                    store.selectedKnowledgePageID = origin.id
-                    store.open(.memory)
+                    sourceInspection = .init(reference: .page(origin),
+                        sourceOwner: ObjectIdentifier(store.readingSources))
                 }
                 .buttonStyle(.borderless)
-                .disabled(source == nil)
+                .disabled(store.isShuttingDown || store.hasOpenKnowledgeDraft)
                 .accessibilityIdentifier("document.procedure-show-source.\(identifier)")
+                .sheet(item: $sourceInspection) { selection in
+                    KnowledgeRecordInspectionView(store: store, selection: selection)
+                }
             }
             Text("Candidate from a reviewed concept · local use on this Mac")
                 .foregroundStyle(.secondary)

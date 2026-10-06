@@ -182,7 +182,10 @@ final class KnowledgeLinkIntegrationTests: XCTestCase {
     }
 
     private func pageNode(_ id: String, graph: CompanionGraphSnapshot) throws -> CompanionGraphNode {
-        try XCTUnwrap(graph.nodes.first { $0.target == .knowledgePage(id: id) })
+        try XCTUnwrap(graph.nodes.first {
+            if case .knowledgePage(let binding) = $0.target { return binding.id == id }
+            return false
+        })
     }
 
     private func libraryURL(_ preference: URL) -> URL {

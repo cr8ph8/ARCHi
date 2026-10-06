@@ -106,6 +106,12 @@ struct WorkspaceView: View {
         .tint(WorkspaceTheme.accent)
         // The native window owns the 880 × 640 content minimum.
         .frame(minWidth: 880)
+        .sheet(item: $store.inspectedKnowledgeRecord) { selection in
+            KnowledgeRecordInspectionView(store: store, selection: selection)
+        }
+        .onChange(of: ObjectIdentifier(store.readingSources)) { _, _ in
+            store.inspectedKnowledgeRecord = nil
+        }
         .sheet(isPresented: $showsRetention) {
             DesktopRetentionSummary(store: store) { showsRetention = false }
         }

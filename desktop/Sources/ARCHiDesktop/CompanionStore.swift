@@ -154,6 +154,7 @@ final class CompanionStore: ObservableObject {
     /// Disposable projection cache; rebuilt whenever owner evidence changes.
     var particleSceneCache: CompanionParticleScene?
     @Published var inspectedDocumentMethod: DocumentMethodInspectionSelection?
+    @Published var inspectedKnowledgeRecord: KnowledgeRecordInspectionSelection?
     /// Chosen method for the document-side preview; never persisted or sent.
     @Published private(set) var documentMethodToTry: DocumentMethodInspectionSelection?
     @Published private(set) var workspaceRoutingNotice: String?
@@ -835,6 +836,18 @@ final class CompanionStore: ObservableObject {
             return "A World Trial is open. Choose Stop & keep record there before starting a Pattern Trial."
         }
         return nil
+    }
+
+    func inspectKnowledgeRecord(_ reference: KnowledgeRecordReference) {
+        guard !isShuttingDown, profileRecoveryBlock == nil else {
+            workspaceRoutingNotice = "Finish profile recovery or reopen ARCHi before inspecting a memory record."
+            return
+        }
+        guard !hasOpenKnowledgeDraft else {
+            workspaceRoutingNotice = "Save or cancel the open knowledge draft before inspecting another record."
+            return
+        }
+        inspectedKnowledgeRecord = .init(reference: reference, sourceOwner: ObjectIdentifier(readingSources))
     }
 
     func dismissWorkspaceRoutingNotice() { workspaceRoutingNotice = nil }
@@ -4265,6 +4278,7 @@ extension CompanionStore {
         clearParticleNavigationForProfileChange()
         selectedReadingSourceIDs = []
         selectedKnowledgePageID = nil
+        inspectedKnowledgeRecord = nil
         selectedKnowledgePages = []
         knowledgePageMessage = nil
         documentReadingPreview = nil
@@ -4326,6 +4340,7 @@ extension CompanionStore {
         clearPreparedDocumentProcedure()
         selectedReadingSourceIDs = []
         selectedKnowledgePageID = nil
+        inspectedKnowledgeRecord = nil
         selectedKnowledgePages = []
         knowledgePageMessage = nil
         documentReadingPreview = nil

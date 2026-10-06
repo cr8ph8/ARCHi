@@ -19,7 +19,7 @@ final class MemoryMapSnapshotTests: XCTestCase {
             range: NSRange(location: 0, length: source.text.utf16.count))
         let draft = try fixture.library.saveKnowledgePage(title: "Source context", body: "Inspect the original passage.",
             kind: .concept, anchors: [anchor])
-        _ = try fixture.library.reviewKnowledgePage(id: draft.id, expectedRevision: draft.revision)
+        let reviewed = try fixture.library.reviewKnowledgePage(id: draft.id, expectedRevision: draft.revision)
         let lesson = KeptLesson(topic: "writing", text: "Keep attribution with a claim.")
         let bytes = try Data(contentsOf: fixture.url)
         let date = Date()
@@ -34,7 +34,7 @@ final class MemoryMapSnapshotTests: XCTestCase {
         for node in memory.nodes where node.kind != .companion {
             XCTAssertEqual(full.nodes.first { $0.id == node.id }, node)
         }
-        XCTAssertEqual(memory.nodes.first { $0.kind == .knowledge }?.target, .knowledgePage(id: draft.id))
+        XCTAssertEqual(memory.nodes.first { $0.kind == .knowledge }?.target, .knowledgePage(reviewed.binding))
         XCTAssertEqual(try Data(contentsOf: fixture.url), bytes)
     }
 

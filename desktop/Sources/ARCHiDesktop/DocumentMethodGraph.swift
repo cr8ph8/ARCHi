@@ -96,7 +96,7 @@ enum DocumentMethodGraph {
                         .init(label: "Revision", value: String(origin.revision)),
                         .init(label: "Digest", value: origin.digest),
                         .init(label: "Meaning", value: "The method retains this exact origin. A newer concept never replaces this reference.")],
-                    target: nil)) { link(id, sourceID, "authored from concept", relationship: .authoredFrom) }
+                    target: .knowledgePage(origin))) { link(id, sourceID, "authored from concept", relationship: .authoredFrom) }
             }
             if !method.originRecordID.isEmpty {
                 let record = store.documentWork.records.first { $0.id == method.originRecordID }

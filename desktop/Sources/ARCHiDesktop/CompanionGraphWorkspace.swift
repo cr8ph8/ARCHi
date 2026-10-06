@@ -29,9 +29,8 @@ extension CompanionStore {
         case .assistant: open(.assistant)
         case .context: open(.context)
         case .memory: open(.memory)
-        case .knowledgePage(let id):
-            selectedKnowledgePageID = id
-            open(.memory)
+        case .knowledgePage(let binding): inspectKnowledgeRecord(.page(binding))
+        case .readingSource(let binding): inspectKnowledgeRecord(.source(binding))
         case .documentMethod(let binding):
             inspectedDocumentMethod = .init(binding: binding,
                 methodOwner: ObjectIdentifier(documentProcedures), historyOwner: ObjectIdentifier(documentWork),
@@ -224,9 +223,9 @@ struct CompanionGraphWorkspace: View {
     /// Re-resolve the exact displayed version at interaction time. A newer page
     /// with the same logical ID must not silently replace the selected node.
     private func currentPage(for node: CompanionGraphNode) -> KnowledgePage? {
-        guard case .knowledgePage(let id) = node.target,
+        guard case .knowledgePage(let binding) = node.target,
               let page = store.readingSources.latestKnowledgePages.first(where: {
-                  $0.id == id && KnowledgePageGraph.nodeID($0.binding) == node.id
+                  $0.binding == binding && KnowledgePageGraph.nodeID($0.binding) == node.id
               }), store.readingSources.availability(of: page) == nil else { return nil }
         return page
     }

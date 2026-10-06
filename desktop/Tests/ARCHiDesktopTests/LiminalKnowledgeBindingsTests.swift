@@ -175,7 +175,7 @@ final class LiminalKnowledgeBindingsTests: XCTestCase {
         XCTAssertNoThrow(try map.project(withDetails([.init(label: "Note", value: body)]), sessionID: session, originDigest: origin))
         XCTAssertThrowsError(try map.project(withDetails([.init(label: "Note", value: body + "x")]), sessionID: session, originDigest: origin))
         XCTAssertThrowsError(try map.project(withDetails(Array(repeating: .init(label: "", value: ""), count: 33)), sessionID: session, originDigest: origin))
-        XCTAssertThrowsError(try map.project(withDetails([], target: .knowledgePage(id: "\u{0}")), sessionID: session, originDigest: origin))
+        XCTAssertThrowsError(try map.project(withDetails([], target: .knowledgePage(.init(id: "\u{0}", revision: 1, digest: digest))), sessionID: session, originDigest: origin))
         let oversized = CompanionGraphSnapshot(nodes: (0..<9).map {
             .init(id: "node-\($0)", title: "", subtitle: "", kind: .knowledge, status: "",
                 details: Array(repeating: .init(label: "", value: body), count: 32), target: nil)
@@ -262,6 +262,42 @@ final class LiminalKnowledgeBindingsTests: XCTestCase {
             XCTAssertNil(pick.resolves(in: current, graph: correction, revisions: [1], after: 0, now: Date(timeIntervalSince1970: 1_000)))
             XCTAssertNil(pick.resolves(in: first, graph: correction, revisions: [1], after: 0, now: Date(timeIntervalSince1970: 1_000)))
         }
+    }
+
+    func testExactReferenceChangesInvalidateParticlePicksWithoutMovingAnchors() throws {
+        let id = UUID().uuidString
+        let page = KnowledgePageBinding(id: id, revision: 1, digest: digest)
+        let source = ReadingSourceSnapshot(id: id, title: "Source", revision: 1, text: "Same text")
+        let declared = ReadingSourceSnapshot(id: id, title: source.title, revision: source.revision,
+            text: source.text, provenance: .init(origin: .human, acquisition: .userCopy))
+        let pairs: [(CompanionGraphTarget, CompanionGraphTarget)] = [
+            (.knowledgePage(page), .knowledgePage(.init(id: id, revision: 2, digest: digest))),
+            (.knowledgePage(page), .knowledgePage(.init(id: id, revision: 1, digest: String(repeating: "b", count: 64)))),
+            (.readingSource(.init(binding: source.binding)), .readingSource(.init(binding: declared.binding)))
+        ]
+        func snapshot(_ target: CompanionGraphTarget) -> CompanionGraphSnapshot {
+            .init(nodes: [.init(id: "record", title: "Record", subtitle: "", kind: .knowledge,
+                status: "", details: [], target: target)], edges: [], truncatedCount: 0)
+        }
+        for (earlier, later) in pairs {
+            var map = try LiminalKnowledgeBindings(manifestSHA256: digest, lowDetailIDs: Array(0..<96))
+            let first = try map.project(snapshot(earlier), sessionID: session, originDigest: origin)
+            let currentGraph = snapshot(later)
+            let current = try map.project(currentGraph, sessionID: session, originDigest: origin)
+            XCTAssertEqual(first.bindings, current.bindings)
+            XCTAssertNotEqual(first.graphDigest, current.graphDigest)
+            let pick = LiminalKnowledgeSelection(schemaVersion: 1, sessionID: session, originDigest: origin,
+                revision: 1, manifestSHA256: digest, graphDigest: first.graphDigest, nodeID: "record",
+                artParticleID: first.bindings[0].anchorID, sequence: 1, updatedAtUnix: 1_000)
+            XCTAssertNil(pick.resolves(in: current, graph: currentGraph, revisions: [1], after: 0,
+                now: Date(timeIntervalSince1970: 1_000)))
+        }
+        var map = try LiminalKnowledgeBindings(manifestSHA256: digest, lowDetailIDs: Array(0..<96))
+        let invalid = ReadingSourceSnapshot(id: "invalid", title: "Source", revision: 1, text: "Source")
+        XCTAssertThrowsError(try map.project(snapshot(.readingSource(.init(binding: invalid.binding))),
+            sessionID: session, originDigest: origin))
+        XCTAssertThrowsError(try map.project(snapshot(.knowledgePage(.init(id: id, revision: 0, digest: digest))),
+            sessionID: session, originDigest: origin))
     }
 
     func testCapacityFallbackPublishesCurrentEmptyBindingsAndRejectsOldPicks() throws {

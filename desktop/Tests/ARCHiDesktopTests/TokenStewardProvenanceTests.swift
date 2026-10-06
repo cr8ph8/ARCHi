@@ -53,7 +53,7 @@ final class TokenStewardProvenanceTests: XCTestCase {
         XCTAssertTrue(graph.nodes.contains { $0.target == .stewardTask(taskID: "saved") })
         XCTAssertTrue(graph.nodes.contains { $0.kind == .source && $0.status == "Historical reference"
             && $0.details.contains(.init(label: "Digest", value: source.digest)) })
-        XCTAssertTrue(graph.nodes.contains { $0.kind == .knowledge && $0.target == .knowledgePage(id: page.id)
+        XCTAssertTrue(graph.nodes.contains { $0.kind == .knowledge && $0.target == .knowledgePage(page)
             && $0.details.contains(.init(label: "Revision", value: "3")) })
         XCTAssertEqual(graph.edges.filter { $0.label == "captured dependency at dispatch" }.count, 2)
 

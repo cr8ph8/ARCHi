@@ -58,7 +58,7 @@ enum KnowledgePageGraph {
             guard add(.init(id: id, title: retained?.title ?? "Unavailable source version",
                 subtitle: "Source v\(identity.revision)", kind: .source,
                 status: issue == nil ? "Retained source" : "Needs source review",
-                details: details, target: .memory,
+                details: details, target: .readingSource(identity),
                 presentationState: issue == nil ? .recorded : .unavailable)) else { return nil }
             return id
         }
@@ -86,7 +86,7 @@ enum KnowledgePageGraph {
                     .init(label: "Revision", value: String(page.revision)),
                     .init(label: "Digest", value: page.binding.digest),
                     .init(label: "Meaning", value: "This authored page is not automatically supplied to a model or counted as learning.")],
-                target: .knowledgePage(id: page.id), presentationState: presentation)) else { continue }
+                target: .knowledgePage(page.binding), presentationState: presentation)) else { continue }
             if ids.contains("companion-archi") { link("companion-archi", id, "authored memory") }
             for anchor in page.anchors {
                 guard let sourceID = addSource(anchor.source) else { continue }

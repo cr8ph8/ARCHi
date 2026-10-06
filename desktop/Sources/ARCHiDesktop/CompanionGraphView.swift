@@ -1023,7 +1023,8 @@ struct CompanionGraphView: View {
         case .assistant: "Open " + AskARCHiBrand.title
         case .context: "Open shared context"
         case .memory: "Manage memories"
-        case .knowledgePage: "Open this knowledge page"
+        case .knowledgePage: "Inspect this page version"
+        case .readingSource: "Inspect this source version"
         case .documentMethod: "Inspect this method version"
         case .advanced: "Open local receipts"
         case .capabilities: "Open ARC"

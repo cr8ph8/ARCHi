@@ -42,7 +42,8 @@ enum CompanionGraphTarget: Equatable, Sendable {
     case assistant, context, memory, advanced, capabilities, steward, interactiveARC
     case arcEvidence(proposalHash: String)
     case stewardTask(taskID: String)
-    case knowledgePage(id: String)
+    case knowledgePage(KnowledgePageBinding)
+    case readingSource(ReadingSourceParent)
     case documentMethod(DocumentProcedureUse)
 }
 struct CompanionGraphDetail: Equatable, Sendable { let label: String; let value: String }
@@ -252,7 +253,7 @@ enum CompanionGraph {
                         status: "Historical reference", details: [.init(label: "Source ID", value: binding.id),
                             .init(label: "Revision", value: String(binding.revision)), .init(label: "Digest", value: binding.digest),
                             .init(label: "Provenance digest", value: binding.provenance?.digest ?? "No declaration recorded"),
-                            .init(label: "Availability", value: "Inspect the source owner. A newer source cannot replace this exact reference.")], target: .memory) {
+                            .init(label: "Availability", value: "Inspect the source owner. A newer source cannot replace this exact reference.")], target: .readingSource(.init(binding: binding))) {
                         edge(id, taskID, lane.dispatched ? "captured dependency at dispatch" : "prepared dependency")
                     }
                 }
@@ -262,7 +263,7 @@ enum CompanionGraph {
                         status: "Historical reference", details: [.init(label: "Page ID", value: binding.id),
                             .init(label: "Revision", value: String(binding.revision)), .init(label: "Digest", value: binding.digest),
                             .init(label: "Availability", value: "Inspect the page history. This reference does not substitute the latest version or certify its claim.")],
-                        target: .knowledgePage(id: binding.id)) {
+                        target: .knowledgePage(binding)) {
                         edge(id, taskID, lane.dispatched ? "captured dependency at dispatch" : "prepared dependency")
                     }
                 }
