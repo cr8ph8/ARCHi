@@ -1,3 +1,9 @@
+## 5 October 2026 — Memory avatar installed walkthrough
+
+Local build **0.7.0 (356.71.80)** was installed through the guarded updater after normal Quit. Its source identity and pre-sign executable/resource entries match the checked candidate; destination-specific Info.plist is the only payload difference. Installed and preserved rollback signatures pass strict/deep verification. All 33 canonical profile files remained byte-identical after installation and the walkthrough.
+
+Native accessibility and compositor inspection confirmed the floating record network, full-size personal Memory Map, exact retained source-version inspector, avatar menu/accessibility map shortcuts, hide/show, Quiet on/off and clean process restart. No model request, manufactured reviewed outcome or profile migration occurred. This closes the earlier installation and initial capture gates only. Actual OS Reduce Motion, dense keyboard/VoiceOver, sustained performance, full populated work/review/reuse, broader body transitions and owner/release acceptance remain open. The previous 51 focused checks were not rerun or recounted. No private profile contents, images or local receipts are published in this entry.
+
 ## 5 October 2026 — Native memory-network avatar
 
 The floating cursor now draws the current personal Memory Map record network instead of placing compact motes over the selected Seed artwork. Existing record IDs, typed links, color, equipment and exact selected-record highlighting carry through the shared renderer. Kept records supply anchors; current origin-bound reviewed uses supply bounded gold motifs. The authored Seed and developed body remain available through their existing presentation owners, and unavailable personal scenes retain the current profile's authored fallback. No profile migration, new memory store or learning credit comes from drawing.
