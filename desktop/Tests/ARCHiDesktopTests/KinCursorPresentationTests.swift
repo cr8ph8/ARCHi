@@ -7,6 +7,31 @@ import XCTest
 /// All data, windows and completed-answer fixtures here are local and disposable.
 final class KinCursorPresentationTests: XCTestCase {
     @MainActor
+    func testMemoryAvatarDistinguishesPreparedRequestAndReviewedGrowthWithoutWriting() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.clean() }
+        XCTAssertTrue(fixture.store.connectLiminalLearningStudy())
+        let scene = try XCTUnwrap(fixture.store.companionParticleScene())
+        let record = try XCTUnwrap(scene.graph.nodes.first { $0.kind != .companion })
+        let files = try fixture.files()
+        let base = try render(CompanionMemoryAvatar(scene: scene, size: 256, reduceMotion: true))
+        let prepared = try render(CompanionMemoryAvatar(scene: scene, size: 256, reduceMotion: true,
+            activity: .init(preparedNodeIDs: [record.id], requestNodeIDs: [])))
+        let requested = try render(CompanionMemoryAvatar(scene: scene, size: 256, reduceMotion: true,
+            activity: .init(preparedNodeIDs: [], requestNodeIDs: [record.id])))
+        assertChangedPixels(base, prepared, "Prepared context must remain visible with reduced motion")
+        assertChangedPixels(prepared, requested, "A running request has a distinct cue from prepared context")
+        let selectedRequest = try render(CompanionMemoryAvatar(scene: scene, size: 256, reduceMotion: true,
+            selectedID: record.id, activity: .init(preparedNodeIDs: [], requestNodeIDs: [record.id])))
+        assertChangedPixels(requested, selectedRequest, "Request activity must not replace the selected-record ring")
+        XCTAssertEqual(fixture.store.companionParticleScene()?.growthByRecordID, scene.growthByRecordID)
+        XCTAssertEqual(try fixture.files(), files)
+        XCTAssertEqual(fixture.client.calls, 0)
+        try save(prepared, name: "avatar-prepared.png")
+        try save(requested, name: "avatar-request-references.png")
+    }
+
+    @MainActor
     func testLiminalSelectionCannotEmitRejectedFirstLightCombination() async throws {
         let fixture = try makeFixture()
         defer { fixture.clean() }
@@ -254,7 +279,14 @@ final class KinCursorPresentationTests: XCTestCase {
         XCTAssertTrue(reopened.evolution.load())
         XCTAssertEqual(reopened.activeQiMon, identity)
         XCTAssertEqual(reopened.preferences, preferences)
-        XCTAssertEqual(reopened.companionParticleScene(), memory)
+        let reopenedScene = try XCTUnwrap(reopened.companionParticleScene())
+        XCTAssertEqual(reopenedScene.graph, memory.graph)
+        XCTAssertEqual(reopenedScene.field.particles, memory.field.particles)
+        XCTAssertEqual(reopenedScene.field.edges, memory.field.edges)
+        XCTAssertEqual(reopenedScene.field.omittedCount, memory.field.omittedCount)
+        XCTAssertEqual(reopenedScene.growthByRecordID, memory.growthByRecordID)
+        XCTAssertEqual(reopenedScene.digest, memory.digest)
+        XCTAssertNotEqual(reopenedScene.sessionID, memory.sessionID)
         assertSameAvatarPixels(cursor, try render(LiveCompanionPresence(store: reopened, size: 128, role: .cursor)),
             "Reopening the same retained records preserves the memory avatar")
         XCTAssertEqual(try fixture.files(), retainedFiles, "Rendering and reopening cannot append another outcome")

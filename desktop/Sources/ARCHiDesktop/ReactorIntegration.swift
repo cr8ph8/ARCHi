@@ -57,7 +57,8 @@ struct LiveCompanionPresence: View {
     var body: some View {
         LiveCompanionDrawing(store: store, size: size, role: role, cursorWindowVisible: cursorWindowVisible)
             .modifier(LiminalStructureScope(store: store,
-                refreshEnabled: role != .cursor || (store.isVisible && !store.isShuttingDown && (cursorWindowVisible ?? true))))
+                refreshEnabled: role != .cursor || (store.isVisible && !store.isShuttingDown && (cursorWindowVisible ?? true)),
+                includesPointStructure: role != .cursor))
     }
 }
 
@@ -80,7 +81,8 @@ struct LiveCompanionPresence: View {
                     seedColor: store.preferences.seedColor, equipment: store.preferences.equipment,
                     expression: store.kinLightExpression,
                     animationVisible: store.isVisible && !store.isShuttingDown ? cursorWindowVisible : false,
-                    selectedID: selection?.selectedID(in: particleScene))
+                    selectedID: selection?.selectedID(in: particleScene),
+                    activity: store.companionParticleActivity(in: particleScene))
             } else if !store.hasPersonalQiMon,
                !store.preferences.quiet && !store.preferences.reduceMotion && !systemReduceMotion,
                store.reactorReferenceMatchesCurrentAppearance,

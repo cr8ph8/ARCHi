@@ -102,8 +102,8 @@ final class CompanionParticleSceneTests: XCTestCase {
 
     @MainActor func testCurrentnessRejectsChangedIdentityRecordEvidenceAndRelationships() throws {
         let scene = try XCTUnwrap(CompanionParticleScene.build(originDigest: origin, graph: graph, development: nil))
-        XCTAssertTrue(scene.isCurrent(graph: graph, originDigest: origin))
-        XCTAssertFalse(scene.isCurrent(graph: graph, originDigest: String(repeating: "d", count: 64)))
+        XCTAssertTrue(scene.isCurrent(graph: graph, originDigest: origin, sessionID: scene.sessionID))
+        XCTAssertFalse(scene.isCurrent(graph: graph, originDigest: String(repeating: "d", count: 64), sessionID: scene.sessionID))
         var changed = graph.nodes
         changed[2].evidenceTrail = [.init(id: "correction", stage: .correction, summary: "Exact source corrected")]
         var edges = graph.edges
@@ -112,16 +112,15 @@ final class CompanionParticleSceneTests: XCTestCase {
                         .init(nodes: graph.nodes, edges: edges, truncatedCount: 2),
                         .init(nodes: Array(graph.nodes.prefix(2)), edges: [], truncatedCount: 2),
                         .init(nodes: graph.nodes, edges: graph.edges, truncatedCount: 3)] {
-            XCTAssertFalse(scene.isCurrent(graph: updated, originDigest: origin))
+            XCTAssertFalse(scene.isCurrent(graph: updated, originDigest: origin, sessionID: scene.sessionID))
         }
     }
 
     @MainActor func testSharedSelectionResolvesOnlyCurrentOriginVersionAndRecord() throws {
         let scene = try XCTUnwrap(CompanionParticleScene.build(originDigest: origin, graph: graph, development: nil))
-        let selection = CompanionParticleSelection(originDigest: origin, graphDigest: scene.graphDigest, nodeID: "concept")
+        let selection = try XCTUnwrap(CompanionParticleSelection(nodeID: "concept", in: scene))
         XCTAssertEqual(selection.selectedID(in: scene), "concept")
-        XCTAssertNil(CompanionParticleSelection(originDigest: origin, graphDigest: scene.graphDigest,
-                                               nodeID: "absent").selectedID(in: scene))
+        XCTAssertNil(CompanionParticleSelection(nodeID: "absent", in: scene))
         let foreign = try XCTUnwrap(CompanionParticleScene.build(originDigest: String(repeating: "d", count: 64),
                                                                 graph: graph, development: nil))
         XCTAssertNil(selection.selectedID(in: foreign))
@@ -134,6 +133,37 @@ final class CompanionParticleSceneTests: XCTestCase {
             let current = try XCTUnwrap(CompanionParticleScene.build(originDigest: origin, graph: snapshot, development: nil))
             XCTAssertNil(selection.selectedID(in: current))
         }
+    }
+
+    @MainActor func testSessionRetiresCallbacksWithoutChangingContentAndUnrelatedRecordsPreserveSelection() throws {
+        let session = UUID().uuidString
+        let scene = try XCTUnwrap(CompanionParticleScene.build(originDigest: origin, graph: graph,
+            development: nil, sessionID: session))
+        let selection = try XCTUnwrap(CompanionParticleSelection(nodeID: "concept", in: scene))
+        let next = try XCTUnwrap(CompanionParticleScene.build(originDigest: origin, graph: graph,
+            development: nil, sessionID: UUID().uuidString))
+        XCTAssertEqual(scene.digest, next.digest, "A transient session must not change content identity")
+        XCTAssertEqual(scene.field.particles, next.field.particles)
+        XCTAssertNotEqual(scene, next)
+        XCTAssertFalse(scene.isCurrent(graph: next.graph, originDigest: next.originDigest, sessionID: next.sessionID))
+        XCTAssertNil(selection.selectedID(in: next))
+
+        let expandedGraph = CompanionGraphSnapshot(nodes: graph.nodes + [node("unrelated")],
+            edges: graph.edges + [.init(id: "new-link", source: "source", target: "unrelated", label: "source passage")],
+            truncatedCount: graph.truncatedCount)
+        let expanded = try XCTUnwrap(CompanionParticleScene.build(originDigest: origin, graph: expandedGraph,
+            development: nil, sessionID: session))
+        XCTAssertEqual(selection.selectedID(in: expanded), "concept", "The exact selected record is unchanged")
+        XCTAssertFalse(scene.isCurrent(graph: expanded.graph, originDigest: origin, sessionID: session),
+            "Preserving a highlight must not make old interaction callbacks current")
+        var retargeted = expandedGraph.nodes
+        retargeted[2] = CompanionGraphNode(id: "concept", title: "Private title", subtitle: "Private subtitle",
+            kind: .knowledge, status: "Private status", details: [.init(label: "Your note", value: "Private body")],
+            target: .context)
+        let changedTarget = try XCTUnwrap(CompanionParticleScene.build(originDigest: origin,
+            graph: .init(nodes: retargeted, edges: expandedGraph.edges, truncatedCount: graph.truncatedCount),
+            development: nil, sessionID: session))
+        XCTAssertNil(selection.selectedID(in: changedTarget), "An ID alone must not preserve a changed target")
     }
 
     @MainActor func testInvalidTopologyIsRejectedWithoutQuietlyDroppingRecords() {

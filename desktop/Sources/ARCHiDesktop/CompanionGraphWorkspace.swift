@@ -114,10 +114,13 @@ struct CompanionGraphWorkspace: View {
                 // Keep this host mounted while Ask opens or closes, preserving
                 // map selection, filters and focus. The store owns all requests.
                 TimelineView(.periodic(from: .now, by: 2)) { context in
+                    let presentationSessionID = store.liminalStructureSessionID
                     let companionScene = store.companionParticleScene(at: context.date)
                     let particleScene = includesActivity ? nil : companionScene
                     let snapshot = particleScene?.graph ?? (includesActivity ? store.companionGraphSnapshot(at: context.date)
                         : store.memoryMapSnapshot(at: context.date))
+                    let activity = store.companionParticleActivity(in: snapshot, sessionID: presentationSessionID,
+                        memoryOnly: !includesActivity)
                     CompanionGraphView(snapshot: snapshot,
                         onOpen: store.openGraphTarget, initialLayout: .particles,
                         initialSelectionID: initialShowcase ? nil : store.selectedGraphNodeID,
@@ -136,8 +139,7 @@ struct CompanionGraphWorkspace: View {
                             showsAssistant = true
                         }, canAsk: { currentPage(for: $0) != nil },
                         lightExpression: store.kinLightExpression,
-                        preparedNodeIDs: store.currentKnowledgeContext == nil ? []
-                            : Set(store.selectedKnowledgePages.map { KnowledgePageGraph.nodeID($0) }),
+                        preparedNodeIDs: activity.preparedNodeIDs, requestNodeIDs: activity.requestNodeIDs,
                         onCreateMethod: { node in
                             guard let selection = store.beginKnowledgeMapMethod(node: node) else {
                                 attachmentMessage = "This concept changed. Select its current reviewed version before creating a method."
@@ -156,7 +158,8 @@ struct CompanionGraphWorkspace: View {
                         },
                         selectionID: store.selectedGraphNodeID,
                         onSelectionChange: { id in
-                            store.selectGraphRecord(id, in: snapshot, particleScene: particleScene, memoryOnly: !includesActivity)
+                            store.selectGraphRecord(id, in: snapshot, particleScene: particleScene, memoryOnly: !includesActivity,
+                                expectedSessionID: presentationSessionID)
                         }, onPlayNote: { node in
                             _ = store.previewResonance(nodeID: node.id, in: snapshot, particleScene: particleScene, capturedOriginDigest: companionScene?.originDigest)
                         }, canPlayNote: { node in

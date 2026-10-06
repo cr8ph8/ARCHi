@@ -28,8 +28,8 @@ final class CompanionParticleSelectionTests: XCTestCase {
         XCTAssertTrue(store.selectMemoryParticle(ids[0], in: scene, openInspector: true))
         XCTAssertEqual(store.section, .nodeLab)
         store.openMemoryMap()
-        XCTAssertNil(store.selectedGraphNodeID)
-        XCTAssertNil(store.memoryParticleSelection)
+        XCTAssertEqual(store.selectedGraphNodeID, ids[0])
+        XCTAssertEqual(store.memoryParticleSelection?.selectedID(in: scene), ids[0])
         XCTAssertEqual(try fixture.files(), files)
         fixture.assertNoInferenceOrDevelopment()
     }
@@ -185,6 +185,83 @@ final class CompanionParticleSelectionTests: XCTestCase {
         XCTAssertNil(store.memoryParticleSelection)
         XCTAssertFalse(store.selectGraphRecord(restoredID, in: restoredGraph, particleScene: nil, memoryOnly: true))
         XCTAssertEqual(try fixture.files(), restoredFiles)
+        fixture.assertNoInferenceOrDevelopment()
+    }
+
+    @MainActor
+    func testIdenticalProfileReloadRejectsOldSelectAndClearInBothScopes() throws {
+        for withIdentity in [true, false] {
+            let fixture = try ParticleSelectionFixture(withIdentity: withIdentity)
+            defer { fixture.cleanUp() }
+            let store = fixture.store
+            let oldScene = store.companionParticleScene()
+            let oldGraph = store.memoryMapSnapshot()
+            let oldSession = store.liminalStructureSessionID
+            let ids = fixture.lessons.map(CompanionGraph.lessonNodeID)
+            XCTAssertTrue(store.selectGraphRecord(ids[0], in: oldGraph, particleScene: oldScene,
+                memoryOnly: true, expectedSessionID: oldSession))
+
+            // Reload the exact same bytes: content identity is not session ownership.
+            try store.admitRestoredProfile()
+            XCTAssertNil(store.selectedGraphNodeID)
+            XCTAssertNil(store.memoryParticleSelection)
+            let currentScene = store.companionParticleScene()
+            let currentGraph = store.memoryMapSnapshot()
+            let currentSession = store.liminalStructureSessionID
+            XCTAssertEqual(currentGraph, oldGraph)
+            XCTAssertEqual(currentScene?.digest, oldScene?.digest)
+            XCTAssertNotEqual(currentSession, oldSession)
+            XCTAssertTrue(store.selectGraphRecord(ids[1], in: currentGraph, particleScene: currentScene,
+                memoryOnly: true, expectedSessionID: currentSession))
+            let files = try fixture.files()
+            let currentPick = store.memoryParticleSelection
+            for id in [ids[0], nil] as [String?] {
+                XCTAssertFalse(store.selectGraphRecord(id, in: oldGraph, particleScene: oldScene,
+                    memoryOnly: true, expectedSessionID: oldSession))
+            }
+            if let oldScene {
+                XCTAssertFalse(store.selectMemoryParticle(ids[0], in: oldScene))
+                XCTAssertFalse(store.selectGraphRecord(nil, in: oldScene.graph, particleScene: oldScene),
+                    "Scene ownership protects callers even without the optional scope token")
+            }
+            XCTAssertEqual(store.selectedGraphNodeID, ids[1])
+            XCTAssertEqual(store.memoryParticleSelection, currentPick)
+            XCTAssertEqual(try fixture.files(), files)
+            fixture.assertNoInferenceOrDevelopment()
+        }
+    }
+
+    @MainActor
+    func testClosedMapSelectionSurvivesUnrelatedAppendButNotCorrection() throws {
+        let fixture = try ParticleSelectionFixture()
+        defer { fixture.cleanUp() }
+        let store = fixture.store
+        let initial = try XCTUnwrap(store.companionParticleScene())
+        let id = CompanionGraph.lessonNodeID(fixture.lessons[0])
+        XCTAssertTrue(store.selectMemoryParticle(id, in: initial))
+        let selected = try XCTUnwrap(store.memoryParticleSelection)
+        _ = try store.readingSources.keep(title: "An unrelated source", text: "A distinct retained source.")
+        let expanded = try XCTUnwrap(store.companionParticleScene())
+        XCTAssertNotEqual(expanded.graphDigest, initial.graphDigest)
+        XCTAssertEqual(selected.selectedID(in: expanded), id)
+        XCTAssertFalse(store.selectGraphRecord(nil, in: initial.graph, particleScene: initial))
+        let files = try fixture.files()
+        store.openMemoryMap()
+        XCTAssertEqual(store.selectedGraphNodeID, id)
+        XCTAssertEqual(store.memoryParticleSelection?.selectedID(in: expanded), id)
+        XCTAssertEqual(try fixture.files(), files)
+
+        store.beginLessonCorrection(revisingID: fixture.lessons[0].id)
+        var correction = try XCTUnwrap(store.lessonDraft)
+        correction.text = "Use the corrected synthetic procedure."
+        XCTAssertTrue(store.keepLesson(correction))
+        let corrected = try XCTUnwrap(store.companionParticleScene())
+        XCTAssertNil(selected.selectedID(in: corrected))
+        let correctedFiles = try fixture.files()
+        store.openMemoryMap()
+        XCTAssertNil(store.selectedGraphNodeID)
+        XCTAssertNil(store.memoryParticleSelection)
+        XCTAssertEqual(try fixture.files(), correctedFiles)
         fixture.assertNoInferenceOrDevelopment()
     }
 

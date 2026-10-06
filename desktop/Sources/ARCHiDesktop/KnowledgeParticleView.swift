@@ -17,6 +17,7 @@ struct KnowledgeParticleView: View, @MainActor Animatable {
     var showsLabels = true
     var expression: KinLightExpression = .resting
     var preparedIDs: Set<String> = []
+    var requestIDs: Set<String> = []
     var focusIDs: Set<String>?
     var compact = false
     var interactive = true
@@ -115,6 +116,7 @@ struct KnowledgeParticleView: View, @MainActor Animatable {
             for particle in particles {
                 guard let point = points[particle.nodeID] else { continue }
                 let focused = particle.nodeID == active || neighbours.contains(particle.nodeID)
+                    || preparedIDs.contains(particle.nodeID) || requestIDs.contains(particle.nodeID)
                 let color = particle.kind == .companion
                     ? (expression.mode == .rest ? tint : KinLightPalette(mode: expression.mode).accent)
                     : graphColor(particle.kind)
@@ -154,9 +156,9 @@ struct KnowledgeParticleView: View, @MainActor Animatable {
                 if particle.nodeID == selectedID {
                     context.stroke(Path(ellipseIn: CGRect(x: point.x - 11, y: point.y - 11, width: 22, height: 22)), with: .color(color), lineWidth: 1)
                 }
-                if !compact && preparedIDs.contains(particle.nodeID) {
-                    context.stroke(Path(ellipseIn: CGRect(x: point.x - 17, y: point.y - 17, width: 34, height: 34)),
-                        with: .color(.white.opacity(0.9)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                if !compact {
+                    MemoryParticleContextCue.draw(in: &context, at: point,
+                        prepared: preparedIDs.contains(particle.nodeID), requested: requestIDs.contains(particle.nodeID))
                 }
             }
         }.accessibilityHidden(true)
@@ -176,12 +178,34 @@ struct KnowledgeParticleView: View, @MainActor Animatable {
         }
         .buttonStyle(.plain).help("\(node.title) · \(node.status)")
         .accessibilityLabel("\(node.kind.title): \(node.title). \(node.status)")
-        .accessibilityValue(preparedIDs.contains(node.id) ? "Selected as context for the next local reply" : "")
+        .accessibilityValue(MemoryParticleContextCue.description(prepared: preparedIDs.contains(node.id),
+            requested: requestIDs.contains(node.id)))
         .accessibilityAddTraits(node.id == selectedID ? [.isSelected] : [])
         .accessibilityIdentifier("companion-graph.particle.\(node.id)")
         .onHover { isHovered in
             if isHovered { hoveredID = node.id }
             else if hoveredID == node.id { hoveredID = nil }
+        }
+    }
+}
+
+/// The same cue in the map, floating avatar and authored-body overlay. Rings
+/// describe request references, never model attention, approval or new growth.
+enum MemoryParticleContextCue {
+    static func description(prepared: Bool, requested: Bool) -> String {
+        [prepared ? "Prepared for the next local reply" : nil,
+         requested ? "Referenced by the current local request" : nil].compactMap { $0 }.joined(separator: ". ")
+    }
+
+    static func draw(in context: inout GraphicsContext, at point: CGPoint, prepared: Bool, requested: Bool) {
+        if requested {
+            for radius in [15.0, 18.0] {
+                context.stroke(Path(ellipseIn: CGRect(x: point.x - radius, y: point.y - radius,
+                    width: radius * 2, height: radius * 2)), with: .color(.white.opacity(0.9)), lineWidth: 1)
+            }
+        } else if prepared {
+            context.stroke(Path(ellipseIn: CGRect(x: point.x - 17, y: point.y - 17, width: 34, height: 34)),
+                with: .color(.white.opacity(0.9)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
         }
     }
 }

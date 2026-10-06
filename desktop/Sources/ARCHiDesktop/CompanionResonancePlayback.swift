@@ -113,7 +113,7 @@ struct CompanionResonancePlaybackGate: Sendable {
               capturedOriginDigest == current.originDigest,
               let node = graph.nodes.first(where: { $0.id == nodeID }) else { return nil }
         if let particleScene,
-           !particleScene.isCurrent(graph: current.graph, originDigest: current.originDigest) { return nil }
+           !particleScene.isCurrent(graph: current.graph, originDigest: current.originDigest, sessionID: current.sessionID) { return nil }
         let request = CompanionResonancePlaybackRequest(id: UUID(), originDigest: current.originDigest,
             graphDigest: LiminalKnowledgeBindings.digest(graph), nodeID: node.id, kind: node.kind,
             scope: particleScene == nil ? .activity : .memory)

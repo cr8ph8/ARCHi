@@ -148,10 +148,14 @@ struct LiminalPointStructure: Codable, Equatable, Sendable {
         let graph = companionGraphSnapshot(at: date)
         do {
             if liminalKnowledgeIdentity != identity {
+                let replacingIdentity = liminalKnowledgeIdentity != nil
                 liminalKnowledgeBindings = try LiminalKnowledgeBindings(manifestSHA256: asset.manifestSHA256,
                                                                          lowDetailIDs: asset.lowDetailIDs)
                 liminalKnowledgeIdentity = identity
-                liminalStructureSessionID = UUID().uuidString
+                // First use joins the current presentation session. Resetting
+                // it here would invalidate the map/selection just captured by
+                // its host. A real asset/owner replacement still retires it.
+                if replacingIdentity { liminalStructureSessionID = UUID().uuidString }
             }
             guard let projection = try liminalKnowledgeBindings?.projectForPresentation(graph,
                 sessionID: liminalStructureSessionID, originDigest: development.originDigest) else { return nil }
@@ -183,15 +187,17 @@ extension EnvironmentValues {
 @MainActor struct LiminalStructureScope: ViewModifier {
     @ObservedObject var store: CompanionStore
     var refreshEnabled = true
+    var includesPointStructure = true
     @State private var recheckedAt = Date()
     func body(content: Content) -> some View {
-        let structure = LiminalV008Runtime.asset.flatMap {
+        let scene = store.companionParticleScene(at: recheckedAt)
+        let structure = (includesPointStructure || scene == nil ? LiminalV008Runtime.asset : nil).flatMap {
             store.liminalKnowledgePresentation(asset: $0, at: recheckedAt)?.structure
         }
         // Keep the artwork in the ordinary view tree so explicit ImageRenderer
         // snapshots never capture a TimelineView placeholder. The task expires
         // with this presentation and refreshes file-backed support while visible.
-        content.environment(\.companionParticleScene, store.companionParticleScene(at: recheckedAt))
+        content.environment(\.companionParticleScene, scene)
             .environment(\.companionParticleSelection, store.memoryParticleSelection)
             .environment(\.liminalPointStructure, structure)
             .task(id: refreshEnabled) {

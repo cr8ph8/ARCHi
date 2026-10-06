@@ -12,6 +12,9 @@ struct CompanionParticleScene: Equatable {
     let graph: CompanionGraphSnapshot
     let field: KnowledgeParticleField
     let originDigest: String
+    /// Transient presentation ownership. Kept separate from the content digest
+    /// so reopening the same records does not change artwork/cache identity.
+    let sessionID: String
     let graphDigest: String
     /// Includes exact graph metadata and current development support, not layout alone.
     let digest: String
@@ -20,8 +23,9 @@ struct CompanionParticleScene: Equatable {
     /// aliases: several records can refer to the same retained content.
     let growthByRecordID: [String: Growth]
 
-    private init(originDigest: String, graph: CompanionGraphSnapshot, inputs: Inputs) {
+    private init(originDigest: String, graph: CompanionGraphSnapshot, inputs: Inputs, sessionID: String) {
         self.originDigest = originDigest
+        self.sessionID = sessionID
         self.graph = graph
         graphDigest = inputs.graphDigest
         digest = inputs.digest
@@ -30,9 +34,12 @@ struct CompanionParticleScene: Equatable {
     }
 
     @MainActor static func build(originDigest: String, graph: CompanionGraphSnapshot,
-                                 development: LiminalFormDevelopment.Snapshot?) -> Self? {
-        guard let inputs = inputs(originDigest: originDigest, graph: graph, development: development) else { return nil }
-        return Self(originDigest: originDigest, graph: graph, inputs: inputs)
+                                 development: LiminalFormDevelopment.Snapshot?, sessionID: String = "") -> Self? {
+        // Empty belongs only to standalone synthetic projections. Live callers
+        // supply the existing owner's UUID and validate it on every callback.
+        guard sessionID.isEmpty || UUID(uuidString: sessionID) != nil,
+              let inputs = inputs(originDigest: originDigest, graph: graph, development: development) else { return nil }
+        return Self(originDigest: originDigest, graph: graph, inputs: inputs, sessionID: sessionID)
     }
 
     /// A view-local cache can check support without recomputing particle coordinates.
@@ -52,13 +59,14 @@ struct CompanionParticleScene: Equatable {
 
     /// Recheck the current owner before resolving a pick. To revalidate growth
     /// as well, compare fingerprint with the owner's fresh development snapshot.
-    func isCurrent(graph: CompanionGraphSnapshot, originDigest: String) -> Bool {
-        self.originDigest == originDigest && Self.validTopology(originDigest: originDigest, graph: graph) != nil
+    func isCurrent(graph: CompanionGraphSnapshot, originDigest: String, sessionID: String) -> Bool {
+        self.sessionID == sessionID && self.originDigest == originDigest && Self.validTopology(originDigest: originDigest, graph: graph) != nil
             && graphDigest == LiminalKnowledgeBindings.digest(graph)
     }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.digest == rhs.digest && lhs.graph == rhs.graph && lhs.growthByRecordID == rhs.growthByRecordID
+        lhs.sessionID == rhs.sessionID && lhs.digest == rhs.digest && lhs.graph == rhs.graph
+            && lhs.growthByRecordID == rhs.growthByRecordID
     }
 
     private struct Inputs {

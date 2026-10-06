@@ -3,6 +3,36 @@ import simd
 @testable import ARCHiDesktop
 
 final class LiminalGraphMorphTests: XCTestCase {
+    @MainActor
+    func testFirstBodyProjectionKeepsSelectedMemorySessionAndReplacementRetiresIt() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("archi-morph-session-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let profile = root.appendingPathComponent("preferences.json")
+        let identity = LocalQiMon(character: .hampton, originDigest: origin, welcomedAt: Date())
+        try NativePreferenceDocument(qiMon: identity).encoded().write(to: profile)
+        let client = MorphProjectionNoCalls()
+        let store = CompanionStore(preferenceURL: profile, assistant: client,
+            assistantFactory: { _, _ in client }, allowsPlay: false)
+        defer { store.disconnectAssistant() }
+        let scene = try XCTUnwrap(store.companionParticleScene())
+        let node = try XCTUnwrap(scene.graph.nodes.first)
+        XCTAssertTrue(store.selectMemoryParticle(node.id, in: scene))
+        let before = try Data(contentsOf: profile)
+        let asset = makeAsset()
+        let body = try XCTUnwrap(store.liminalKnowledgePresentation(asset: asset, forMemoryMap: true))
+        XCTAssertEqual(body.sidecar.sessionID, scene.sessionID)
+        XCTAssertEqual(store.memoryParticleSelection?.selectedID(in: try XCTUnwrap(store.companionParticleScene())), node.id)
+        XCTAssertTrue(store.selectGraphRecord(node.id, in: scene.graph, particleScene: scene, expectedSessionID: scene.sessionID))
+        let replacement = LiminalPointAsset(packageURL: asset.packageURL, manifestSHA256: String(repeating: "c", count: 64),
+            manifest: asset.manifest, artIDs: asset.artIDs, finish: nil, surfaceLight: nil)
+        XCTAssertNotNil(store.liminalKnowledgePresentation(asset: replacement, forMemoryMap: true))
+        XCTAssertNotEqual(store.liminalStructureSessionID, scene.sessionID)
+        XCTAssertFalse(store.selectGraphRecord(nil, in: scene.graph, particleScene: scene, expectedSessionID: scene.sessionID))
+        XCTAssertEqual(try Data(contentsOf: profile), before)
+        XCTAssertEqual(client.calls, 0)
+    }
+
     private let origin = String(repeating: "a", count: 64)
     private let manifest = String(repeating: "b", count: 64)
     private let viewport = CGSize(width: 720, height: 480)
@@ -390,6 +420,15 @@ final class LiminalGraphMorphTests: XCTestCase {
         var little = value.littleEndian
         return withUnsafeBytes(of: &little) { Data($0) }
     }
+}
+
+@MainActor private final class MorphProjectionNoCalls: AssistantClient {
+    private(set) var calls = 0
+    func connect() async throws { calls += 1; throw AssistantFailure.stopped }
+    func reply(to request: AssistantRequest, onEvent: @escaping @MainActor (AssistantEvent) -> Void) async throws {
+        calls += 1; throw AssistantFailure.stopped
+    }
+    func disconnect() {}
 }
 
 @MainActor private final class LiminalGraphMorphNoCalls: AssistantClient {

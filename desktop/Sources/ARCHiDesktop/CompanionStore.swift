@@ -411,6 +411,17 @@ final class CompanionStore: ObservableObject {
         return AssistantActivity.derive(owned: Set(replyOwners.keys), results: compareResults)
     }
 
+    /// Presentation may describe the current local request's captured references,
+    /// never a prepared connection, an unowned receipt or a completed old reply.
+    var currentParticleActivityReceipt: AssistantLaneReceipt? {
+        guard !isShuttingDown, profileRecoveryBlock == nil, replyOwners[.qwen] != nil,
+              let lane = compareResults[.qwen], lane.state == .pending,
+              let receipt = lane.receipt, receipt.provider == .qwen,
+              receipt.state == .pending, receipt.requestStarted,
+              isCurrentReplyContext(receipt) else { return nil }
+        return receipt
+    }
+
     var hasFreshKinFocus: Bool {
         guard activeQiMon != nil, isVisible, !isShuttingDown,
               let preview = spatialPreview, preview.isFresh(at: monotonicTime()),
@@ -512,14 +523,18 @@ final class CompanionStore: ObservableObject {
                                      role: CompanionPresentationRole = .body) -> String {
         let cue = gesture?.purpose == .practice ? ". Practicing staff gesture"
             : gesture?.purpose == .pointing ? ". Pointing with staff" : ""
-        let memoryAvatar = role == .cursor && companionParticleScene() != nil
+        let scene = role == .cursor ? companionParticleScene() : nil
+        let memoryAvatar = scene != nil
+        let activity = scene.map { companionParticleActivity(in: $0) } ?? .empty
+        let preparedCue = activity.preparedNodeIDs.isEmpty ? "" : ". \(activity.preparedNodeIDs.count) records prepared for next reply"
+        let requestCue = activity.requestNodeIDs.isEmpty ? "" : ". \(activity.requestNodeIDs.count) records referenced by current request"
         let identity = role == .cursor ? activeQiMon.map { "\($0.name) · \(memoryAvatar ? "Memory avatar" : "Seed cursor"). " } ?? "" : ""
         let appearance = memoryAvatar ? "Connected memory particles. \(preferences.seedColor.title)"
             + (preferences.equipment.item.map { " · " + $0.title } ?? "")
             : CompanionVisualAsset.label(form: presentationForm(for: preferences, role: role), family: presentationFamily,
             treatment: preferences.visualTreatment, recipe: presentationRecipe,
             naturalVariation: presentationNaturalVariation, equipment: preferences.equipment, seedColor: preferences.seedColor)
-        return identity + appearance + ". Assistant: " + assistantActivity.title + cue
+        return identity + appearance + ". Assistant: " + assistantActivity.title + cue + preparedCue + requestCue
             + (activeQiMon == nil ? "" : ". Light expression: " + kinLightExpression(for: preferences).label)
             + (desktopInterest.phase == .idle ? "" : ". Object of interest: " + desktopInterest.message)
     }
@@ -876,10 +891,16 @@ final class CompanionStore: ObservableObject {
         return available
     }
 
-    /// General navigation starts at memory; exact receipt routes retain their selection.
+    /// Resume the avatar's exact current record; never carry an activity-only,
+    /// changed, removed or earlier-profile selection into the Memory map.
     func openMemoryMap() {
-        selectedGraphNodeID = nil
-        memoryParticleSelection = nil
+        if let scene = companionParticleScene(), let selection = memoryParticleSelection,
+           let id = selection.selectedID(in: scene), selectedGraphNodeID == id {
+            memoryParticleSelection = .init(nodeID: id, in: scene)
+        } else {
+            selectedGraphNodeID = nil
+            memoryParticleSelection = nil
+        }
         open(.nodeLab)
     }
 
@@ -894,7 +915,9 @@ final class CompanionStore: ObservableObject {
             workspaceRoutingNotice = "That exact method or its history is unavailable. No replacement was selected."
             return false
         }
-        selectedGraphNodeID = DocumentMethodGraph.nodeID(binding)
+        let nodeID = DocumentMethodGraph.nodeID(binding)
+        selectedGraphNodeID = nodeID
+        memoryParticleSelection = companionParticleScene().flatMap { .init(nodeID: nodeID, in: $0) }
         open(.nodeLab)
         workspaceRoutingNotice = nil
         return true
@@ -933,7 +956,7 @@ final class CompanionStore: ObservableObject {
         guard LiminalKnowledgeBindings.digest(graph) == graphDigest,
               graph.nodes.contains(where: { $0.id == nodeID }) else { return false }
         if let scene = companionParticleScene(), scene.graph.nodes.contains(where: { $0.id == nodeID }) {
-            memoryParticleSelection = .init(originDigest: scene.originDigest, graphDigest: scene.graphDigest, nodeID: nodeID)
+            memoryParticleSelection = .init(nodeID: nodeID, in: scene)
         } else { memoryParticleSelection = nil }
         selectedGraphNodeID = nodeID
         open(.nodeLab)
@@ -944,9 +967,9 @@ final class CompanionStore: ObservableObject {
     @discardableResult
     func selectMemoryParticle(_ id: String, in scene: CompanionParticleScene, openInspector: Bool = false) -> Bool {
         guard let current = companionParticleScene(),
-              scene.isCurrent(graph: current.graph, originDigest: current.originDigest),
+              scene.isCurrent(graph: current.graph, originDigest: current.originDigest, sessionID: current.sessionID),
               current.graph.nodes.contains(where: { $0.id == id }) else { return false }
-        memoryParticleSelection = .init(originDigest: current.originDigest, graphDigest: current.graphDigest, nodeID: id)
+        memoryParticleSelection = .init(nodeID: id, in: current)
         selectedGraphNodeID = id
         if openInspector { open(.nodeLab) }
         return true
@@ -956,13 +979,15 @@ final class CompanionStore: ObservableObject {
     /// A callback from an old projection cannot clear or replace a newer pick.
     @discardableResult
     func selectGraphRecord(_ id: String?, in snapshot: CompanionGraphSnapshot,
-                           particleScene: CompanionParticleScene?, memoryOnly: Bool = false) -> Bool {
-        guard profileRecoveryBlock == nil, !isShuttingDown else { return false }
+                           particleScene: CompanionParticleScene?, memoryOnly: Bool = false,
+                           expectedSessionID: String? = nil) -> Bool {
+        guard profileRecoveryBlock == nil, !isShuttingDown,
+              expectedSessionID == nil || expectedSessionID == liminalStructureSessionID else { return false }
         let current: CompanionGraphSnapshot
         let scene: CompanionParticleScene?
         if let particleScene {
             guard let fresh = companionParticleScene(),
-                  particleScene.isCurrent(graph: fresh.graph, originDigest: fresh.originDigest) else { return false }
+                  particleScene.isCurrent(graph: fresh.graph, originDigest: fresh.originDigest, sessionID: fresh.sessionID) else { return false }
             current = fresh.graph; scene = fresh
         } else {
             // The Memory map remains usable without an active particle form.
@@ -975,7 +1000,7 @@ final class CompanionStore: ObservableObject {
               id == nil || current.nodes.contains(where: { $0.id == id }) else { return false }
         selectedGraphNodeID = id
         if let id, let scene, scene.graph.nodes.contains(where: { $0.id == id }) {
-            memoryParticleSelection = .init(originDigest: scene.originDigest, graphDigest: scene.graphDigest, nodeID: id)
+            memoryParticleSelection = .init(nodeID: id, in: scene)
         } else { memoryParticleSelection = nil }
         return true
     }

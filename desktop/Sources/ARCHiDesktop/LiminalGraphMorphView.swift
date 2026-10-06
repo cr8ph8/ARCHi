@@ -22,6 +22,7 @@ struct LiminalGraphMorphSource {
     let focusIDs: Set<String>?
     let growthByRecordID: [String: CompanionParticleScene.Growth]
     let preparedIDs: Set<String>
+    var requestIDs: Set<String> = []
     let expression: KinLightExpression
     var seedAppearance: CompanionParticleAppearance? = nil
     let onSelect: (String) -> Void
@@ -73,7 +74,7 @@ struct LiminalGraphMorphSource {
                         // Metal already checks its real window and occlusion.
                         isVisible: presented && prepared.key == key,
                         ready: readyKey == key && prepared.key == key,
-                        growthByRecordID: growthByRecordID, preparedIDs: preparedIDs,
+                        growthByRecordID: growthByRecordID, preparedIDs: preparedIDs, requestIDs: requestIDs,
                         expression: expression,
                         displayedProgress: displayedProgress,
                         onDisplayedProgress: {
@@ -91,7 +92,8 @@ struct LiminalGraphMorphSource {
                     KnowledgeParticleView(field: field, nodes: nodes, selectedID: selectedID,
                         spread: 1 + min(0, LiminalGraphMorph.boundedProgress(progress)),
                         pulses: false, reduceMotion: true, tint: seedColor.accent, expression: expression,
-                        preparedIDs: preparedIDs, focusIDs: focusIDs, growthByRecordID: growthByRecordID, onSelect: onSelect)
+                        preparedIDs: preparedIDs, requestIDs: requestIDs, focusIDs: focusIDs,
+                        growthByRecordID: growthByRecordID, onSelect: onSelect)
                     if failed || prepared?.key == key {
                         Text("Point form is not available yet. Your records remain in the map.")
                             .font(.caption).padding(8).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
@@ -145,6 +147,7 @@ struct LiminalGraphMorphSource {
     let ready: Bool
     let growthByRecordID: [String: CompanionParticleScene.Growth]
     let preparedIDs: Set<String>
+    let requestIDs: Set<String>
     let expression: KinLightExpression
     let displayedProgress: Double
     let onDisplayedProgress: (Double) -> Void
@@ -201,10 +204,8 @@ struct LiminalGraphMorphSource {
                                     with: .color(Color(red: 0.96, green: 0.73, blue: 0.40)))
                             }
                         }
-                        if preparedIDs.contains(id) {
-                            context.stroke(Path(ellipseIn: CGRect(x: point.x - 17, y: point.y - 17, width: 34, height: 34)),
-                                with: .color(.white.opacity(0.9)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        }
+                        MemoryParticleContextCue.draw(in: &context, at: point,
+                            prepared: preparedIDs.contains(id), requested: requestIDs.contains(id))
                     }
                 }.allowsHitTesting(false).accessibilityHidden(true)
                 ForEach(nodes) { node in
@@ -214,7 +215,8 @@ struct LiminalGraphMorphSource {
                         }.buttonStyle(.plain).position(point)
                             .help("\(node.title) · \(node.status)")
                             .accessibilityLabel("\(node.kind.title): \(node.title). \(node.status)")
-                            .accessibilityValue(preparedIDs.contains(node.id) ? "Selected as context for the next local reply" : "")
+                            .accessibilityValue(MemoryParticleContextCue.description(prepared: preparedIDs.contains(node.id),
+                                requested: requestIDs.contains(node.id)))
                             .accessibilityAddTraits(node.id == selectedID ? [.isSelected] : [])
                             .accessibilityIdentifier("companion-graph.form-particle.\(node.id)")
                         if node.id == selectedID || preparedIDs.contains(node.id) || node.kind == .companion && weight < 0.5 {

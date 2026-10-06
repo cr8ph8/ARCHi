@@ -11,13 +11,31 @@ enum CompanionMemoryParticles {
 
 struct CompanionParticleSelection: Equatable {
     let originDigest: String
+    let sessionID: String
     let graphDigest: String
     let nodeID: String
+    private let recordDigest: String
+
+    init?(nodeID: String, in scene: CompanionParticleScene) {
+        guard let node = scene.graph.nodes.first(where: { $0.id == nodeID }) else { return nil }
+        originDigest = scene.originDigest
+        sessionID = scene.sessionID
+        graphDigest = scene.graphDigest
+        self.nodeID = nodeID
+        recordDigest = Self.digest(node)
+    }
 
     func selectedID(in scene: CompanionParticleScene) -> String? {
-        guard scene.originDigest == originDigest, scene.graphDigest == graphDigest,
-              scene.graph.nodes.contains(where: { $0.id == nodeID }) else { return nil }
+        guard scene.originDigest == originDigest, scene.sessionID == sessionID,
+              let node = scene.graph.nodes.first(where: { $0.id == nodeID }),
+              Self.digest(node) == recordDigest else { return nil }
+        // Unrelated graph edits need not erase this exact record's highlight.
+        // Interaction callbacks still validate the complete displayed scene.
         return nodeID
+    }
+
+    private static func digest(_ node: CompanionGraphNode) -> String {
+        LiminalKnowledgeBindings.digest(.init(nodes: [node], edges: [], truncatedCount: 0))
     }
 }
 
@@ -48,12 +66,14 @@ struct CompanionMemoryAvatar: View {
     var expression: KinLightExpression = .resting
     var animationVisible: Bool? = nil
     var selectedID: String?
+    var activity: CompanionParticleActivity = .empty
 
     var body: some View {
         ZStack {
             KnowledgeParticleView(field: scene.field, nodes: scene.graph.nodes, selectedID: selectedID,
                 spread: 1, pulses: !reduceMotion, reduceMotion: reduceMotion, tint: seedColor.accent,
-                showsLabels: false, expression: expression, interactive: false,
+                showsLabels: false, expression: expression, preparedIDs: activity.preparedNodeIDs,
+                requestIDs: activity.requestNodeIDs, interactive: false,
                 growthByRecordID: scene.growthByRecordID, animationVisible: animationVisible, onSelect: { _ in })
                 .frame(width: 256, height: 256)
                 .scaleEffect(size / 256)
@@ -67,6 +87,7 @@ struct CompanionMemoryAvatar: View {
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("ARCHi memory avatar")
+        .accessibilityValue("\(activity.preparedNodeIDs.count) prepared for next reply. \(activity.requestNodeIDs.count) referenced by current request.")
         .accessibilityIdentifier("companion.memory-avatar")
     }
 }
@@ -122,9 +143,11 @@ extension EnvironmentValues {
         let graph = memoryMapSnapshot(at: date)
         guard let digest = CompanionParticleScene.fingerprint(originDigest: development.originDigest,
             graph: graph, development: development) else { particleSceneCache = nil; return nil }
-        if particleSceneCache?.digest == digest { return particleSceneCache }
+        if particleSceneCache?.digest == digest, particleSceneCache?.sessionID == liminalStructureSessionID {
+            return particleSceneCache
+        }
         particleSceneCache = CompanionParticleScene.build(originDigest: development.originDigest,
-            graph: graph, development: development)
+            graph: graph, development: development, sessionID: liminalStructureSessionID)
         return particleSceneCache
     }
 

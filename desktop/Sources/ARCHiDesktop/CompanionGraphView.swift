@@ -208,6 +208,7 @@ struct CompanionGraphView: View {
     var canAsk: (CompanionGraphNode) -> Bool = { _ in false }
     var lightExpression: KinLightExpression = .resting
     var preparedNodeIDs: Set<String> = []
+    var requestNodeIDs: Set<String> = []
     var particleScene: CompanionParticleScene?
     var seedAppearance: CompanionParticleAppearance?
     var liminalGraphSource: LiminalGraphMorphSource?
@@ -243,7 +244,7 @@ struct CompanionGraphView: View {
          initialShowcase: Bool = false,
          onAsk: ((CompanionGraphNode) -> Void)? = nil,
          canAsk: @escaping (CompanionGraphNode) -> Bool = { _ in false },
-         lightExpression: KinLightExpression = .resting, preparedNodeIDs: Set<String> = [],
+         lightExpression: KinLightExpression = .resting, preparedNodeIDs: Set<String> = [], requestNodeIDs: Set<String> = [],
          onCreateMethod: ((CompanionGraphNode) -> Void)? = nil,
          canCreateMethod: @escaping (CompanionGraphNode) -> Bool = { _ in false },
          particleScene: CompanionParticleScene? = nil,
@@ -259,6 +260,7 @@ struct CompanionGraphView: View {
         self.reduceMotion = reduceMotion; self.seedColor = seedColor
         self.onAsk = onAsk; self.canAsk = canAsk
         self.lightExpression = lightExpression; self.preparedNodeIDs = preparedNodeIDs
+        self.requestNodeIDs = requestNodeIDs
         self.onCreateMethod = onCreateMethod; self.canCreateMethod = canCreateMethod
         self.particleScene = particleScene; self.seedAppearance = seedAppearance
         self.liminalGraphSource = liminalGraphSource
@@ -511,9 +513,13 @@ struct CompanionGraphView: View {
                 HStack(spacing: 8) {
                     Label(lightExpression.label, systemImage: "sparkles")
                     Spacer(minLength: 0)
+                    if !requestNodeIDs.isEmpty {
+                        Label("\(requestNodeIDs.count) in this request", systemImage: "circle.circle")
+                            .help("Double rings mark current records referenced by the running local request. They do not establish model attention, citations or helpful use.")
+                    }
                     if !preparedNodeIDs.isEmpty {
                         Label("\(preparedNodeIDs.count) for next reply", systemImage: "circle.dashed")
-                            .help("Dashed rings mark current pages selected as local reply context. Selection is not evidence that a model used them.")
+                            .help("Dashed rings mark current records prepared as local reply context. Selection is not evidence that a model used them.")
                     }
                 }
                 .font(.system(size: 10)).foregroundStyle(.secondary)
@@ -673,6 +679,7 @@ struct CompanionGraphView: View {
                                 focusIDs: focusID == nil ? nil : Set(CompanionGraphNavigation.visibleNodes(in: snapshot,
                                     query: "", kindFilter: nil, focusID: focusID).map(\.id)),
                                 growthByRecordID: particleScene?.growthByRecordID ?? [:], preparedIDs: preparedNodeIDs,
+                                requestIDs: requestNodeIDs,
                                 expression: lightExpression, seedAppearance: seedAppearance,
                                 onSelect: { selectNode($0) })
                         } else {
@@ -685,6 +692,7 @@ struct CompanionGraphView: View {
                         KnowledgeParticleView(field: field, nodes: visibleNodes, selectedID: selectedID,
                             spread: particleSpread, pulses: particlePulses, reduceMotion: reduceMotion || systemReduceMotion,
                             tint: seedColor.accent, expression: lightExpression, preparedIDs: preparedNodeIDs,
+                            requestIDs: requestNodeIDs,
                             focusIDs: focusID == nil ? nil : Set(CompanionGraphNavigation.visibleNodes(in: snapshot,
                                 query: "", kindFilter: nil, focusID: focusID).map(\.id)),
                             compact: seedAppearance != nil && particleSpread == 0,
