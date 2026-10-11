@@ -1,0 +1,10 @@
+# Check out the committed LF bytes on every platform. SOURCE_SHA256SUMS and
+# the pinned-file checks hash files exactly as they are on disk, so a CRLF
+# checkout (the Git for Windows default, core.autocrlf=true) breaks them.
+* text=auto eol=lf
+
+*.png binary
+*.icns binary
+
+# Vendored file committed with CRLF line endings; keep its committed bytes.
+unity/ARCHi/Packages/com.coplaydev.unity-mcp/Editor/Windows/MCPForUnityEditorWindow.cs -text
