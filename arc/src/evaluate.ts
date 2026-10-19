@@ -258,6 +258,9 @@ export function evaluateArcTask(input: Readonly<{
   predictions: unknown;
   solver: unknown;
 }>): readonly ArcEvidenceReceipt[] {
+  if (!isDataRecord(input) || !hasExactKeys(input, ["manifest", "task", "predictions", "solver"])) {
+    throw new TypeError("Evaluation request has unexpected or missing fields");
+  }
   const manifest = admitted<ArcEvaluationManifest>(validateArcManifest(input.manifest), "Invalid ARC manifest");
   const task = admitted<ArcTask>(validateArcTask(input.task), "Invalid ARC task");
   const solver = admitted<ArcSolverIdentity>(validateArcSolver(input.solver), "Invalid solver identity");
@@ -371,6 +374,9 @@ export function createArcCapabilityProposal(
     solver: unknown;
   }>,
 ): ArcCapabilityProposal {
+  if (!isDataRecord(input) || !hasExactKeys(input, ["manifest", "evaluations", "solver"])) {
+    throw new TypeError("Proposal request has unexpected or missing fields");
+  }
   const manifest = admitted<ArcEvaluationManifest>(validateArcManifest(input.manifest), "Invalid ARC manifest");
   const solver = admitted<ArcSolverIdentity>(validateArcSolver(input.solver), "Invalid solver identity");
   const manifestTaskById = new Map(manifest.tasks.map((task) => [task.taskId, task] as const));

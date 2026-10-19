@@ -99,6 +99,47 @@ final class DesktopInterestStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testReturningToEarlierBytesCannotReviveExternalAllowance() async throws {
+        let f = InterestStoreFixture(); defer { f.cleanUp() }
+        try await f.adopt()
+        f.store.setAssistantRoute(.codex)
+        f.store.allowDesktopInterestWithExternalRoute()
+        XCTAssertTrue(f.store.canShareDesktopInterestWithRoute)
+        let original = f.store.sharedText
+        f.store.sharedText += " Changed bytes."
+        XCTAssertNil(f.store.desktopInterestExternalDigest)
+        f.store.sharedText = original
+        XCTAssertFalse(f.store.canShareDesktopInterestWithRoute)
+        XCTAssertNil(f.store.desktopInterestExternalDigest)
+        f.store.allowDesktopInterestWithExternalRoute()
+        XCTAssertTrue(f.store.canShareDesktopInterestWithRoute, "A fresh explicit allowance remains available")
+        XCTAssertEqual(f.cloud.requests.count, 0)
+    }
+
+    @MainActor
+    func testProfileRestoreAndRecoveryBlockRevokeExternalAllowance() async throws {
+        let f = InterestStoreFixture(); defer { f.cleanUp() }
+        try await f.adopt()
+        f.store.setAssistantRoute(.codex)
+        let archive = f.url.deletingLastPathComponent().appendingPathComponent("checkpoint.archibackup")
+        try FileManager.default.createDirectory(at: archive.deletingLastPathComponent(), withIntermediateDirectories: true)
+        _ = try f.store.createProfileBackup(at: archive)
+        let review = try f.store.previewProfileRestore(from: archive)
+        f.store.allowDesktopInterestWithExternalRoute()
+        XCTAssertTrue(f.store.canShareDesktopInterestWithRoute)
+        _ = try f.store.restoreProfile(review)
+        XCTAssertEqual(f.store.sharedText, f.reader.text, "Recovery preserves the working copy")
+        XCTAssertNotNil(f.store.desktopInterestSource, "Capture provenance remains available")
+        XCTAssertNil(f.store.desktopInterestExternalDigest)
+        XCTAssertFalse(f.store.canShareDesktopInterestWithRoute)
+        f.store.allowDesktopInterestWithExternalRoute()
+        f.store.blockProfileForRecovery("Synthetic interrupted recovery")
+        XCTAssertNil(f.store.desktopInterestExternalDigest)
+        XCTAssertFalse(f.store.canShareDesktopInterestWithRoute)
+        XCTAssertEqual(f.local.requests.count + f.cloud.requests.count, 0)
+    }
+
+    @MainActor
     func testLocalRoutesNeedNoExternalAllowanceAndSourceReplacementClearsIt() async throws {
         for stopSharing in [false, true] {
             let f = InterestStoreFixture(); defer { f.cleanUp() }
@@ -191,6 +232,9 @@ final class DesktopInterestStoreTests: XCTestCase {
         let range = (f.reader.text as NSString).range(of: "Original passage.")
         f.store.selectText(range: range, sourceRevision: f.store.sourceRevision)
         f.store.preparePassageRevision()
+        f.store.setAssistantRoute(.codex)
+        f.store.allowDesktopInterestWithExternalRoute()
+        XCTAssertNotNil(f.store.desktopInterestExternalDigest)
         f.store.setAssistantRoute(.automatic)
         f.store.submit()
         try await interestStoreSettle { f.local.requests.count == 1 }
@@ -205,11 +249,14 @@ final class DesktopInterestStoreTests: XCTestCase {
         XCTAssertEqual(f.store.sharedText, f.reader.text, "Receiving a proposed revision never applies it")
         f.store.applyPassageRevision(provider: .qwen, targetID: target.id)
         XCTAssertEqual(f.store.sharedText, "Reviewed wording. Keep this ending.")
+        XCTAssertNil(f.store.desktopInterestExternalDigest, "Applying a revision revokes the earlier allowance")
         XCTAssertEqual(f.store.desktopInterestSource, capturedSource, "Capture provenance still identifies the original snapshot")
         XCTAssertTrue(f.store.canUndoWorkingCopyEdit)
         f.store.undoWorkingCopyEdit()
         XCTAssertEqual(f.store.sharedText, f.reader.text)
         XCTAssertFalse(f.store.canUndoWorkingCopyEdit)
+        f.store.setAssistantRoute(.codex)
+        XCTAssertFalse(f.store.canShareDesktopInterestWithRoute, "Undo restores content without restoring authority")
         XCTAssertEqual(f.cloud.requests.count, 0)
         XCTAssertFalse(FileManager.default.fileExists(atPath: f.url.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: f.evolutionURL.path))

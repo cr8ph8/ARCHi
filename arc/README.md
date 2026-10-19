@@ -30,6 +30,7 @@ Every receipt and summary carries literal false write-authority flags. The packa
 - `reproducible` remains `false` and `attestation` remains `unattested` in this initial package because this repository does not yet have committed solver provenance.
 - Results from different solvers cannot be mixed into one proposal. Even a perfect single-solver result produces `status: "proposed"` and `certification: "not-certified"`.
 - `archi-arc-exact-v1` versions both exact scoring and `archi-canonical-json-v1` serialization. The smoke task, receipt, and proposal hashes are frozen in `fixtures/golden/smoke-evidence-v1.json` to detect accidental identity drift.
+- Evaluation and proposal requests reject extra fields and accessor-bearing envelopes before reading their values. A solver cannot supply an evaluator override or rewrite expected outputs against the admitted manifest. This is a data boundary, not process isolation: an optimizer with filesystem access could still replace evaluator source or submit a different manifest. Independent runner ownership, pinned manifest/source digests and OS-enforced write restrictions are required before running such an optimizer.
 
 ## Commands
 

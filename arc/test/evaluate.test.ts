@@ -74,6 +74,34 @@ function multipleTaskFixtures(): {
 }
 
 describe("ARC evidence contract", () => {
+  it("rejects optimizer-supplied evaluator controls without executing them", () => {
+    const { manifest, task } = fixtures();
+    const request = { manifest, task, predictions: [[[0, 0, 0]]], solver };
+    let called = false;
+    const evaluator = () => { called = true; return true; };
+    expect(() => evaluateArcTask({ ...request, evaluator } as typeof request)).toThrow(/unexpected/);
+    const proposal = { manifest, evaluations: [{ task, predictions: request.predictions }], solver };
+    expect(() => createArcCapabilityProposal({ ...proposal, evaluator } as typeof proposal)).toThrow(/unexpected/);
+    const accessor = Object.defineProperty({ ...request }, "manifest", {
+      enumerable: true, get() { called = true; return manifest; },
+    });
+    expect(() => evaluateArcTask(accessor)).toThrow(/unexpected/);
+    expect(called).toBe(false);
+    expect(evaluateArcTask(request)[0]?.result).toBe("incorrect");
+    expect(createArcCapabilityProposal(proposal).counts.exact).toBe(0);
+  });
+
+  it("rejects rewritten expected outputs against the admitted manifest", () => {
+    const { manifest, task } = fixtures();
+    const rewritten = { ...task, test: [{ ...task.test[0], output: [[0, 0, 0]] }] };
+    expect(() => createArcCapabilityProposal({ manifest,
+      evaluations: [{ task: rewritten, predictions: [[[0, 0, 0]]] }], solver,
+    })).toThrow(/frozen manifest/);
+    expect(Object.isFrozen(manifest.tasks)).toBe(true);
+    expect(Object.isFrozen(task.test[0]?.output?.[0])).toBe(true);
+    expect(evaluateArcTask({ manifest, task, predictions: [[[0, 0, 0]]], solver })[0]?.result).toBe("incorrect");
+  });
+
   it("matches known SHA-256 vectors and canonicalizes object key order", () => {
     expect(sha256Text("")).toBe("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
     expect(sha256Text("abc")).toBe("sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
