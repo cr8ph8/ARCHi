@@ -113,9 +113,11 @@ struct ReactorControlServerTests {
     private func roundTrip(_ path: String, _ payload: String, delayBeforeWrite: Bool = false) async throws -> Data {
         try await Task.detached {
             let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-            guard fd >= 0 else { throw TestError.socket }
+            guard fd >= 0 else { throw TestError.socket(operation: "create", code: errno) }
             defer { close(fd) }
-            var timeout = timeval(tv_sec: 4, tv_usec: 0), noSignal: Int32 = 1
+            // Concurrent MainActor rendering exceeded seven seconds on the CI host.
+            // Bound the test client independently of the production server's three-second input timeout.
+            var timeout = timeval(tv_sec: 15, tv_usec: 0), noSignal: Int32 = 1
             _ = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
             _ = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
             _ = setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSignal, socklen_t(MemoryLayout<Int32>.size))
@@ -129,26 +131,28 @@ struct ReactorControlServerTests {
                     connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
                 }
             }
-            guard connected == 0 else { throw TestError.socket }
+            guard connected == 0 else { throw TestError.socket(operation: "connect", code: errno) }
             if delayBeforeWrite { try await Task.sleep(for: .milliseconds(100)) }
             try Data(payload.utf8).withUnsafeBytes { bytes in
                 var sent = 0
                 while sent < bytes.count {
                     let count = write(fd, bytes.baseAddress!.advanced(by: sent), bytes.count - sent)
-                    guard count > 0 else { throw TestError.socket }
+                    if count < 0 && errno == EINTR { continue }
+                    guard count > 0 else { throw TestError.socket(operation: "write", code: errno) }
                     sent += count
                 }
             }
             var response = Data(), buffer = [UInt8](repeating: 0, count: 4096)
             while response.count <= ReactorControlServer.maximumMessageBytes {
                 let count = read(fd, &buffer, buffer.count)
-                guard count > 0 else { throw TestError.socket }
+                if count < 0 && errno == EINTR { continue }
+                guard count > 0 else { throw TestError.socket(operation: "read", code: count == 0 ? 0 : errno) }
                 response.append(contentsOf: buffer.prefix(count))
                 if let newline = response.firstIndex(of: 10) { return Data(response[..<newline]) }
             }
-            throw TestError.socket
+            throw TestError.socket(operation: "response size", code: EMSGSIZE)
         }.value
     }
 
-    private enum TestError: Error { case socket }
+    private enum TestError: Error { case socket(operation: String, code: Int32) }
 }

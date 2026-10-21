@@ -80,6 +80,8 @@ jobs:
         run: swift test --package-path desktop --filter DesktopProfileBackupTests
       - name: Check restored owner admission regressions
         run: swift test --package-path desktop --filter DesktopRecoveryIntegrationTests
+      - name: Check rendering environment and local socket fixtures serially
+        run: swift test --package-path desktop --no-parallel --filter 'KinFirstLightRenderingTests|ReactorControlServerTests'
       - name: Run default native suite and report opt-in skips separately
         run: swift test --package-path desktop
       # Synthetic/default checks only. Do not opt into live providers, native

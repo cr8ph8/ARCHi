@@ -108,7 +108,9 @@ final class KinFirstLightRenderingTests: XCTestCase {
         let explicit = try render(KinArt(form: .kin, size: 256, reduceMotion: true,
             lightExpression: .init(mode: .orbit)))
         let system = try render(KinArt(form: .kin, size: 256, reduceMotion: false,
-            lightExpression: .init(mode: .orbit)))
+            lightExpression: .init(mode: .orbit))
+            // ImageRenderer is a separate root, outside the app's environment.
+            .environment(\.accessibilityReduceMotion, NSWorkspace.shared.accessibilityDisplayShouldReduceMotion))
         XCTAssertTrue(try NaturalPresentationComparison.compare(explicit, system).withinAlphaPresentationBound)
     }
 
