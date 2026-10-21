@@ -43,6 +43,10 @@ To check the retained TypeScript source separately, use Node.js 24 or later and 
 
 The public package commands operate on the included source. Private development research and accountability records are not build dependencies.
 
+## Offline harness observation pilot
+
+The [OO-Harness pilot](harness/README.md) adds reviewed specialist check plans, strict observation envelopes, source pins, inherited revocation and synthetic tests. Run `npm run harness:test` and `npm run harness:check` with Node.js 24+. These commands make no model calls and grant no execution authority. The normal `npm run check` includes both. This is a separate developer observation pilot; native assistant dispatch is not changed. The [research and evaluation design](docs/OO_HARNESS_RESEARCH.md) defines the remaining native integration and quality experiments.
+
 The [source-check workflow template](docs/source-checks.yml.example) verifies the complete checksum manifest and retained TypeScript on Linux, then compiles Swift and runs selected deterministic domain tests on macOS. It uses official actions pinned to commits, read-only repository permissions, no artifact upload and no live providers or native visual tests. It is not enabled: the publishing credential lacks GitHub workflow permission. A maintainer with that permission can place this template at `.github/workflows/source-checks.yml` in a later commit, refresh the source checksums, and run it. Local validation results are recorded separately.
 
 ## Try the Unity companion/play source
