@@ -15,11 +15,18 @@
     "unity:build": "bash script/build_unity_port.sh",
     "source:preflight": "python3 script/source_release_preflight.py",
     "source:preflight:test": "python3 -m unittest discover -s scripts/tests -p 'test_*source*.py' -v",
-    "check": "npm run test && npm run foundation:test && npm run pwa:test && npm run arc:typecheck && npm run arc:test && npm run arc:replay:test && npm run build",
+    "check": "npm run test && npm run foundation:test && npm run pwa:test && npm run arc:typecheck && npm run arc:test && npm run arc:replay:test && npm run imagination:typecheck && npm run imagination:test && npm run build",
     "marketplace:test": "python3 -m unittest discover -s marketplace/tests -v",
-    "arc:replay:test": "node --test scripts/arc-replay.test.mjs"
+    "arc:replay:test": "node --test scripts/arc-replay.test.mjs",
+    "imagination:typecheck": "tsc --project imagination/tsconfig.json",
+    "imagination:test": "node --test --test-isolation=none imagination/test/*.test.ts scripts/imagination-pilot.test.mjs",
+    "imagination:demo": "node scripts/imagination-pilot.mjs demo",
+    "imagination:review": "node scripts/imagination-pilot.mjs review",
+    "imagination:agima": "node scripts/imagination-pilot.mjs agima",
+    "imagination:check": "npm run imagination:typecheck && npm run imagination:test && npm run imagination:demo"
   },
   "devDependencies": {
+    "@types/node": "24.19.2",
     "es-module-lexer": "2.3.2",
     "playwright": "1.62.1",
     "typescript": "7.0.2",

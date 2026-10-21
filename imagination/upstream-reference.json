@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "archi-imagination-upstream-reference/v1",
+  "scope": "reference-only",
+  "recordedOn": "2026-10-21",
+  "implementation": {
+    "id": "archi-imagination-pilot/v1",
+    "kind": "independent-cpu-advisory-sokoban-reviewer",
+    "bundledUpstreamRuntime": false,
+    "bundledModelWeights": false,
+    "neuralBackendInstalled": false,
+    "trainingRunPerformed": false,
+    "nativeAppInstalledByThisIntegration": false,
+    "benchmarkReproductionPerformed": false,
+    "fixtureEvidence": "Handwritten synthetic candidates and predictions; no learned planning quality claim."
+  },
+  "paper": {
+    "title": "Train An Imaginative Agent",
+    "arxivId": "2610.26845",
+    "version": "v1",
+    "url": "https://arxiv.org/abs/2610.26845v1"
+  },
+  "upstreamSource": {
+    "repository": "Agentic-Imagination/Agima",
+    "url": "https://github.com/Agentic-Imagination/Agima",
+    "revision": "9d3878edf8a72498519f9f92cac28d570a3e1a43",
+    "revisionUrl": "https://github.com/Agentic-Imagination/Agima/commit/9d3878edf8a72498519f9f92cac28d570a3e1a43",
+    "revisionResolution": "Observed GitHub API response for commits/main on the recorded date; this is a source reference, not verification of an installed runtime.",
+    "resolutionUrl": "https://api.github.com/repos/Agentic-Imagination/Agima/commits/main",
+    "availability": "not-installed",
+    "runtimeImported": false
+  },
+  "artifacts": [
+    {
+      "role": "future-base-assets",
+      "repoType": "model",
+      "repoId": "ByteDance-Seed/BAGEL-7B-MoT",
+      "revision": "5019f57d168e5816e8f3f701b17cc816bb7cf24b",
+      "url": "https://huggingface.co/ByteDance-Seed/BAGEL-7B-MoT/tree/5019f57d168e5816e8f3f701b17cc816bb7cf24b",
+      "availability": "not-downloaded",
+      "localVerification": "not-performed",
+      "localSha256": null
+    },
+    {
+      "role": "future-sokoban-cot-k5-checkpoint",
+      "repoType": "model",
+      "repoId": "novastar111/sokoban_easy_cot_chunk_k5_world_model",
+      "revision": "887196bd83c0f3ccd1ad99eb6d468148011de327",
+      "url": "https://huggingface.co/novastar111/sokoban_easy_cot_chunk_k5_world_model/tree/887196bd83c0f3ccd1ad99eb6d468148011de327",
+      "availability": "not-downloaded",
+      "localVerification": "not-performed",
+      "localSha256": null,
+      "referenceProtocol": {
+        "task": "sokoban",
+        "variant": "cot",
+        "chunkSize": 5,
+        "decoder": "perseg"
+      },
+      "upstreamFileReferences": [
+        {
+          "path": "ema-00001-of-00002.safetensors",
+          "sizeBytes": 29209180896,
+          "publishedSha256": "551c1d53029b362e09112b024e0b54812b43cfc98e89dd505a3b669b8b51dc93",
+          "locallyVerified": false
+        },
+        {
+          "path": "ema-00002-of-00002.safetensors",
+          "sizeBytes": 29220023552,
+          "publishedSha256": "55357d839ba2eb148994a2ea9962c055ea4eed648b68558daf863c0ab31c642c",
+          "locallyVerified": false
+        },
+        {
+          "path": "ema.safetensors.index.json",
+          "sizeBytes": 116532,
+          "publishedGitBlobSha1": "ee650630504c6ce4cc6786a3b7defa8cd05399f9",
+          "locallyVerified": false
+        }
+      ]
+    },
+    {
+      "role": "future-held-out-sokoban-episodes",
+      "repoType": "dataset",
+      "repoId": "novastar111/sokoban_hard_init_state_pool",
+      "revision": "88b5402b1f88a3ec8bca74e02c108616ad794fc8",
+      "url": "https://huggingface.co/datasets/novastar111/sokoban_hard_init_state_pool/tree/88b5402b1f88a3ec8bca74e02c108616ad794fc8",
+      "selectedFiles": ["test.jsonl.gz"],
+      "availability": "not-downloaded",
+      "localVerification": "not-performed",
+      "localSha256": null,
+      "selectionNote": "The repository also contains training rows. Use the explicit held-out file, not a recursive scan of the complete repository."
+    },
+    {
+      "role": "training-reference-only",
+      "repoType": "dataset",
+      "repoId": "novastar111/sokoban_easy_cot_chunk_k5_train",
+      "revision": "4d93607db2a883e41314543fb4f750fda09d78e2",
+      "url": "https://huggingface.co/datasets/novastar111/sokoban_easy_cot_chunk_k5_train/tree/4d93607db2a883e41314543fb4f750fda09d78e2",
+      "availability": "not-downloaded",
+      "localVerification": "not-performed",
+      "localSha256": null,
+      "usedForTraining": false
+    }
+  ],
+  "referenceDocuments": [
+    "https://github.com/Agentic-Imagination/Agima/blob/9d3878edf8a72498519f9f92cac28d570a3e1a43/docs/installation.md",
+    "https://github.com/Agentic-Imagination/Agima/blob/9d3878edf8a72498519f9f92cac28d570a3e1a43/docs/evaluation.md",
+    "https://github.com/Agentic-Imagination/Agima/blob/9d3878edf8a72498519f9f92cac28d570a3e1a43/docs/data-and-models.md",
+    "https://github.com/Agentic-Imagination/Agima/blob/9d3878edf8a72498519f9f92cac28d570a3e1a43/docs/artifacts/models.json",
+    "https://github.com/Agentic-Imagination/Agima/blob/9d3878edf8a72498519f9f92cac28d570a3e1a43/docs/artifacts/datasets.json"
+  ],
+  "neuralProviderStatus": {
+    "available": false,
+    "fallback": "none",
+    "reason": "Agima/BAGEL weights and CUDA inference are not installed by this pilot.",
+    "nextEvidence": "Pinned assets verified locally, compatible CUDA inference executed, matching protocol and episode-level evaluation recorded."
+  }
+}
