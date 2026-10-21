@@ -1,8 +1,6 @@
 name: Source checks
 
 on:
-  push:
-    branches: [main, 'codex/**']
   pull_request:
   workflow_dispatch:
 
@@ -22,6 +20,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Verify complete source manifest
         shell: bash
@@ -65,14 +64,25 @@ jobs:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Report Swift toolchain
-        run: swift --version
+      - name: Report source and toolchain
+        run: |
+          git rev-parse HEAD
+          sw_vers
+          xcodebuild -version
+          swift --version
       - name: Compile native source
         run: swift build --package-path desktop
-      - name: Check deterministic domain contracts
-        run: >-
-          swift test --package-path desktop
-          --filter 'DesktopInterestCaptureTests|CompanionGraphTests|DocumentSelectionTests|WorkingCopyRevisionTests'
-      # No model/provider, window capture, GUI render, permission prompt, profile
-      # migration, app launch or opt-in integration test is requested by this job.
+      - name: Check external allowance and queued admission regressions
+        run: swift test --package-path desktop --filter DesktopInterestStoreTests
+      - name: Check two-file restore and rollback regressions
+        run: swift test --package-path desktop --filter DesktopProfileBackupTests
+      - name: Check restored owner admission regressions
+        run: swift test --package-path desktop --filter DesktopRecoveryIntegrationTests
+      - name: Check rendering environment and local socket fixtures serially
+        run: swift test --package-path desktop --no-parallel --filter 'KinFirstLightRenderingTests|ReactorControlServerTests'
+      - name: Run default native suite and report opt-in skips separately
+        run: swift test --package-path desktop
+      # Synthetic/default checks only. Do not opt into live providers, native
+      # capture, real profiles, app launch or windowed acceptance tests here.

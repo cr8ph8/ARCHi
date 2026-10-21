@@ -170,7 +170,7 @@ final class DesktopProfileBackupTests: XCTestCase {
     func testInterruptedRestoreRecoversBeforeOwnerAdmissionAndBlocksStaleRecovery() throws {
         let fixture = try Fixture(); defer { fixture.remove() }
         try seed(fixture.source, text: "The incoming lesson.")
-        try seed(fixture.destination, text: "The earlier lesson.")
+        try seed(fixture.destination, text: "The earlier lesson.", role: .guardian)
         let original = try pair(fixture.destination)
         let archiveURL = fixture.root.appendingPathComponent("checkpoint.archibackup")
         _ = try DesktopProfileBackup.create(profile: .custom, preferenceURL: fixture.source, archiveURL: archiveURL)
@@ -199,6 +199,88 @@ final class DesktopProfileBackupTests: XCTestCase {
         XCTAssertNil(try DesktopProfileBackup.pendingRecovery(profile: .custom, preferenceURL: fixture.destination))
     }
 
+    func testErrorAfterFullInstallRequiresReadbackRecoveryBeforeRetry() throws {
+        let fixture = try Fixture(); defer { fixture.remove() }
+        try seed(fixture.source, text: "Incoming state.")
+        try seed(fixture.destination, text: "Earlier state.", role: .guardian)
+        let original = try pair(fixture.destination)
+        let incoming = try pair(fixture.source)
+        XCTAssertNotEqual(original[0], incoming[0], "Preferences must actually change")
+        XCTAssertNotEqual(original[1], incoming[1], "Evolution must actually change")
+        let archive = fixture.root.appendingPathComponent("checkpoint.archibackup")
+        _ = try DesktopProfileBackup.create(profile: .custom, preferenceURL: fixture.source, archiveURL: archive)
+        let preview = try DesktopProfileBackup.preview(archiveURL: archive, profile: .custom,
+            preferenceURL: fixture.destination)
+        XCTAssertThrowsError(try DesktopProfileBackup.restore(preview, rollbackDirectory: fixture.rollbacks) { step in
+            if case .pairInstalled = step { throw DesktopProfileBackup.Interrupted() }
+        })
+        XCTAssertEqual(try pair(fixture.destination), incoming, "An error does not prove the mutation failed")
+        XCTAssertTrue(DesktopProfileBackup.hasPendingJournal(preferenceURL: fixture.destination))
+        XCTAssertThrowsError(try DesktopProfileBackup.restore(preview, rollbackDirectory: fixture.rollbacks),
+            "Never blindly retry an operation with an unresolved outcome")
+        XCTAssertEqual(try pair(fixture.destination), incoming)
+        let pending = try XCTUnwrap(DesktopProfileBackup.pendingRecovery(profile: .custom,
+            preferenceURL: fixture.destination))
+        _ = try DesktopProfileBackup.recover(pending)
+        XCTAssertEqual(try pair(fixture.destination), original)
+        XCTAssertFalse(DesktopProfileBackup.hasPendingJournal(preferenceURL: fixture.destination))
+        let fresh = try DesktopProfileBackup.preview(archiveURL: archive, profile: .custom,
+            preferenceURL: fixture.destination)
+        _ = try DesktopProfileBackup.restore(fresh, rollbackDirectory: fixture.rollbacks)
+        XCTAssertEqual(try pair(fixture.destination), incoming)
+    }
+
+    func testOrdinaryErrorsAtEveryInstallCheckpointRollBackBothChangedSlots() throws {
+        for failure in [DesktopProfileBackup.Checkpoint.journalPrepared, .firstFileInstalled, .pairInstalled] {
+            let fixture = try Fixture(); defer { fixture.remove() }
+            try seed(fixture.source, text: "Incoming state.")
+            try seed(fixture.destination, text: "Earlier state.", role: .guardian)
+            let original = try pair(fixture.destination), incoming = try pair(fixture.source)
+            XCTAssertNotEqual(original[0], incoming[0])
+            XCTAssertNotEqual(original[1], incoming[1])
+            let archive = fixture.root.appendingPathComponent("checkpoint.archibackup")
+            _ = try DesktopProfileBackup.create(profile: .custom, preferenceURL: fixture.source, archiveURL: archive)
+            let preview = try DesktopProfileBackup.preview(archiveURL: archive, profile: .custom,
+                preferenceURL: fixture.destination)
+            var rollback: URL?
+            XCTAssertThrowsError(try DesktopProfileBackup.restore(preview, rollbackDirectory: fixture.rollbacks) { step in
+                if step == failure {
+                    switch step {
+                    case .journalPrepared: XCTAssertEqual(try pair(fixture.destination), original)
+                    case .firstFileInstalled: XCTAssertEqual(try pair(fixture.destination), [incoming[0], original[1]])
+                    case .pairInstalled: XCTAssertEqual(try pair(fixture.destination), incoming)
+                    }
+                    throw TestFailure.injected
+                }
+            }) { rollback = ($0 as? DesktopProfileBackup.Failure)?.rollbackArchiveURL }
+            XCTAssertNotNil(rollback, "An ordinary failure reports its retained rollback archive")
+            XCTAssertEqual(try pair(fixture.destination), original)
+            XCTAssertFalse(DesktopProfileBackup.hasPendingJournal(preferenceURL: fixture.destination))
+        }
+    }
+
+    func testPreparedJournalInterruptionPreservesPairAndBlocksRetry() throws {
+        let fixture = try Fixture(); defer { fixture.remove() }
+        try seed(fixture.source, text: "Incoming state.")
+        try seed(fixture.destination, text: "Earlier state.", role: .guardian)
+        let original = try pair(fixture.destination)
+        let archive = fixture.root.appendingPathComponent("checkpoint.archibackup")
+        _ = try DesktopProfileBackup.create(profile: .custom, preferenceURL: fixture.source, archiveURL: archive)
+        let preview = try DesktopProfileBackup.preview(archiveURL: archive, profile: .custom,
+            preferenceURL: fixture.destination)
+        XCTAssertThrowsError(try DesktopProfileBackup.restore(preview, rollbackDirectory: fixture.rollbacks) { step in
+            if step == .journalPrepared { throw DesktopProfileBackup.Interrupted() }
+        })
+        XCTAssertEqual(try pair(fixture.destination), original)
+        XCTAssertTrue(DesktopProfileBackup.hasPendingJournal(preferenceURL: fixture.destination))
+        XCTAssertThrowsError(try DesktopProfileBackup.restore(preview, rollbackDirectory: fixture.rollbacks))
+        let pending = try XCTUnwrap(DesktopProfileBackup.pendingRecovery(profile: .custom,
+            preferenceURL: fixture.destination))
+        _ = try DesktopProfileBackup.recover(pending)
+        XCTAssertEqual(try pair(fixture.destination), original)
+        XCTAssertFalse(DesktopProfileBackup.hasPendingJournal(preferenceURL: fixture.destination))
+    }
+
     func testConcurrentUnknownBytesArePreservedAndMalformedJournalBlocksRecovery() throws {
         let fixture = try Fixture(); defer { fixture.remove() }
         try seed(fixture.source, text: "Incoming state.")
@@ -220,12 +302,12 @@ final class DesktopProfileBackupTests: XCTestCase {
     }
 
     private enum TestFailure: Error { case injected }
-    private func seed(_ url: URL, text: String) throws {
+    private func seed(_ url: URL, text: String, role: EvolutionRole = .muse) throws {
         let document = NativePreferenceDocument(lessons: [KeptLesson(topic: "Planning", text: text, createdAt: instant)],
             qiMon: LocalQiMon(character: .kin, originDigest: String(repeating: "a", count: 64), welcomedAt: instant))
         _ = try NativePreferencePersistence.write(document: document, to: url, expected: nil)
         let evolution = EvolutionStore(saveURL: evolutionURL(url))
-        evolution.confirmRole(.muse); evolution.confirmHelpStyle(.reflective)
+        evolution.confirmRole(role); evolution.confirmHelpStyle(.reflective)
         XCTAssertTrue(evolution.save(), evolution.status)
     }
     private func evolutionURL(_ url: URL) -> URL { url.deletingPathExtension().appendingPathExtension("evolution.json") }

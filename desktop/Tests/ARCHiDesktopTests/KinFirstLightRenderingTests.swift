@@ -99,15 +99,15 @@ final class KinFirstLightRenderingTests: XCTestCase {
     }
 
     @MainActor
-    func testSystemReduceMotionUsesTheSameStaticFirstLightFrame() throws {
+    func testSystemReduceMotionUsesTheSameStaticFirstLightFrame() async throws {
         // macOS exposes this environment value as read-only. Never change the
         // user's accessibility preference merely to manufacture a test result.
         guard NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
             throw XCTSkip("System Reduce Motion is off; analytical policy covers both inputs. Native system rendering needs that existing setting enabled.")
         }
-        let explicit = try render(KinArt(form: .kin, size: 256, reduceMotion: true,
+        let explicit = try await renderHosted(KinArt(form: .kin, size: 256, reduceMotion: true,
             lightExpression: .init(mode: .orbit)))
-        let system = try render(KinArt(form: .kin, size: 256, reduceMotion: false,
+        let system = try await renderHosted(KinArt(form: .kin, size: 256, reduceMotion: false,
             lightExpression: .init(mode: .orbit)))
         XCTAssertTrue(try NaturalPresentationComparison.compare(explicit, system).withinAlphaPresentationBound)
     }
@@ -199,6 +199,32 @@ final class KinFirstLightRenderingTests: XCTestCase {
             }
         }
         return pixels
+    }
+
+    @MainActor private func renderHosted<V: View>(_ view: V) async throws -> Data {
+        // The system-only environment key is read-only. Use a native hosting root
+        // instead of assuming ImageRenderer inherits an app/window environment.
+        let window = NSPanel(contentRect: CGRect(x: 0, y: 0, width: 256, height: 256),
+            styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let host = NSHostingView(rootView: view.frame(width: 256, height: 256))
+        host.sizingOptions = []
+        window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        try await Task.sleep(for: .milliseconds(100))
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        var opaqueSamples = 0
+        for y in stride(from: 0, to: bitmap.pixelsHigh, by: 8) {
+            for x in stride(from: 0, to: bitmap.pixelsWide, by: 8) {
+                if let color = bitmap.colorAt(x: x, y: y), color.alphaComponent > 0.9 { opaqueSamples += 1 }
+            }
+        }
+        XCTAssertGreaterThan(opaqueSamples, 16, "A blank native snapshot is not rendering evidence")
+        return try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
     }
 
     @MainActor private func render<V: View>(_ view: V, scale: CGFloat = 2) throws -> Data {

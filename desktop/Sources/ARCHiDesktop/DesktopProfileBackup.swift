@@ -66,7 +66,7 @@ enum DesktopProfileBackup {
         }
     }
     /// Synchronous fault seam for synthetic partial-write/crash recovery tests.
-    enum Checkpoint { case journalPrepared, firstFileInstalled, pairInstalled }
+    enum Checkpoint: Equatable { case journalPrepared, firstFileInstalled, pairInstalled }
     struct Interrupted: Error {}
 
     static func hasPendingJournal(preferenceURL: URL) -> Bool {

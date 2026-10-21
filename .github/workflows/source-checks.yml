@@ -1,0 +1,88 @@
+name: Source checks
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  retained-source:
+    name: Manifest and retained TypeScript
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify complete source manifest
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import re
+          import subprocess
+
+          root = Path.cwd()
+          tracked = set(subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')) - {''}
+          expected = tracked - {'SOURCE_SHA256SUMS'}
+          listed = set()
+          for line in Path('SOURCE_SHA256SUMS').read_text().splitlines():
+              digest, relative = line.split('  ', 1)
+              assert re.fullmatch(r'[0-9a-f]{64}', digest), 'Invalid checksum'
+              assert relative in expected and relative not in listed, 'Unexpected or duplicate manifest path'
+              path = root / relative
+              assert path.is_file() and not path.is_symlink(), 'Missing file or unexpected symlink'
+              assert hashlib.sha256(path.read_bytes()).hexdigest() == digest, 'Checksum mismatch: ' + relative
+              listed.add(relative)
+          assert listed == expected, 'Manifest does not cover every tracked source file'
+          print('Verified', len(listed), 'source files')
+          PY
+      - name: Use Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install pinned npm dependencies
+        run: npm ci
+      - name: Check retained source
+        run: npm run check
+
+  native-source:
+    name: Native compile and domain contracts
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Report source and toolchain
+        run: |
+          git rev-parse HEAD
+          sw_vers
+          xcodebuild -version
+          swift --version
+      - name: Compile native source
+        run: swift build --package-path desktop
+      - name: Check external allowance and queued admission regressions
+        run: swift test --package-path desktop --filter DesktopInterestStoreTests
+      - name: Check two-file restore and rollback regressions
+        run: swift test --package-path desktop --filter DesktopProfileBackupTests
+      - name: Check restored owner admission regressions
+        run: swift test --package-path desktop --filter DesktopRecoveryIntegrationTests
+      - name: Check rendering environment and local socket fixtures serially
+        run: swift test --package-path desktop --no-parallel --filter 'KinFirstLightRenderingTests|ReactorControlServerTests'
+      - name: Run default native suite and report opt-in skips separately
+        run: swift test --package-path desktop
+      # Synthetic/default checks only. Do not opt into live providers, native
+      # capture, real profiles, app launch or windowed acceptance tests here.

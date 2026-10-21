@@ -176,6 +176,62 @@ final class DesktopRecoveryIntegrationTests: XCTestCase {
         XCTAssertEqual(client.calls, 0)
     }
 
+    @MainActor
+    func testAdmissionBoundaryFailureRestoresBothOwnersOrPreservesConflictingBytes() throws {
+        for conflict in [false, true] {
+            let directory = try root(); defer { try? FileManager.default.removeItem(at: directory) }
+            let source = directory.appendingPathComponent("source/preferences.json")
+            let target = directory.appendingPathComponent("target/preferences.json")
+            try write(tone: "Warm", to: source)
+            try write(tone: "Direct", to: target)
+            let sourceEvolution = source.deletingPathExtension().appendingPathExtension("evolution.json")
+            let targetEvolution = target.deletingPathExtension().appendingPathExtension("evolution.json")
+            let incomingEvolution = EvolutionStore(saveURL: sourceEvolution)
+            incomingEvolution.confirmRole(.muse)
+            XCTAssertTrue(incomingEvolution.save())
+            let priorEvolution = EvolutionStore(saveURL: targetEvolution)
+            priorEvolution.confirmRole(.guardian)
+            XCTAssertTrue(priorEvolution.save())
+            let oldPreferences = try Data(contentsOf: target)
+            let oldEvolution = try Data(contentsOf: targetEvolution)
+            XCTAssertNotEqual(oldPreferences, try Data(contentsOf: source))
+            XCTAssertNotEqual(oldEvolution, try Data(contentsOf: sourceEvolution))
+            let archive = directory.appendingPathComponent("incoming.archibackup")
+            _ = try DesktopProfileBackup.create(profile: .custom, preferenceURL: source, archiveURL: archive)
+            let client = RecoveryIntegrationNoCalls()
+            let store = makeStore(target, client)
+            XCTAssertTrue(store.evolution.load())
+            let review = try store.previewProfileRestore(from: archive)
+            let unknown = Data("concurrent unknown preferences must survive".utf8)
+            var retained: URL?
+            XCTAssertThrowsError(try store.restoreProfile(review) {
+                if conflict { try unknown.write(to: target) }
+                throw AdmissionFailure.injected
+            }) { retained = ($0 as? DesktopRecoveryError)?.rollbackArchiveURL }
+            XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(retained).path))
+            if conflict {
+                XCTAssertEqual(try Data(contentsOf: target), unknown)
+                XCTAssertNotNil(store.profileRecoveryBlock)
+                XCTAssertNotNil(store.evolution.persistenceBlockedReason)
+                XCTAssertFalse(store.evolution.save())
+                XCTAssertFalse(store.evolution.forget())
+                store.rememberPreferences = true
+                store.savePreferences()
+                XCTAssertEqual(try Data(contentsOf: target), unknown)
+            } else {
+                XCTAssertEqual(try Data(contentsOf: target), oldPreferences)
+                XCTAssertEqual(try Data(contentsOf: targetEvolution), oldEvolution)
+                XCTAssertEqual(store.preferences.tone, "Direct")
+                XCTAssertEqual(store.evolution.confirmedRole, .guardian)
+                XCTAssertNil(store.profileRecoveryBlock)
+                XCTAssertFalse(DesktopProfileBackup.hasPendingJournal(preferenceURL: target))
+            }
+            XCTAssertEqual(client.calls, 0)
+        }
+    }
+
+    private enum AdmissionFailure: Error { case injected }
+
     @MainActor private func makeStore(_ url: URL, _ client: RecoveryIntegrationNoCalls) -> CompanionStore {
         CompanionStore(preferenceURL: url, assistant: client, assistantFactory: { _, _ in client }, allowsPlay: false)
     }

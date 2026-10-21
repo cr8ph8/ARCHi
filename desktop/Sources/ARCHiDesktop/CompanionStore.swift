@@ -112,7 +112,17 @@ final class CompanionStore: ObservableObject {
     }
     @Published var position = CGPoint.zero
     @Published var placementRevision: UInt64 = 0
-    @Published var sharedText = ""
+    @Published var sharedText = "" {
+        didSet {
+            // Undoing an edit restores bytes, not a previously granted allowance.
+            if !sharedText.utf8.elementsEqual(oldValue.utf8) {
+                desktopInterestExternalDigest = nil
+                // Direct writes must fence queued dispatch and late events too.
+                cancelWork(reason: "Working-copy bytes changed; earlier requests cleared.")
+                clearSessionContext()
+            }
+        }
+    }
     let desktopInterest: DesktopInterestSession
     @Published private(set) var desktopInterestSource: DesktopInterestSource?
     @Published private(set) var desktopInterestExternalDigest: String?
@@ -1999,6 +2009,7 @@ extension CompanionStore {
     /// The caller has already verified the restored pair and retained rollback.
     /// No provider invocation, new identity, or save is performed during reload.
     func admitRestoredProfile() throws {
+        desktopInterestExternalDigest = nil
         let loaded = try NativePreferencePersistence.read(preferenceURL)
         cancelWork(reason: "Saved profile restored. Earlier replies and references cleared.")
         clearSessionContext()
@@ -2031,6 +2042,7 @@ extension CompanionStore {
     }
 
     func blockProfileForRecovery(_ reason: String) {
+        desktopInterestExternalDigest = nil
         cancelWork(reason: "Profile recovery needs review.")
         clearSessionContext()
         compareResults = [:]

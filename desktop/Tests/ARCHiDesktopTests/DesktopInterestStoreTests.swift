@@ -99,6 +99,131 @@ final class DesktopInterestStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testReturningToEarlierBytesCannotReviveExternalAllowance() async throws {
+        for route in [AssistantRoute.codex, .compare] {
+            let f = InterestStoreFixture(); defer { f.cleanUp() }
+            try await f.adopt()
+            f.store.setAssistantRoute(route)
+            f.store.connectAssistant()
+            try await interestStoreSettle { route.providers.allSatisfy { f.store.connection(for: $0) == .ready } }
+            f.store.prompt = "Explain this snapshot."
+            f.store.allowDesktopInterestWithExternalRoute()
+            XCTAssertTrue(f.store.canBeginReply)
+            let original = f.store.sharedText
+            f.store.sharedText += " Changed bytes."
+            XCTAssertNil(f.store.desktopInterestExternalDigest)
+            f.store.sharedText = original
+            XCTAssertFalse(f.store.canShareDesktopInterestWithRoute)
+            XCTAssertFalse(f.store.canBeginReply)
+            f.store.submit()
+            await interestStoreDrain()
+            XCTAssertEqual(f.local.requests.count + f.cloud.requests.count, 0)
+            f.store.allowDesktopInterestWithExternalRoute()
+            XCTAssertTrue(f.store.canBeginReply, "A fresh explicit allowance remains available")
+            XCTAssertEqual(f.local.requests.count + f.cloud.requests.count, 0, "Allowance never sends")
+            f.store.submit()
+            try await interestStoreSettle {
+                f.cloud.requests.count == 1 && (route != .compare || f.local.requests.count == 1)
+            }
+            XCTAssertEqual(f.cloud.requests[0].sourceText, original)
+        }
+    }
+
+    @MainActor
+    func testEqualUnicodeStringsWithDifferentBytesRevokeButIdenticalBytesDoNot() async throws {
+        let f = InterestStoreFixture(); defer { f.cleanUp() }
+        f.reader.text = "Caf\u{e9}\r\n"
+        try await f.adopt()
+        f.store.setAssistantRoute(.codex)
+        f.store.allowDesktopInterestWithExternalRoute()
+        let original = f.store.sharedText
+        f.store.sharedText = original
+        XCTAssertNotNil(f.store.desktopInterestExternalDigest, "An identical-byte assignment retains permission")
+        let decomposed = "Cafe\u{301}\r\n"
+        XCTAssertEqual(original, decomposed, "Swift String equality is normalization aware")
+        XCTAssertFalse(original.utf8.elementsEqual(decomposed.utf8))
+        f.store.sharedText = decomposed
+        XCTAssertNil(f.store.desktopInterestExternalDigest)
+        f.store.allowDesktopInterestWithExternalRoute()
+        f.store.sharedText = "Cafe\u{301}\n"
+        XCTAssertNil(f.store.desktopInterestExternalDigest, "Line-ending changes are byte changes")
+        f.store.sharedText = original
+        XCTAssertFalse(f.store.canShareDesktopInterestWithRoute)
+    }
+
+    @MainActor
+    func testByteChangeBeforeQueuedDispatchAndLateReplyCannotUseOldTicket() async throws {
+        for dispatched in [false, true] {
+            let f = InterestStoreFixture(); defer { f.cleanUp() }
+            try await f.adopt()
+            f.store.setAssistantRoute(.codex)
+            f.store.connectAssistant()
+            try await interestStoreSettle { f.store.connection(for: .codex) == .ready }
+            f.store.prompt = "Explain this snapshot."
+            f.store.allowDesktopInterestWithExternalRoute()
+            f.store.submit()
+            if dispatched { try await interestStoreSettle { f.cloud.requests.count == 1 } }
+            f.store.sharedText += " New bytes."
+            if dispatched { f.cloud.complete(0, text: "Late reply must not be admitted.") }
+            await interestStoreDrain()
+            XCTAssertNil(f.store.desktopInterestExternalDigest)
+            XCTAssertFalse(f.store.isWorking)
+            XCTAssertFalse(f.store.reply.contains("Late reply must not be admitted."))
+            XCTAssertEqual(f.cloud.requests.count, dispatched ? 1 : 0)
+            XCTAssertTrue(f.store.sharedText.hasSuffix(" New bytes."))
+        }
+    }
+
+    @MainActor
+    func testFailedProfileAdmissionRevokesAllowanceBeforeReadingPreferences() async throws {
+        let f = InterestStoreFixture(); defer { f.cleanUp() }
+        try await f.adopt()
+        f.store.setAssistantRoute(.codex)
+        f.store.allowDesktopInterestWithExternalRoute()
+        try FileManager.default.createDirectory(at: f.url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("invalid saved preferences".utf8).write(to: f.url)
+        XCTAssertThrowsError(try f.store.admitRestoredProfile())
+        XCTAssertNil(f.store.desktopInterestExternalDigest)
+        XCTAssertNotNil(f.store.desktopInterestSource)
+        XCTAssertTrue(f.store.sharedText.utf8.elementsEqual(f.reader.text.utf8))
+        XCTAssertEqual(f.local.requests.count + f.cloud.requests.count, 0)
+    }
+
+    @MainActor
+    func testProfileRestoreAndRecoveryBlockRevokeExternalAllowance() async throws {
+        let f = InterestStoreFixture(); defer { f.cleanUp() }
+        try await f.adopt()
+        f.store.setAssistantRoute(.codex)
+        f.store.connectAssistant()
+        try await interestStoreSettle { f.store.connection(for: .codex) == .ready }
+        f.store.prompt = "Explain this snapshot."
+        let archive = f.url.deletingLastPathComponent().appendingPathComponent("checkpoint.archibackup")
+        try FileManager.default.createDirectory(at: archive.deletingLastPathComponent(), withIntermediateDirectories: true)
+        _ = try f.store.createProfileBackup(at: archive)
+        let review = try f.store.previewProfileRestore(from: archive)
+        f.store.allowDesktopInterestWithExternalRoute()
+        XCTAssertTrue(f.store.canShareDesktopInterestWithRoute)
+        _ = try f.store.restoreProfile(review)
+        XCTAssertEqual(f.store.sharedText, f.reader.text, "Recovery preserves the working copy")
+        XCTAssertNotNil(f.store.desktopInterestSource, "Capture provenance remains available")
+        XCTAssertNil(f.store.desktopInterestExternalDigest)
+        XCTAssertFalse(f.store.canShareDesktopInterestWithRoute)
+        XCTAssertFalse(f.store.canBeginReply)
+        f.store.submit()
+        await interestStoreDrain()
+        XCTAssertEqual(f.cloud.requests.count, 0)
+        f.store.allowDesktopInterestWithExternalRoute()
+        XCTAssertTrue(f.store.canBeginReply)
+        f.store.blockProfileForRecovery("Synthetic interrupted recovery")
+        XCTAssertNil(f.store.desktopInterestExternalDigest)
+        XCTAssertFalse(f.store.canShareDesktopInterestWithRoute)
+        XCTAssertFalse(f.store.canBeginReply)
+        f.store.submit()
+        await interestStoreDrain()
+        XCTAssertEqual(f.local.requests.count + f.cloud.requests.count, 0)
+    }
+
+    @MainActor
     func testLocalRoutesNeedNoExternalAllowanceAndSourceReplacementClearsIt() async throws {
         for stopSharing in [false, true] {
             let f = InterestStoreFixture(); defer { f.cleanUp() }
@@ -191,6 +316,9 @@ final class DesktopInterestStoreTests: XCTestCase {
         let range = (f.reader.text as NSString).range(of: "Original passage.")
         f.store.selectText(range: range, sourceRevision: f.store.sourceRevision)
         f.store.preparePassageRevision()
+        f.store.setAssistantRoute(.codex)
+        f.store.allowDesktopInterestWithExternalRoute()
+        XCTAssertNotNil(f.store.desktopInterestExternalDigest)
         f.store.setAssistantRoute(.automatic)
         f.store.submit()
         try await interestStoreSettle { f.local.requests.count == 1 }
@@ -205,11 +333,14 @@ final class DesktopInterestStoreTests: XCTestCase {
         XCTAssertEqual(f.store.sharedText, f.reader.text, "Receiving a proposed revision never applies it")
         f.store.applyPassageRevision(provider: .qwen, targetID: target.id)
         XCTAssertEqual(f.store.sharedText, "Reviewed wording. Keep this ending.")
+        XCTAssertNil(f.store.desktopInterestExternalDigest, "Applying a revision revokes the earlier allowance")
         XCTAssertEqual(f.store.desktopInterestSource, capturedSource, "Capture provenance still identifies the original snapshot")
         XCTAssertTrue(f.store.canUndoWorkingCopyEdit)
         f.store.undoWorkingCopyEdit()
         XCTAssertEqual(f.store.sharedText, f.reader.text)
         XCTAssertFalse(f.store.canUndoWorkingCopyEdit)
+        f.store.setAssistantRoute(.codex)
+        XCTAssertFalse(f.store.canShareDesktopInterestWithRoute, "Undo restores content without restoring authority")
         XCTAssertEqual(f.cloud.requests.count, 0)
         XCTAssertFalse(FileManager.default.fileExists(atPath: f.url.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: f.evolutionURL.path))
