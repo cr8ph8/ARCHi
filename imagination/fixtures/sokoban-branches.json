@@ -1,0 +1,40 @@
+{
+  "provenance": "Original hand-authored synthetic contract fixture; no model inference or paper episode",
+  "request": {
+    "requestId": "sokoban-branches-001",
+    "observation": {
+      "revision": 1,
+      "authorizationEpoch": 1,
+      "state": { "rows": ["#######", "##    #", "# $ . #", "# @   #", "#######"] }
+    },
+    "policyVersion": "archi-imagination-demo-v1",
+    "issuedAtMs": 1000,
+    "expiresAtMs": 11000,
+    "budget": { "maxCandidates": 3, "maxHorizon": 5, "maxTransitions": 15 }
+  },
+  "candidates": [
+    {
+      "id": "push-into-corner",
+      "actions": ["UP"],
+      "predictedStates": [{ "rows": ["#######", "##$   #", "# @ . #", "#     #", "#######"] }],
+      "predictedSuccess": false
+    },
+    {
+      "id": "walk-around-and-push",
+      "actions": ["LEFT", "UP", "RIGHT", "RIGHT"],
+      "predictedStates": [
+        { "rows": ["#######", "##    #", "# $ . #", "#@    #", "#######"] },
+        { "rows": ["#######", "##    #", "#@$ . #", "#     #", "#######"] },
+        { "rows": ["#######", "##    #", "# @$. #", "#     #", "#######"] },
+        { "rows": ["#######", "##    #", "#  @* #", "#     #", "#######"] }
+      ],
+      "predictedSuccess": true
+    },
+    {
+      "id": "partial-walk",
+      "actions": ["RIGHT"],
+      "predictedStates": [{ "rows": ["#######", "##    #", "# $ . #", "#  @  #", "#######"] }],
+      "predictedSuccess": false
+    }
+  ]
+}
