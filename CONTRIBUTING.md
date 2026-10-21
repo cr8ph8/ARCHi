@@ -20,7 +20,7 @@ For native source on macOS 14+ with Swift 6 and the macOS SDK:
     swift build --package-path desktop
     swift test --package-path desktop
 
-The [CI workflow template](docs/source-checks.yml.example) uses a smaller deterministic native subset suitable for unattended runners. It is not enabled because the current publishing credential lacks workflow permission. The full suite intentionally skips opt-in tests whose external or windowed prerequisites are absent. Report skips separately. Do not enable live-provider, real-profile or native capture tests merely to make a skipped count smaller; use explicitly chosen synthetic fixtures and required permissions when validating those paths.
+The [source checks workflow](.github/workflows/source-checks.yml) selects the exact PR head and checks retained npm contracts, native compilation, the allowance/restore/admission suites and the default full native suite. Its [example](docs/source-checks.yml.example) mirrors those checks. Configuration is not a passed run: inspect the final commit and execution logs. The full suite intentionally skips opt-in tests whose external or windowed prerequisites are absent. Report skips separately. Do not enable live-provider, real-profile or native capture tests merely to make a skipped count smaller; use explicitly chosen synthetic fixtures and required permissions when validating those paths.
 
 The [Unity guide](unity/ARCHi/README.md) covers the pinned Editor, build helper and explicit smoke runner. A build is separate from runtime interaction, accessibility, long-session and distribution qualification.
 

@@ -115,7 +115,12 @@ final class CompanionStore: ObservableObject {
     @Published var sharedText = "" {
         didSet {
             // Undoing an edit restores bytes, not a previously granted allowance.
-            if !sharedText.utf8.elementsEqual(oldValue.utf8) { desktopInterestExternalDigest = nil }
+            if !sharedText.utf8.elementsEqual(oldValue.utf8) {
+                desktopInterestExternalDigest = nil
+                // Direct writes must fence queued dispatch and late events too.
+                cancelWork(reason: "Working-copy bytes changed; earlier requests cleared.")
+                clearSessionContext()
+            }
         }
     }
     let desktopInterest: DesktopInterestSession

@@ -74,6 +74,67 @@ function multipleTaskFixtures(): {
 }
 
 describe("ARC evidence contract", () => {
+  for (const entryPoint of ["evaluation", "proposal"] as const) {
+    it.each(["hidden", "symbol", "symbol-accessor"] as const)(
+      `rejects a %s extra on the ${entryPoint} envelope without invoking it`,
+      (extra) => {
+        const { manifest, task } = fixtures();
+        const request = { manifest, task, predictions: [[[0, 0, 0]]], solver };
+        const proposal = { manifest, evaluations: [{ task, predictions: request.predictions }], solver };
+        const envelope = entryPoint === "evaluation" ? request : proposal;
+        let called = false;
+        const evaluator = () => { called = true; return true; };
+        if (extra === "hidden") {
+          Object.defineProperty(envelope, "evaluator", { value: evaluator });
+        } else if (extra === "symbol") {
+          Object.defineProperty(envelope, Symbol("evaluator"), { value: evaluator, enumerable: true });
+        } else {
+          Object.defineProperty(envelope, Symbol("evaluator"), { get: evaluator });
+        }
+        expect(() => entryPoint === "evaluation"
+          ? evaluateArcTask(envelope as typeof request)
+          : createArcCapabilityProposal(envelope as typeof proposal)).toThrow(/unexpected/);
+        expect(called).toBe(false);
+      },
+    );
+  }
+
+  it("rejects a proposal envelope accessor before reading it", () => {
+    const { manifest, task } = fixtures();
+    let reads = 0;
+    const proposal = Object.defineProperty({ manifest, evaluations: [{ task, predictions: [] }], solver },
+      "evaluations", { enumerable: true, get() { reads += 1; return []; } });
+    expect(() => createArcCapabilityProposal(proposal)).toThrow(/unexpected/);
+    expect(reads).toBe(0);
+  });
+
+  it.each(["hidden", "symbol", "symbol-accessor"] as const)(
+    "rejects a %s array extension before evaluating its values",
+    (extra) => {
+      const { manifest, task } = fixtures();
+      const predictions = [[[2, 0, 2]]];
+      let called = false;
+      const getter = () => { called = true; return true; };
+      if (extra === "hidden") Object.defineProperty(predictions, "claimedScore", { value: 1 });
+      else if (extra === "symbol") Object.defineProperty(predictions, Symbol("claimedScore"), { value: 1 });
+      else Object.defineProperty(predictions, Symbol("claimedScore"), { get: getter });
+      expect(() => evaluateArcTask({ manifest, task, predictions, solver })).toThrow(/data-only array/);
+      expect(validateArcGrid(predictions[0]).ok).toBe(true);
+      expect(called).toBe(false);
+    },
+  );
+
+  it("rejects hidden and symbol task fields through the same strict data contract", () => {
+    const { task } = fixtures();
+    expect(validateArcTask(Object.defineProperty({ ...task }, "claimedScore", { value: 1 })).ok).toBe(false);
+    let called = false;
+    const accessor = Object.defineProperty({ ...task }, Symbol("claimedScore"), {
+      get() { called = true; return 1; },
+    });
+    expect(validateArcTask(accessor).ok).toBe(false);
+    expect(called).toBe(false);
+  });
+
   it("rejects optimizer-supplied evaluator controls without executing them", () => {
     const { manifest, task } = fixtures();
     const request = { manifest, task, predictions: [[[0, 0, 0]]], solver };

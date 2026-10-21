@@ -64,7 +64,8 @@ extension CompanionStore {
         return DesktopRestoreReview(preview: preview, stamp: recoveryStamp)
     }
 
-    func restoreProfile(_ review: DesktopRestoreReview) throws -> DesktopProfileBackup.RestoreReport {
+    func restoreProfile(_ review: DesktopRestoreReview,
+                        beforeAdmission: () throws -> Void = {}) throws -> DesktopProfileBackup.RestoreReport {
         if let reason = recoveryRestoreBlockReason ?? recoveryJournalBlockReason { throw DesktopRecoveryError.blocked(reason) }
         guard recoveryStamp == review.stamp else {
             throw DesktopRecoveryError.blocked("Your choices changed while the restore preview was open. Preview this backup again.")
@@ -82,6 +83,8 @@ extension CompanionStore {
             throw error
         }
         do {
+            // Synchronous fault seam; a successful seam cannot bypass owner validation.
+            try beforeAdmission()
             try admitRestoredProfile()
             return report
         } catch {

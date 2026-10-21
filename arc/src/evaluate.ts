@@ -108,7 +108,12 @@ function isDataRecord(value: unknown): value is DataRecord {
     if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return false;
-    return Object.values(Object.getOwnPropertyDescriptors(value)).every((descriptor) => "value" in descriptor);
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    return Reflect.ownKeys(descriptors).every((key) => {
+      if (typeof key !== "string") return false;
+      const descriptor = descriptors[key];
+      return !!descriptor && "value" in descriptor && descriptor.enumerable === true;
+    });
   } catch {
     return false;
   }
@@ -117,10 +122,14 @@ function isDataRecord(value: unknown): value is DataRecord {
 function isDataArray(value: unknown): value is unknown[] {
   try {
     if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return false;
-    if (!Object.values(Object.getOwnPropertyDescriptors(value)).every((descriptor) => "value" in descriptor)) {
-      return false;
-    }
-    if (!Object.keys(value).every((key) => /^(?:0|[1-9][0-9]*)$/.test(key) && Number(key) < value.length)) {
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    if (!Reflect.ownKeys(descriptors).every((key) => {
+      if (typeof key !== "string") return false;
+      const descriptor = descriptors[key];
+      if (!descriptor || !("value" in descriptor)) return false;
+      return key === "length" || (descriptor.enumerable === true
+        && /^(?:0|[1-9][0-9]*)$/.test(key) && Number(key) < value.length);
+    })) {
       return false;
     }
     return Array.from({ length: value.length }, (_, index) => index).every((index) =>
@@ -132,9 +141,8 @@ function isDataArray(value: unknown): value is unknown[] {
 }
 
 function hasExactKeys(record: DataRecord, keys: readonly string[]): boolean {
-  const actual = Object.keys(record).sort();
-  const expected = [...keys].sort();
-  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+  const actual = Reflect.ownKeys(record);
+  return actual.length === keys.length && actual.every((key) => typeof key === "string" && keys.includes(key));
 }
 
 function admitted<T>(result: ReturnType<typeof validateArcManifest> | { ok: true; value: T } | { ok: false; issues: readonly string[] }, label: string): T {

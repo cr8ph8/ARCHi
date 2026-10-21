@@ -8,7 +8,7 @@ Work together operates on a deliberately shared text copy. Its object-of-interes
 
 Selection, proposals and Apply bind to the current working-copy revision. The external app and imported original stay unchanged; Undo and export operate on the local copy. Local Qwen is the default for captured text, and a separate exact-copy allowance gates Codex/Compare. Reading, reviewing or adopting does not invoke inference, keep a lesson or award development. The image is used only for OCR, is not persisted/sent and adds no image-semantics or camera capability. Placement and staff cues remain existing native presentation state.
 
-The external-copy allowance is revoked whenever the working-copy bytes change, when a restored profile is admitted, or when profile recovery blocks saving. Returning to earlier bytes through Undo does not revive permission. A new explicit allowance is required before that captured copy can use an external route.
+The external-copy allowance is revoked whenever the working-copy bytes change, when a restored profile is admitted, or when profile recovery blocks saving. Returning to earlier bytes through Undo does not revive permission. A new explicit allowance is required before that captured copy can use an external route. Byte changes also cancel queued requests and fence late provider events through the existing request tickets.
 
 Node Lab derives nodes and links from current native source metadata, kept lessons, temporary records and lane receipts. Provider/request scope keeps repeated reference labels distinct. Historical metadata cannot restore withdrawn lesson text. The graph is an inspection/navigation projection with bounded input and output; it creates no persistence, model calls, agent swarm or inferred relationship database.
 
