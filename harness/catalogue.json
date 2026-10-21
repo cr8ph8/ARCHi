@@ -1,0 +1,11 @@
+{
+  "format": "archi-harness-catalogue",
+  "schemaVersion": 1,
+  "qualification": "synthetic-only",
+  "entries": [
+    { "id": "base", "parentId": null },
+    { "id": "artifact", "parentId": "base" },
+    { "id": "spreadsheet", "parentId": "artifact" },
+    { "id": "api-schema", "parentId": "base" }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "format": "archi-harness-synthetic-fixtures",
+  "discovery": [
+    { "id": "discovery-text", "expected": "base", "features": { "outputFormat": "text", "errors": [], "baseCompleted": true, "artifactExists": false, "artifactValid": false, "percentageCells": false } },
+    { "id": "discovery-docx", "expected": "artifact", "features": { "outputFormat": "docx", "errors": [], "baseCompleted": false, "artifactExists": false, "artifactValid": false, "percentageCells": false } },
+    { "id": "discovery-percent", "expected": "spreadsheet", "features": { "outputFormat": "xlsx", "errors": [], "baseCompleted": false, "artifactExists": true, "artifactValid": false, "percentageCells": true } },
+    { "id": "discovery-schema", "expected": "api-schema", "features": { "outputFormat": "text", "errors": ["tool-schema"], "baseCompleted": false, "artifactExists": false, "artifactValid": false, "percentageCells": false } }
+  ],
+  "heldOut": [
+    { "id": "holdout-pdf-missing", "expected": "artifact", "features": { "outputFormat": "pdf", "errors": [], "baseCompleted": true, "artifactExists": false, "artifactValid": false, "percentageCells": false } },
+    { "id": "holdout-code-invalid", "expected": "artifact", "features": { "outputFormat": "code", "errors": [], "baseCompleted": true, "artifactExists": true, "artifactValid": false, "percentageCells": false } },
+    { "id": "holdout-pdf-complete", "expected": "base", "features": { "outputFormat": "pdf", "errors": [], "baseCompleted": true, "artifactExists": true, "artifactValid": true, "percentageCells": false } },
+    { "id": "holdout-workbook-missing", "expected": "spreadsheet", "features": { "outputFormat": "xlsx", "errors": [], "baseCompleted": false, "artifactExists": false, "artifactValid": false, "percentageCells": true } },
+    { "id": "holdout-query-error", "expected": "api-schema", "features": { "outputFormat": "text", "errors": ["query-parse"], "baseCompleted": false, "artifactExists": false, "artifactValid": false, "percentageCells": false } },
+    { "id": "holdout-permission-denied", "expected": "base", "features": { "outputFormat": "xlsx", "errors": ["permission-denied"], "baseCompleted": false, "artifactExists": false, "artifactValid": false, "percentageCells": true } },
+    { "id": "holdout-service-down", "expected": "base", "features": { "outputFormat": "docx", "errors": ["unavailable"], "baseCompleted": false, "artifactExists": false, "artifactValid": false, "percentageCells": false } },
+    { "id": "holdout-no-match", "expected": "base", "features": { "outputFormat": "text", "errors": [], "baseCompleted": false, "artifactExists": false, "artifactValid": false, "percentageCells": false } }
+  ]
+}

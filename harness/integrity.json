@@ -1,0 +1,12 @@
+{
+  "format": "archi-harness-source-pins",
+  "schemaVersion": 1,
+  "files": {
+    "contracts.mjs": "sha256:1da0539047302705dc2fc203627ccebef93c237e9e0f0f62100e4b1fd084366d",
+    "strategies.mjs": "sha256:eb6d19677f62087188b9a39d8177c678b3e04cc3dc1be76e4e3e5c62aed3c55a",
+    "router.mjs": "sha256:3620deb64903404772678f07d7d7aa0fe4c9c90b70aa86b021fb5ddb69f526ce",
+    "catalogue.json": "sha256:f27b51a0d5cf23ecd86c143c2ad27c84344c583eb50d8b4576953d6094a5a6d3",
+    "cli.mjs": "sha256:b8545d33c0fd55dc73bcf893dcf0061edbb32a16d76a125c0da1ec9f2dd963b2",
+    "fixtures.json": "sha256:e8832f675ea46d5f4b83530d8c73cfdf4353589851fb7969f2dda26ee3777a3a"
+  }
+}
