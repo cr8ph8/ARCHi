@@ -26,6 +26,8 @@ The [Unity guide](unity/ARCHi/README.md) covers the pinned Editor, build helper 
 
 SOURCE_SHA256SUMS covers every tracked source file except itself. Regenerate it after final edits and verify both the hashes and complete file coverage before submitting. Keep generated caches, screenshots, build outputs and user data outside the tracked source tree.
 
+The [protected-runtime checks](docs/RUNTIME_BOUNDARIES.md) include a deliberately weakened evidence verifier and rewritten local test, checked against a separately stored policy. `npm run runtime:boundary:test` is a development regression suite. A production external controller and its trusted policy must be provisioned outside the proposer's authority; the repository workflow alone does not supply that trust boundary.
+
 ## License and attribution
 
 Project-authored contributions use the repository's [MIT license](LICENSE). Preserve applicable third-party license notices and describe the provenance of added runtime assets. The [asset attribution](ASSET_ATTRIBUTION.md) and [third-party notices](THIRD_PARTY_NOTICES.md) identify the current distribution.
