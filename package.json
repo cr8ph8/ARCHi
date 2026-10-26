@@ -10,10 +10,11 @@
     "arc:test": "vitest run arc/test",
     "pwa:test": "node --test scripts/pwa-contract.test.mjs",
     "foundation:test": "node --test scripts/boundary-text.test.mjs scripts/episode-trace.test.mjs",
+    "runtime:boundary:test": "node --test scripts/runtime-integrity-guard.test.mjs",
     "desktop:build": "swift build --package-path desktop",
     "desktop:test": "swift test --package-path desktop",
     "desktop:review": "./script/build_and_run.sh --verify --review",
-    "check": "npm run test && npm run foundation:test && npm run pwa:test && npm run arc:typecheck && npm run arc:test && npm run build"
+    "check": "npm run test && npm run foundation:test && npm run runtime:boundary:test && npm run pwa:test && npm run arc:typecheck && npm run arc:test && npm run build"
   },
   "devDependencies": {
     "es-module-lexer": "2.3.2",

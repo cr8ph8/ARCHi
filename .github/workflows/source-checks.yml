@@ -55,6 +55,11 @@ jobs:
         run: npm ci
       - name: Check retained source
         run: npm run check
+      - name: Check trusted-file ownership in a disposable Linux fixture
+        run: >-
+          sudo env -i PATH="$PATH" ARCHI_REQUIRE_UID_ISOLATION=1 "$(command -v node)" --test
+          --test-name-pattern='a separate Linux UID'
+          scripts/runtime-integrity-guard.test.mjs
 
   native-source:
     name: Native compile and domain contracts
