@@ -58,6 +58,14 @@ jobs:
       - run: npm run build
       - name: Exercise memory controls and suggestions in Chrome with synthetic data
         run: node scripts/memory-influence-playtest.mjs
+      - name: Retain synthetic playtest report and screenshots
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: contextual-memory-playtest
+          path: /tmp/archi-memory-influence-playtest
+          if-no-files-found: ignore
+          retention-days: 7
 
   native-memory:
     runs-on: macos-15

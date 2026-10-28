@@ -77,7 +77,7 @@ Current production callers use context match 1 only after the existing exact con
 
 ## Source and validation
 
-This candidate builds on `codex/unified-orb-20261028` at `7a4d36dbeb9b74bc9f1f097de9c5b13227d46f57`. That baseline's native CI reported a Swift SIMD type-check timeout in `LiminalSurfaceLight`. A small typed-intermediate refactor preserves the operation order and removes that compilation obstacle; it does not introduce memory-driven geometry.
+This candidate builds on `codex/unified-orb-20261028` at `7a4d36dbeb9b74bc9f1f097de9c5b13227d46f57`. That baseline's native CI reported a Swift SIMD type-check timeout in `LiminalSurfaceLight`. A small typed-intermediate refactor preserves the operation order and removes that compilation obstacle; it does not introduce memory-driven geometry. Once the application compiled, CI also exposed an existing orb-test fixture assigning to immutable snapshot fields. That fixture now decodes synthetic wire variants, preserving the production snapshot's immutability and the original rejection assertions.
 
 Focused checks are executable through `.github/workflows/memory-influence-validation.yml`:
 
