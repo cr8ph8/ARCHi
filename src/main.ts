@@ -116,7 +116,10 @@ import {
   bondQiMonPair, createQiMonRoster, discoverQiMon, inspectQiMonRoster, inviteQiMon,
   projectQiMonRoster, revisionForQiMonRoster, selectQiMonTeam, serializeQiMonRoster,
   trainQiMon, type QiMonRoster, type QiMonRosterProjection,
+  assessQiMonMemory, qiMonMemorySources, QIMON_MEMORY_CONTEXT, QIMON_MEMORY_ACTIONS,
+  type QiMonMemoryAssessment, type QiMonMemoryAction,
 } from "./qimon-roster";
+import { rankQiMonPracticeChoices } from "./qimon-memory-influence";
 import {
   availableRelayTargets, createRelayBattle, createRelayCommand, resolveRelayRound,
   type RelayBattleState,
@@ -226,6 +229,7 @@ const ui = {
   rosterTeamControls: element<HTMLElement>("qimon-team-controls"),
   rosterTraining: element<HTMLElement>("qimon-training"),
   rosterRelay: element<HTMLElement>("qimon-relay"),
+  rosterMemory: element<HTMLElement>("qimon-memory"),
   rosterReview: element<HTMLButtonElement>("qimon-roster-review"),
   rosterFile: element<HTMLInputElement>("qimon-roster-file"),
   rosterImportPreview: element<HTMLElement>("qimon-roster-import-preview"),
@@ -236,6 +240,7 @@ const ui = {
   battleRosterReturn: element<HTMLButtonElement>("battle-roster-return"),
   battleOpponentMode: element<HTMLSelectElement>("battle-opponent-mode"),
   battleCommandHelp: element<HTMLElement>("battle-command-help"),
+  battleMemoryGuidance: element<HTMLElement>("battle-memory-guidance"),
   battlePartnerNote: element<HTMLElement>("battle-partner-note"),
   battlePanel: element<HTMLElement>("battle-panel"),
   battleStatus: element<HTMLElement>("battle-status"),
@@ -1872,6 +1877,7 @@ function updateBattleInterface(): void {
   updateBattleActionSelect("one");
   updateBattleActionSelect("two");
   updateBattleCommandLocks();
+  renderBattleMemoryGuidance();
   updateBattleTranscript();
   ui.battleRoundLabel.textContent = battleState.status === "complete" ? "Field settled" : `Round ${battleState.round}`;
   ui.battleRoundResult.textContent = battleLastResult;
@@ -2639,7 +2645,7 @@ function playOwnedRelay(action: Parameters<typeof createRelayCommand>[2], target
 }
 
 function renderQiMonRoster(): void {
-  for (const node of [ui.rosterOffers, ui.rosterMembers, ui.rosterTeamControls, ui.rosterTraining, ui.rosterRelay]) {
+  for (const node of [ui.rosterOffers, ui.rosterMembers, ui.rosterTeamControls, ui.rosterTraining, ui.rosterRelay, ui.rosterMemory]) {
     node.replaceChildren();
   }
   const projection = currentQiMonRoster();
@@ -2749,6 +2755,130 @@ function renderQiMonRoster(): void {
   }
   if (!candidates) ui.rosterTraining.append(rosterCard("Practice creates the next node", "Keep a solo match to train one recruit, or keep a two-member match where both acted to form a pair."));
   renderQiMonRelay(projection);
+  renderQiMonMemory(projection);
+}
+
+function renderQiMonMemory(projection: QiMonRosterProjection): void {
+  if (!roster || !projection.members.length) {
+    ui.rosterMemory.append(rosterCard("No recruited memories yet", "Invite a QiMon to assess how its kept origin and later practices bear on a move."));
+    return;
+  }
+  for (const member of projection.members) {
+    const sources = qiMonMemorySources(journey, roster, member.id);
+    const panel = document.createElement("details");
+    panel.className = "qimon-memory-editor";
+    const summary = document.createElement("summary");
+    summary.textContent = `${member.card.name} · ${sources.length} source memories`;
+    panel.append(summary);
+    const form = document.createElement("div");
+    form.className = "qimon-memory-fields";
+    const labeled = (label: string, control: HTMLElement): void => {
+      const wrapper = document.createElement("label");
+      const name = document.createElement("span"); name.textContent = label;
+      wrapper.append(name, control); form.append(wrapper);
+    };
+    const source = document.createElement("select");
+    for (const memory of sources) {
+      const option = document.createElement("option"); option.value = memory.eventId;
+      option.textContent = `${memory.label} · ${memory.eventId.slice(-10)}`; source.append(option);
+    }
+    labeled("Source memory", source);
+    const target = document.createElement("select");
+    for (const action of QIMON_MEMORY_ACTIONS) {
+      const option = document.createElement("option"); option.value = action;
+      option.textContent = BATTLE_ACTION_LABELS[action]; target.append(option);
+    }
+    labeled("Move being considered · rules v1 practice", target);
+    const polarity = document.createElement("select");
+    for (const [value, label] of [["unassessed", "Unassessed"], ["1", "Attraction (+1)"],
+      ["0", "Assessed neutral (0)"], ["-1", "Detraction (−1)"]]) {
+      const option = document.createElement("option"); option.value = value; option.textContent = label; polarity.append(option);
+    }
+    labeled("Directional influence", polarity);
+    const numberField = (label: string): HTMLInputElement => {
+      const input = document.createElement("input"); input.type = "number";
+      input.min = "0"; input.max = "1"; input.step = "0.01"; input.value = "1"; input.required = true;
+      labeled(`${label} · 0 to 1`, input); return input;
+    };
+    const magnitude = numberField("Magnitude"), confidence = numberField("Assessed confidence"), salience = numberField("Retrieval salience");
+    const provenance = document.createElement("small"); provenance.className = "qimon-memory-provenance";
+    const reload = (): void => {
+      const saved = projection.memoryInfluences.find((value) => value.memberId === member.id
+        && value.sourceEventId === source.value && value.context === QIMON_MEMORY_CONTEXT && value.targetAction === target.value);
+      polarity.value = saved?.polarity == null ? "unassessed" : String(saved.polarity);
+      magnitude.value = String(saved?.magnitude ?? 1); confidence.value = String(saved?.confidence ?? 1);
+      salience.value = String(saved?.retrievalSalience ?? 1);
+      const selected = sources.find((value) => value.eventId === source.value);
+      provenance.textContent = selected ? `Source ${selected.eventId} · SHA-256 ${selected.digest}` : "Source unavailable";
+    };
+    source.addEventListener("change", reload); target.addEventListener("change", reload); reload();
+    const save = (): void => {
+      if (![magnitude, confidence, salience].every((input) => input.reportValidity() && input.value.trim() !== "")) return;
+      const assessment: QiMonMemoryAssessment = { memberId: member.id, sourceEventId: source.value,
+        context: QIMON_MEMORY_CONTEXT, targetAction: target.value as QiMonMemoryAction,
+        polarity: polarity.value === "unassessed" ? null : Number(polarity.value) as -1 | 0 | 1,
+        magnitude: Number(magnitude.value), confidence: Number(confidence.value), retrievalSalience: Number(salience.value) };
+      void commitQiMonRoster((current, r, j) => assessQiMonMemory(journey, current, assessment, r, j),
+        `${member.card.name}'s memory influence was kept. Its source and training remain intact.`);
+    };
+    form.append(provenance, rosterAction("Keep this assessment", save, !sources.length));
+    const note = document.createElement("p");
+    note.textContent = "Edits are explicit. Set Unassessed to withdraw directional guidance. Attraction and detraction affect move suggestions; salience controls retrieval separately.";
+    form.append(note); panel.append(form); ui.rosterMemory.append(panel);
+  }
+}
+
+function qiMonMemorySourceIsCurrent(): boolean {
+  if (qaMode) return true;
+  const saved = readStoredJourney();
+  try {
+    return storageWriteAvailable && saved.status === "valid"
+      && revisionForJourney(saved.journey) === revisionForJourney(journey)
+      && rosterStorageBaseline !== null && window.localStorage.getItem(ROSTER_STORAGE_KEY) === rosterStorageBaseline;
+  } catch { return false; }
+}
+
+function renderBattleMemoryGuidance(): void {
+  ui.battleMemoryGuidance.replaceChildren();
+  ui.battleMemoryGuidance.hidden = true;
+  if (!battleState || battleState.status !== "active" || !roster || rosterIssue || !battleOwnedCards
+      || battleOpponentMode !== "companion" || battleLockedCommands.one || journeyInputInterlocked || commitInFlight
+      || !qiMonMemorySourceIsCurrent()) return;
+  try {
+    const ranking = rankQiMonPracticeChoices(battleState, "one", journey, roster);
+    const first = ranking[0]; if (!first) return;
+    const expectedBattle = battleRevision(battleState), expectedRoster = revisionForQiMonRoster(roster),
+      expectedJourney = revisionForJourney(journey);
+    const heading = document.createElement("strong"); heading.textContent = `Memory suggestion · ${first.label}`;
+    const details = document.createElement("p");
+    details.textContent = `Ranking ${first.score.toFixed(3)} · attraction ${first.memory.positiveMass.toFixed(3)} · detraction ${first.memory.negativeMass.toFixed(3)} · neutral ${first.memory.neutralMass.toFixed(3)}. You choose and play the move.`;
+    const choices = document.createElement("details");
+    const title = document.createElement("summary"); title.textContent = "Inspect move influences"; choices.append(title);
+    const list = document.createElement("ul");
+    for (const choice of ranking) {
+      const row = document.createElement("li");
+      row.textContent = `${choice.label}: ${choice.score.toFixed(3)} · ${choice.memory.assessedCount} assessed, ${choice.memory.unassessedCount} unassessed`
+        + (choice.memory.rows.length ? ` · retrieval ${choice.memory.rows.map((memory) => memory.retrieval.toFixed(3)).join(", ")}` : " · no memory assessment");
+      list.append(row);
+    }
+    choices.append(list);
+    const use = rosterAction("Use suggestion", () => {
+      if (!battleState || !roster || battleRevision(battleState) !== expectedBattle
+          || revisionForQiMonRoster(roster) !== expectedRoster || revisionForJourney(journey) !== expectedJourney
+          || battleLockedCommands.one || journeyInputInterlocked || commitInFlight || rosterIssue || !qiMonMemorySourceIsCurrent()
+          || (desktopHost && !desktopHost.visible)) { renderBattleMemoryGuidance(); return; }
+      const current = rankQiMonPracticeChoices(battleState, "one", journey, roster)[0];
+      if (!current || current.id !== first.id) { renderBattleMemoryGuidance(); return; }
+      ui.battleOneAction.value = current.command.action; updateBattleTarget("one");
+      ui.battleOneTarget.value = current.command.targetQiMonId ?? ""; updateBattleCommandHelp();
+      ui.battleOneAction.focus({ preventScroll: true });
+    });
+    ui.battleMemoryGuidance.append(heading, details, choices, use);
+    ui.battleMemoryGuidance.hidden = false;
+  } catch {
+    // The existing roster/source owner is unavailable; no stale recommendation is shown.
+    ui.battleMemoryGuidance.hidden = true;
+  }
 }
 
 function renderQiMonRelay(projection: QiMonRosterProjection): void {
@@ -5459,6 +5589,9 @@ ui.battleOneAction.addEventListener("change", () => updateBattleTarget("one"));
 ui.battleTwoAction.addEventListener("change", () => updateBattleTarget("two"));
 ui.battleOneLock.addEventListener("click", () => lockBattleCommand("one"));
 ui.battleTwoLock.addEventListener("click", () => lockBattleCommand("two"));
+window.addEventListener("storage", (event) => {
+  if (event.key === null || event.key === STORAGE_KEY || event.key === ROSTER_STORAGE_KEY) renderBattleMemoryGuidance();
+});
 ui.battleResolve.addEventListener("click", resolveBattle);
 ui.battleAgain.addEventListener("click", () => {
   cancelBattleConfirmation();

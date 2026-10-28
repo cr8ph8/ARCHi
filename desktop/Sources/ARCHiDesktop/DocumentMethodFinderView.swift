@@ -49,7 +49,7 @@ struct DocumentMethodFinderView: View {
                     .foregroundStyle(.orange)
                     .accessibilityIdentifier("document.method-finder.query-limit")
             }
-            Text("Word matches are hints. Every method still needs matching checks and current sources. Reviewed outcomes, then comparable local usage, order ties.")
+            Text("Word matches are hints. Every method still needs matching checks and current sources. Reviewed outcomes order ties; explicitly assessed memory influence refines equal outcomes.")
                 .foregroundStyle(.secondary)
             if let result {
                 results(result)
@@ -69,6 +69,7 @@ struct DocumentMethodFinderView: View {
         .onChange(of: store.documentRequirements) { _, _ in clearResults() }
         .onChange(of: store.documentProcedures.procedures) { _, _ in clearResults() }
         .onChange(of: store.documentWork.records) { _, _ in clearResults() }
+        .onChange(of: store.lessonRevision) { _, _ in clearResults() }
         .onChange(of: store.readingSources.sources) { _, _ in clearResults() }
         .onChange(of: store.readingSources.knowledgePages) { _, _ in clearResults() }
         .onChange(of: store.profileRecoveryBlock) { _, _ in clearResults() }
@@ -95,6 +96,7 @@ struct DocumentMethodFinderView: View {
                         } else {
                             Text("Outcome history is unavailable.").foregroundStyle(.secondary)
                         }
+                        DocumentMethodMemoryInfluenceSummary(store: store, procedure: hit.procedure)
                         DisclosureGroup("Review instruction…") {
                             Text(hit.procedure.instruction).textSelection(.enabled)
                                 .padding(.top, 3)

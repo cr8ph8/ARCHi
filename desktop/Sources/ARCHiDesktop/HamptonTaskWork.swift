@@ -48,8 +48,9 @@ extension CompanionStore {
         let costs = Dictionary(uniqueKeysWithValues: eligible.compactMap { entry in
             resources(for: entry.method).map { (entry.method.binding, $0) }
         })
-        return HamptonMethodResourceOutcomes.refineEqualQualityOrder(ordered,
+        let resourceOrder = HamptonMethodResourceOutcomes.refineEqualQualityOrder(ordered,
             outcomes: qualities, resources: costs)
+        return refineDocumentMethodOrderWithMemory(resourceOrder, outcomes: qualities)
     }
 
     func beginLessonForCurrentTask() {

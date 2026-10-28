@@ -1,0 +1,78 @@
+name: Contextual memory influence checks
+
+on:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - 'shared/**'
+      - 'src/**'
+      - 'index.html'
+      - 'package*.json'
+      - 'scripts/memory-influence-playtest.mjs'
+      - 'SOURCE_SHA256SUMS'
+      - '.github/workflows/memory-influence-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: memory-influence-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  retained-qimon:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24.22.1'
+      - run: npm ci --ignore-scripts
+      - name: Verify source hashes and complete tracked coverage
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          import re
+          import subprocess
+          expected = set(subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')) - {'', 'SOURCE_SHA256SUMS'}
+          listed = set()
+          for line in Path('SOURCE_SHA256SUMS').read_text().splitlines():
+              digest, name = line.split('  ', 1)
+              path = Path(name)
+              assert re.fullmatch(r'[0-9a-f]{64}', digest), 'Invalid checksum'
+              assert name in expected and name not in listed, 'Unexpected or duplicate manifest path'
+              assert path.is_file() and not path.is_symlink(), 'Missing file or unexpected symlink'
+              assert hashlib.sha256(path.read_bytes()).hexdigest() == digest, 'Checksum mismatch: ' + name
+              listed.add(name)
+          assert listed == expected, 'Manifest does not cover every tracked source file'
+          print('Verified', len(listed), 'source files')
+          PY
+      - name: Check retained QiMon memory, roster and legal action boundaries
+        run: npx vitest run src/qimon-memory-influence.test.ts src/qimon-roster.test.ts src/qimon-relay.test.ts src/battle-engine.test.ts src/journey-activity.test.ts
+      - run: npm run build
+      - name: Exercise memory controls and suggestions in Chrome with synthetic data
+        run: node scripts/memory-influence-playtest.mjs
+
+  native-memory:
+    runs-on: macos-15
+    timeout-minutes: 25
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - run: xcodebuild -version
+      - run: swift --version
+      - name: Check influence calculation, migration, persistence and real method ordering
+        run: >-
+          swift test --package-path desktop
+          --filter 'ContextualMemoryInfluenceTests|MemoryInfluenceIntegrationTests|KeptLessonsTests|LessonStoreTests|KeptLessonRequestTests|CoreMemoryFreshnessTests|HamptonMethodOutcomesTests|HamptonMethodResourceOutcomesTests|ReadingCorrectionMemoryTests|LiminalSurfaceLightTests/testExpression'
+      # Synthetic records only. No app install, provider call, live profile,
+      # artwork-dependent qualification or game save is accessed by this job.

@@ -190,8 +190,8 @@ private enum LessonValidation {
 /// A versioned extension of the existing native preference file, not another
 /// memory database. Preferences and explicitly kept lessons can be forgotten separately.
 struct NativePreferenceDocument: Codable, Equatable {
-    static let currentSchema = "archi-native-preferences/v10"
-    private static let previousSchemas = ["archi-native-preferences/v2", "archi-native-preferences/v3", "archi-native-preferences/v4", "archi-native-preferences/v5", "archi-native-preferences/v6", "archi-native-preferences/v7", "archi-native-preferences/v8", "archi-native-preferences/v9"]
+    static let currentSchema = "archi-native-preferences/v11"
+    private static let previousSchemas = ["archi-native-preferences/v2", "archi-native-preferences/v3", "archi-native-preferences/v4", "archi-native-preferences/v5", "archi-native-preferences/v6", "archi-native-preferences/v7", "archi-native-preferences/v8", "archi-native-preferences/v9", "archi-native-preferences/v10"]
     static let maximumBytes = 64 * 1024
     static let maximumLessons = 16
     var schema = Self.currentSchema
@@ -203,6 +203,8 @@ struct NativePreferenceDocument: Codable, Equatable {
     var itemLibrary: [CompanionItemPackage] = []
     var itemAcquisitions: [MarketplaceItemAcquisition]? = nil
     var personalContext: PersonalContext? = nil
+    /// Advisory relationships retain exact source bindings in this existing owner.
+    var memoryInfluences: [LessonMemoryInfluence]? = nil
 
     static func validateLessonSnapshots(_ snapshots: [LessonSnapshot]) -> Bool {
         snapshots.count <= maximumLessons && snapshots.allSatisfy(\.isValid)
@@ -212,12 +214,19 @@ struct NativePreferenceDocument: Codable, Equatable {
     var isValid: Bool {
         schema == Self.currentSchema && (preferences?.isValid ?? true)
             && (qiMon?.isValid ?? true)
-            && (personalContext?.isValid ?? true)
+            && (personalContext?.isValid ?? true) && LessonMemoryInfluence.valid(memoryInfluences)
             && CompanionItemPackage.isValidLibrary(itemLibrary)
             && MarketplaceItemAcquisition.valid(itemAcquisitions, library: itemLibrary)
             && (preferences?.equipment.design.map { itemLibrary.contains($0) } ?? true)
             && lessons.allSatisfy(\.isValid)
             && Self.validateLessonSnapshots(lessons.map(LessonSnapshot.init(lesson:)))
+            && memoryInfluenceSourcesAreCurrent
+    }
+
+    private var memoryInfluenceSourcesAreCurrent: Bool {
+        guard let memoryInfluences, !memoryInfluences.isEmpty else { return true }
+        let references = lessons.compactMap { EvolutionLessonUse.make(snapshot: LessonSnapshot(lesson: $0)) }
+        return memoryInfluences.allSatisfy { references.contains($0.source) }
     }
 
     static func decode(_ data: Data) throws -> Self {
@@ -231,7 +240,8 @@ struct NativePreferenceDocument: Codable, Equatable {
         if object.keys.contains("schema") {
             guard let schema = object["schema"] as? String,
                   schema == currentSchema || previousSchemas.contains(schema) else { throw NativePreferenceError.unsupportedSchema }
-            let optional: Set<String> = schema == currentSchema ? ["preferences", "focusGesture", "qiMon", "itemLibrary", "personalContext", "itemAcquisitions"]
+            let optional: Set<String> = schema == currentSchema ? ["preferences", "focusGesture", "qiMon", "itemLibrary", "personalContext", "itemAcquisitions", "memoryInfluences"]
+                : schema == "archi-native-preferences/v10" ? ["preferences", "focusGesture", "qiMon", "itemLibrary", "personalContext", "itemAcquisitions"]
                 : (schema == "archi-native-preferences/v9" || schema == "archi-native-preferences/v8" || schema == "archi-native-preferences/v7" || schema == "archi-native-preferences/v6") ? ["preferences", "focusGesture", "qiMon", "itemLibrary", "personalContext"]
                 : schema == "archi-native-preferences/v5" ? ["preferences", "focusGesture", "qiMon", "itemLibrary"]
                 : schema == "archi-native-preferences/v4" ? ["preferences", "focusGesture", "qiMon"]
@@ -270,12 +280,12 @@ struct NativePreferenceDocument: Codable, Equatable {
             guard let lessons = object["lessons"] as? [[String: Any]] else { throw NativePreferenceError.invalidDocument }
             for lesson in lessons {
                 try validateKeys(lesson, required: ["id", "revision", "topic", "text", "reason", "createdAt", "updatedAt"],
-                    optional: (schema == currentSchema || schema == "archi-native-preferences/v9" || schema == "archi-native-preferences/v8") ? ["source", "origin", "expiresAt", "taskScope"] : ["source", "origin", "expiresAt"])
+                    optional: (schema == currentSchema || schema == "archi-native-preferences/v10" || schema == "archi-native-preferences/v9" || schema == "archi-native-preferences/v8") ? ["source", "origin", "expiresAt", "taskScope"] : ["source", "origin", "expiresAt"])
                 for (key, required) in [("source", Set(["name", "digest"])), ("origin", Set(["requestID", "inputDigest"]))] {
                     if let value = lesson[key], !(value is NSNull) {
                         guard let fields = value as? [String: Any] else { throw NativePreferenceError.invalidDocument }
                         try validateKeys(fields, required: required,
-                            optional: key == "origin" && (schema == currentSchema || schema == "archi-native-preferences/v9") ? ["readingSources", "knowledgePages"] : [])
+                            optional: key == "origin" && (schema == currentSchema || schema == "archi-native-preferences/v10" || schema == "archi-native-preferences/v9") ? ["readingSources", "knowledgePages"] : [])
                         if key == "origin", let dependencies = fields["readingSources"], !(dependencies is NSNull) {
                             guard let entries = dependencies as? [[String: Any]] else { throw NativePreferenceError.invalidDocument }
                             for entry in entries { try validateKeys(entry, required: ["id", "revision", "digest"], optional: ["provenance"]) }
@@ -334,6 +344,8 @@ extension NativePreferenceDocument {
         itemAcquisitions = values.contains(.itemAcquisitions)
             ? try values.decode([MarketplaceItemAcquisition].self, forKey: .itemAcquisitions) : nil
         personalContext = try values.decodeIfPresent(PersonalContext.self, forKey: .personalContext)
+        memoryInfluences = values.contains(.memoryInfluences)
+            ? try values.decode([LessonMemoryInfluence].self, forKey: .memoryInfluences) : nil
     }
 }
 
@@ -363,7 +375,9 @@ enum NativePreferencePersistence {
     static func write(document: NativePreferenceDocument, to url: URL, expected: Data?) throws -> Data? {
         let data = try document.encoded()
         guard try rawData(at: url) == expected else { throw NativePreferenceError.conflict }
-        if document.preferences == nil && document.lessons.isEmpty && document.focusGesture == nil && document.qiMon == nil && document.itemLibrary.isEmpty && document.personalContext == nil {
+        if document.preferences == nil && document.lessons.isEmpty && document.focusGesture == nil
+            && document.qiMon == nil && document.itemLibrary.isEmpty && document.personalContext == nil
+            && (document.memoryInfluences?.isEmpty ?? true) {
             if expected != nil { try FileManager.default.removeItem(at: url) }
             return nil
         }

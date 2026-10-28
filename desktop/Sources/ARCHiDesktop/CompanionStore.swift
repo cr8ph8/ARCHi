@@ -4020,6 +4020,67 @@ extension CompanionStore {
         return evolution.bindPracticeJourney(individual.originDigest)
     }
 
+    /// Read projection from the existing preference owner; no parallel store.
+    var memoryInfluences: [LessonMemoryInfluence] { preferenceDocument.memoryInfluences ?? [] }
+
+    func memoryInfluences(for snapshot: LessonSnapshot) -> [LessonMemoryInfluence] {
+        guard currentKeptLesson(matching: snapshot) != nil else { return [] }
+        return memoryInfluences.filter { $0.source.matches(snapshot: snapshot) }
+    }
+
+    /// Explicit assessment edits change the envelope revision, never the memory's
+    /// content revision or digest. Methods derived from that memory stay bound.
+    @discardableResult
+    func updateLessonMemoryInfluence(lesson snapshot: LessonSnapshot, expectedRevision: UInt64,
+                                    procedure: DocumentProcedureUse,
+                                    assessment: ContextualMemoryInfluence.Assessment?) -> Bool {
+        guard !isShuttingDown, expectedRevision == lessonRevision,
+              let prior = currentKeptLesson(matching: snapshot),
+              let source = EvolutionLessonUse.make(snapshot: snapshot),
+              prior.source == nil || prior.source == currentLessonSource else {
+            lessonMessage = "The lesson or its source changed. Reopen its influence controls before saving."
+            return false
+        }
+        if let assessment {
+            let relation = LessonMemoryInfluence(source: source, procedure: procedure, assessment: assessment)
+            guard relation.isValid, documentProcedureUnavailable(procedure) == nil else {
+                lessonMessage = "Choose a current method version and valid influence values before saving."
+                return false
+            }
+        } else if !procedure.isValid {
+            lessonMessage = "The method reference is invalid. The saved relationship is unchanged."
+            return false
+        }
+        var values = memoryInfluences
+        if let assessment {
+            let relation = LessonMemoryInfluence(source: source, procedure: procedure, assessment: assessment)
+            if let index = values.firstIndex(where: { $0.source == source && $0.procedure == procedure }) {
+                values[index] = relation
+            } else { values.append(relation) }
+        } else {
+            values.removeAll { $0.source == source && $0.procedure == procedure }
+        }
+        let nextValues = values.isEmpty ? nil : values
+        guard LessonMemoryInfluence.valid(nextValues) else {
+            lessonMessage = "Keep at most 16 method relationships per lesson and 64 in this profile. Remove an old relationship first."
+            return false
+        }
+        if nextValues == preferenceDocument.memoryInfluences {
+            lessonMessage = "This relationship already has those settings."
+            return true
+        }
+        var document = preferenceDocument
+        document.memoryInfluences = nextValues
+        guard commitPreferenceDocument(document) else { return false }
+        // Ranking metadata is never included in model context. Existing in-flight
+        // source snapshots remain valid; future method ordering reads this owner.
+        lessonMessage = assessment == nil
+            ? "Relationship removed. The original lesson remains available under its existing retrieval rules."
+            : "Influence saved for this exact method version. Original lesson text and source are preserved."
+        status = lessonMessage
+        return true
+    }
+
     func lessonAvailability(_ lesson: KeptLesson) -> String {
         if !lessonDependenciesAreCurrent(lesson.origin) { return "Supporting reading copy changed or was forgotten · review this lesson before reuse" }
         if let expiry = lesson.expiresAt, expiry <= wallClock() { return "Expired · revise to use again" }
@@ -4098,6 +4159,8 @@ extension CompanionStore {
         var document = preferenceDocument
         if let index = document.lessons.firstIndex(where: { $0.id == lesson.id }) {
             document.lessons[index] = lesson
+            document.memoryInfluences?.removeAll { $0.source.lessonID == lesson.id }
+            if document.memoryInfluences?.isEmpty == true { document.memoryInfluences = nil }
         } else {
             guard document.lessons.count < NativePreferenceDocument.maximumLessons else {
                 lessonMessage = "You can keep up to 16 lessons. Withdraw an unused lesson before adding another."
@@ -4122,6 +4185,8 @@ extension CompanionStore {
         }
         var document = preferenceDocument
         document.lessons.removeAll { $0.id == id }
+        document.memoryInfluences?.removeAll { $0.source.lessonID == id }
+        if document.memoryInfluences?.isEmpty == true { document.memoryInfluences = nil }
         guard commitPreferenceDocument(document) else { return false }
         revokeLocalLessonSnapshot(id)
         if lessonDraft?.lessonID == id { lessonDraft = nil }
