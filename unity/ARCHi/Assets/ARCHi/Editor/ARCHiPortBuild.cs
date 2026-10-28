@@ -130,6 +130,7 @@ public static class ARCHiPortBuild
             var receipt = InspectScene(scene);
             receipt.relayAssertions = ARCHi.Port.Editor.RelayPracticeChecks.Run();
             receipt.nativePresentationAssertions = ARCHi.Port.Editor.NativePresentationChecks.Run();
+            receipt.nativePresentationAssertions += ARCHi.Port.Editor.OrbPresentationChecks.Run();
             receipt.status = "EDITOR_SCENE_VALIDATED_RUNTIME_NOT_EXERCISED";
             WriteReceipt(receipt, "scene-validation");
             Debug.Log("ARCHI_PORT_SCENE_VALIDATED " + StartupScene);
@@ -213,6 +214,7 @@ public static class ARCHiPortBuild
         plist = plist.Insert(closing, "\t<key>ARCHiNativePresentationProtocol</key>\n\t<integer>1</integer>\n"
             + "\t<key>ARCHiNativeStaffRecipeVersion</key>\n\t<integer>1</integer>\n"
             + "\t<key>ARCHiNativeArenaProtocol</key>\n\t<integer>1</integer>\n"
+            + "\t<key>ARCHiOrbPresentationVersion</key>\n\t<integer>1</integer>\n"
             + "\t<key>ARCHiSeedAppearanceVersion</key>\n\t<integer>1</integer>\n"
             + "\t<key>ARCHiPersonalSeedVersion</key>\n\t<integer>1</integer>\n"
             + "\t<key>ARCHiLiminalPointAssetVersion</key>\n\t<integer>7</integer>\n"

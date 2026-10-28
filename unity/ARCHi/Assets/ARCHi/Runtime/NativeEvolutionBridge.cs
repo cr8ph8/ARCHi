@@ -16,6 +16,7 @@ namespace ARCHi.Port
         private ArenaWorkspace observedArena;
         private string appliedKnowledgeDigest;
         private long selectionSequence;
+        private long orbRequestSequence;
         public bool Fresh { get; private set; }
         public NativePresentationSnapshot Current => current;
         public string State { get; private set; } = "Waiting for the native companion.";
@@ -165,6 +166,7 @@ namespace ARCHi.Port
         private void WriteAcknowledgment(bool active)
         {
             if (path == null || current == null) return;
+            if (current.orb != null && port?.OrbReady != true) active = false;
             try
             {
                 var ack = new Acknowledgment { sessionID = session, originDigest = current.originDigest, revision = current.revision,
@@ -187,7 +189,10 @@ namespace ARCHi.Port
                     updatedAtUnix = UnixNow, active = active };
                 var destination = path + ".ack";
                 var temporary = destination + ".tmp";
-                File.WriteAllText(temporary, JsonUtility.ToJson(ack), new UTF8Encoding(false));
+                var json = JsonUtility.ToJson(ack);
+                // JsonUtility materializes null inline classes. Keep legacy ACKs descriptor-free.
+                if (current.orb != null && port?.OrbReady == true) json = json.Substring(0, json.Length - 1) + ",\"orb\":" + JsonUtility.ToJson(current.orb) + "}";
+                File.WriteAllText(temporary, json, new UTF8Encoding(false));
                 if (File.Exists(destination)) File.Replace(temporary, destination, null); else File.Move(temporary, destination);
             }
             catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
@@ -213,6 +218,30 @@ namespace ARCHi.Port
             catch(Exception error) when(error is IOException||error is InvalidDataException||error is UnauthorizedAccessException||error is ArgumentException) {
                 // A missing, changed or invalid projection cannot leave old pick targets active.
                 renderer.ClearKnowledge();
+            }
+        }
+
+        public void RequestOrbAction(string action, string value = null)
+        {
+            if (!Fresh || current?.orb == null || !current.active || !current.visible || path == null) return;
+            if ((action == "theme" && !OrbPresentation.IsTheme(value))
+                || (action == "anchor" && value != "world" && value != "follow")
+                || (action != "theme" && action != "anchor" && action != "assistant" && action != "memory" && action != "qimon" && action != "arena")) return;
+            var request = new OrbActionRequest { sessionID = session, originDigest = current.originDigest,
+                revision = current.revision, sequence = ++orbRequestSequence, updatedAtUnix = UnixNow, action = action, value = value };
+            var destination = path + ".orb-request";
+            var temporary = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(temporary, JsonUtility.ToJson(request), new UTF8Encoding(false));
+                if (File.Exists(destination)) File.Replace(temporary, destination, null); else File.Move(temporary, destination);
+            }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
+            { State = "The orb request could not reach ARCHi."; }
+            finally
+            {
+                try { if (File.Exists(temporary)) File.Delete(temporary); }
+                catch (Exception error) when (error is IOException || error is UnauthorizedAccessException) { }
             }
         }
 

@@ -62,18 +62,22 @@ struct KnowledgeParticleField {
               CGRect(origin: .zero, size: canvas).contains(target) else { return base }
         func bounded(_ p: Vector) -> Vector {
             // Keep both the selection ring and reviewed-support satellites in frame.
-            .init(x: min(canvas.width - 18, max(18, p.x)), y: min(canvas.height - 18, max(18, p.y)))
+            .init(x: min(Double(canvas.width) - 18, max(18, p.x)),
+                  y: min(Double(canvas.height) - 18, max(18, p.y)))
         }
-        return base.reduce(into: [:]) { result, pair in
+        let u: Double = progress.isFinite ? min(1, max(0, progress)) : 0
+        let t = u * u * (3 - 2 * u)
+        return base.reduce(into: [String: Vector]()) { result, pair in
             let (id, start) = pair
-            let u = progress.isFinite ? min(1, max(0, progress)) : 0
-            let t = u * u * (3 - 2 * u)
-            let angle = fraction(id, salt: "region-anchor") * 2 * .pi
-            let end = bounded(.init(x: target.midX + cos(angle) * (target.width / 2 + 22),
-                                    y: target.midY + sin(angle) * (target.height / 2 + 22)))
+            let angle = fraction(id, salt: "region-anchor") * 2 * Double.pi
+            let end = bounded(Vector(x: Double(target.midX) + cos(angle) * (Double(target.width) / 2 + 22),
+                                     y: Double(target.midY) + sin(angle) * (Double(target.height) / 2 + 22)))
             let mid = (start + end) * 0.5
-            let control = bounded(mid + .init(x: -sin(angle), y: cos(angle)) * min(60, (end - start).length * 0.25))
-            result[id] = start * ((1 - t) * (1 - t)) + control * (2 * (1 - t) * t) + end * (t * t)
+            let tangent = Vector(x: -sin(angle), y: cos(angle))
+            let control = bounded(mid + tangent * min(60, (end - start).length * 0.25))
+            let fromStart = start * ((1 - t) * (1 - t))
+            let throughControl = control * (2 * (1 - t) * t)
+            result[id] = fromStart + throughControl + end * (t * t)
         }
     }
     let particles: [Particle]
@@ -209,10 +213,10 @@ struct KnowledgeParticleField {
         let t = spread.isFinite ? min(1, max(0, spread)) : 1
         let straight = particle.orb * (1 - t) + particle.constellation * t
         guard !reduceMotion, t > 0, t < 1 else { return straight }
-        let envelope = pow(max(0, sin(.pi * t)), 1.5)
+        let envelope: Double = pow(max(0, sin(Double.pi * t)), 1.5)
         let angle = 2 * Double.pi * 1.15 * t + particle.phase
-        let deviation = Vector(x: cos(angle), y: sin(angle))
-            * (min(0.065, 0.16 * (particle.constellation - particle.orb).length) * envelope)
+        let amplitude: Double = min(0.065, 0.16 * (particle.constellation - particle.orb).length) * envelope
+        let deviation = Vector(x: cos(angle), y: sin(angle)) * amplitude
         return straight + deviation
     }
 

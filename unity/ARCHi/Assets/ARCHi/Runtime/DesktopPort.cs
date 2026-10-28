@@ -118,6 +118,8 @@ namespace ARCHi.Port
 
         private void OnDisable()
         {
+            if (nativeOrb != null) { Destroy(nativeOrb.gameObject); nativeOrb = null; }
+            nativeOrbImage = null;
             if (nativePoints != null) { Destroy(nativePoints.gameObject); nativePoints = null; }
             if (arena != null) Destroy(arena.gameObject);
             arena = null;

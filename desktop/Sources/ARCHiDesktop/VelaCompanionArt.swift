@@ -50,7 +50,7 @@ struct VelaCompanionFrame: View {
             let unit = min(canvas.width, canvas.height)
             guard unit.isFinite, unit > 0 else { return }
             let phase = VelaGeometry.normalized(phase)
-            let float = sin(phase) * 0.009
+            let float = CGFloat(sin(phase) * 0.009)
             context.translateBy(x: (canvas.width - unit) / 2, y: (canvas.height - unit) / 2 + float * unit)
             let drawing = VelaDrawing(unit: unit, phase: phase, mode: expression.mode, color: seedColor)
             drawing.draw(context: &context, lantern: lantern)

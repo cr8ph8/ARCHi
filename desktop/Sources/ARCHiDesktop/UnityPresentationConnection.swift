@@ -46,6 +46,7 @@ struct UnityPresentationSnapshot: Codable, Equatable {
     var pointStructure: LiminalPointStructure? = nil
     var pointFinishSHA256: String? = nil
     var pointLightStyle: String? = nil
+    var orb: UnityOrbPresentation? = nil
 
     /// The body descriptor stays present even when anchor capacity makes the
     /// current inspection sidecar empty. Bind both to this exact session.
@@ -75,6 +76,7 @@ struct UnityPresentationSnapshot: Codable, Equatable {
             && destinationRevision == other.destinationRevision && seedAppearance == other.seedAppearance && seedColor == other.seedColor
             && pointPresentation == other.pointPresentation && pointKnowledgeSHA256 == other.pointKnowledgeSHA256
             && pointStructure == other.pointStructure && pointFinishSHA256 == other.pointFinishSHA256 && pointLightStyle == other.pointLightStyle
+            && orb == other.orb
     }
 
     @MainActor static func capture(store: CompanionStore, sessionID: UUID, revision: Int,
@@ -152,9 +154,11 @@ struct UnityPresentationAcknowledgment: Codable {
     var pointLightStyle: String? = nil
     var pointManifestSHA256: String? = nil
     var pointKnowledgeSHA256: String? = nil
+    var orb: UnityOrbPresentation? = nil
 
     func matches(_ snapshot: UnityPresentationSnapshot, now: Date) -> Bool {
         schemaVersion == 1 && sessionID == snapshot.sessionID && originDigest == snapshot.originDigest
+            && orb == snapshot.orb
             && revision == snapshot.revision && body == snapshot.body && active == snapshot.active
             && (appearance ?? "kin") == snapshot.appearance
             && Self.seedStyle(seedAppearance) == Self.seedStyle(snapshot.seedAppearance)
@@ -209,6 +213,11 @@ struct UnityPresentationAcknowledgment: Codable {
     @Published private(set) var worldOutcomeStatus = "Open Arena to observe solo practice outcomes."
     @Published private(set) var missingWorldOutcomes = 0
     @Published private(set) var arenaAdviceTracking: ArenaAdviceTracking?
+    @Published private(set) var orbPresentation: UnityOrbPresentation?
+    @Published var readOrbReplies = false
+    let orbSpeech = OrbSpeechPlayback()
+    private var lastOrbActivity: AssistantActivity?
+    private var lastOrbRequestSequence = 0
     private var worldOutcomeHistory = WorldOutcomeHistory()
     private var lastWorldOutcomeSnapshot: WorldOutcomeSnapshot?
     private var pointSidecar: LiminalKnowledgeBindings.Sidecar?
@@ -319,6 +328,21 @@ struct UnityPresentationAcknowledgment: Codable {
             && (Bundle(url: url)?.object(forInfoDictionaryKey: "ARCHiNativeStaffRecipeVersion") as? NSNumber)?.intValue == 1
     }
 
+    static func supportsOrb(_ url: URL) -> Bool {
+        isCompatiblePlayer(url)
+            && (Bundle(url: url)?.object(forInfoDictionaryKey: "ARCHiOrbPresentationVersion") as? NSNumber)?.intValue == 1
+    }
+
+    /// Explicit development entry for an external renderer. It uses the same publisher, not another profile owner.
+    func prepareOrbHeadset(store: CompanionStore) {
+        guard !isSharing else { status = "Stop the current Unity session before pairing a headset."; return }
+        do {
+            try beginPublishing(store: store, orb: UnityOrbPresentation())
+            status = "Headset presentation prepared. Pair a renderer using the orb setup guide."
+        } catch { status = "Headset session unavailable: \(error.localizedDescription)" }
+    }
+    var orbTransportSourceURL: URL? { isSharing && orbPresentation != nil && player == nil ? snapshotURL : nil }
+
     static func supportsArena(_ url: URL) -> Bool {
         isCompatiblePlayer(url)
             && (Bundle(url: url)?.object(forInfoDictionaryKey: "ARCHiNativeArenaProtocol") as? NSNumber)?.intValue == 1
@@ -378,7 +402,8 @@ struct UnityPresentationAcknowledgment: Codable {
 
     func openArena(store: CompanionStore) async { await open(store: store, destination: .arena) }
 
-    func open(store: CompanionStore, destination: UnityPresentationDestination = .companion) async {
+    func open(store: CompanionStore, destination: UnityPresentationDestination = .companion,
+              orb: UnityOrbPresentation? = nil) async {
         guard !store.isShuttingDown else { return }
         if let reason = store.unityPresentationUnavailableReason(for: availablePlayer) {
             if isSharing { stop() }
@@ -387,6 +412,10 @@ struct UnityPresentationAcknowledgment: Codable {
         }
         guard let app = availablePlayer else {
             status = "Choose the ARCHi Unity companion build to connect it."
+            return
+        }
+        guard orb == nil || (orb?.isValid == true && destination == .companion && Self.supportsOrb(app)) else {
+            status = "Choose the updated Unity player to open ARCHi’s orb room."
             return
         }
         guard store.activeQiMon == nil || store.preferences.seedAppearance == .kinParticles || Self.supportsSeedAppearances(app) else {
@@ -402,6 +431,7 @@ struct UnityPresentationAcknowledgment: Codable {
             return
         }
         if isSharing {
+            orbPresentation = orb
             if destination == .arena || requestedDestination != nil {
                 requestedDestination = destination
                 destinationRevision = (destinationRevision ?? 0) + 1
@@ -417,7 +447,7 @@ struct UnityPresentationAcknowledgment: Codable {
         }
         selectedPlayer = app
         lastLaunchFailure = nil
-        do { try beginPublishing(store: store, destination: destination) }
+        do { try beginPublishing(store: store, destination: destination, orb: orb) }
         catch {
             lastLaunchFailure = error.localizedDescription
             status = "Unity could not open: \(error.localizedDescription)"
@@ -447,7 +477,11 @@ struct UnityPresentationAcknowledgment: Codable {
 
     /// Also exercised directly with a disposable profile; this does not launch UI.
     func beginPublishing(store: CompanionStore, directory: URL? = nil,
-                        destination: UnityPresentationDestination = .companion) throws {
+                        destination: UnityPresentationDestination = .companion,
+                        orb: UnityOrbPresentation? = nil) throws {
+        guard orb == nil || (orb?.isValid == true && destination == .companion && store.activeQiMon?.isValid == true) else {
+            throw PresentationError.noCompanion
+        }
         guard store.preferences.seedAppearance != .vela,
               ![CompanionForm.velaSeed, .velaLantern].contains(store.presentationForm) else {
             throw PresentationError.nativeOnlySeed
@@ -467,6 +501,14 @@ struct UnityPresentationAcknowledgment: Codable {
         requestedDestination = routes ? destination : nil
         destinationRevision = routes ? 1 : nil
         self.destination = destination
+        orbPresentation = orb; lastOrbActivity = nil; lastOrbRequestSequence = 0
+        orbSpeech.changed = { [weak self, weak store] in
+            // Playback callbacks may arrive while publish is retiring speech. Avoid nested publication.
+            Task { @MainActor [weak self, weak store] in
+                guard let self, let store, self.isSharing else { return }
+                self.refresh(store: store)
+            }
+        }
         lastSnapshot = nil; previousSnapshot = nil; hasRenderAcknowledgment = false; suspended = false
         pointSidecar = nil; pointSidecarDigest = nil; lastPointSelectionSequence = 0
         worldOutcomeHistory.reset(); lastWorldOutcomeSnapshot = nil; worldOutcomes = []; missingWorldOutcomes = 0
@@ -536,9 +578,23 @@ struct UnityPresentationAcknowledgment: Codable {
                     systemReduceMotion: systemReduceMotion ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
                     destination: requestedDestination, destinationRevision: destinationRevision, localPractice: isLocalPractice)
         else { throw PresentationError.noCompanion }
+        if var orb = orbPresentation, !isLocalPractice, destination == .companion {
+            let activity = store.assistantActivity
+            let canSpeak = snapshot.active && snapshot.visible && !snapshot.quiet && !suspended
+            if !canSpeak || activity == .working || activity == .stopped { orbSpeech.stop() }
+            let becameReady = activity == .ready && (lastOrbActivity == .working || lastOrbActivity == .responding)
+            lastOrbActivity = activity
+            if readOrbReplies && becameReady && canSpeak { orbSpeech.speak(store.reply) }
+            orb.listening = store.voiceInput.phase == .recording && canSpeak
+            orb.speaking = orbSpeech.isSpeaking && canSpeak
+            snapshot.orb = orb
+        } else {
+            lastOrbActivity = nil
+            orbSpeech.stop()
+        }
         var inspectionUnavailableReason: String?
         var structureUnavailableReason: String?
-        if LiminalV008Runtime.applies(form: store.presentationForm, family: store.presentationFamily, treatment: store.preferences.visualTreatment),
+        if snapshot.orb == nil, LiminalV008Runtime.applies(form: store.presentationForm, family: store.presentationFamily, treatment: store.preferences.visualTreatment),
            store.preferences.seedAppearance == .hamptonLiminal,
            let selectedPlayer, Self.supportsPointAssets(selectedPlayer),
            let asset = LiminalV008Runtime.asset {
@@ -587,6 +643,7 @@ struct UnityPresentationAcknowledgment: Codable {
         // body's ACK must not label a new body as rendered, even for one tick.
         readAcknowledgment(now: now)
         consumeKnowledgeSelection(store: store, now: now)
+        consumeOrbRequest(store: store, now: now)
         if suspended { status = "Unity presentation paused." }
         else if hasRenderAcknowledgment {
             status = isLocalPractice ? "Unity Arena · local roster practice. Nothing is saved to a companion."
@@ -638,6 +695,52 @@ struct UnityPresentationAcknowledgment: Codable {
         _ = store.inspectKnowledgeParticle(nodeID: node.id, graphDigest: sidecar.graphDigest)
     }
 
+    private func consumeOrbRequest(store: CompanionStore, now: Date) {
+        guard isSharing, hasRenderAcknowledgment, !suspended, let snapshotURL,
+              let data = try? Self.readAcknowledgmentData(at: snapshotURL.appendingPathExtension("orb-request")),
+              let request = try? JSONDecoder().decode(UnityOrbActionRequest.self, from: data),
+              let action = request.resolve(matching: [lastSnapshot, previousSnapshot].compactMap { $0 },
+                  after: lastOrbRequestSequence, now: now) else { return }
+        lastOrbRequestSequence = request.sequence
+        applyOrbCommand(action, store: store)
+    }
+
+    @discardableResult func handleOrbCommand(_ text: String, store: CompanionStore) -> Bool {
+        guard isSharing, orbPresentation != nil, let command = OrbCommand.parse(text),
+              !suspended || command == .resume else { return false }
+        applyOrbCommand(command, store: store)
+        return true
+    }
+
+    func applyOrbCommand(_ command: OrbCommand, store: CompanionStore) {
+        guard isSharing, orbPresentation != nil, !store.isShuttingDown else { return }
+        switch command {
+        case .theme(let theme): orbPresentation?.theme = theme; refresh(store: store)
+        case .anchor(let anchor): orbPresentation?.anchor = anchor; refresh(store: store)
+        case .assistant: store.open(.assistant)
+        case .memory: store.open(.memory)
+        case .qimon:
+            store.open(.unity)
+            let game = QiMonEmbeddedGame.shared
+            game.refreshLocation()
+            let owner = sessionID
+            if game.directory != nil { Task { [weak self] in
+                guard let self, self.isSharing, self.sessionID == owner else { return }
+                await game.play()
+            } }
+            else { status = "Choose the current First Signal build in the existing QiMon card." }
+        case .arena:
+            let owner = sessionID
+            Task { [weak self, weak store] in
+                guard let self, let store, self.isSharing, self.sessionID == owner else { return }
+                if self.player == nil { self.stop() }
+                await self.openArena(store: store)
+            }
+        case .pause: orbSpeech.stop(); setSuspended(true, store: store)
+        case .resume: setSuspended(false, store: store)
+        }
+    }
+
     private func readWorldOutcomes(now: Date) {
         guard let snapshotURL else { return }
         do {
@@ -680,6 +783,8 @@ struct UnityPresentationAcknowledgment: Codable {
     }
 
     func stop() {
+        orbSpeech.changed = nil; orbSpeech.stop()
+        orbPresentation = nil; lastOrbActivity = nil; lastOrbRequestSequence = 0
         task?.cancel(); task = nil; subscriptions.removeAll()
         if isSharing, let lastSnapshot, let snapshotURL {
             let retired = UnityPresentationSnapshot(schemaVersion: 1, sessionID: lastSnapshot.sessionID,

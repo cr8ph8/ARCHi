@@ -448,8 +448,11 @@ enum CompanionGraph {
                 if cited { edge(id, answerID, "citation recorded") }
             }
             let captured = Dictionary(grouping: receipt.localLessons, by: \.modelID)
-            let memoryIDs = Set((evidence?.lessonIDsAvailable ?? []) + (evidence?.reasoningMemoryIDsOffered ?? [])
-                + (evidence?.reasoningMemoryIDsDispatched ?? []) + (evidence?.memoryIDsCited ?? []) + receipt.localLessons.map(\.modelID))
+            var memoryIDs = Set(evidence?.lessonIDsAvailable ?? [])
+            memoryIDs.formUnion(evidence?.reasoningMemoryIDsOffered ?? [])
+            memoryIDs.formUnion(evidence?.reasoningMemoryIDsDispatched ?? [])
+            memoryIDs.formUnion(evidence?.memoryIDsCited ?? [])
+            memoryIDs.formUnion(receipt.localLessons.map(\.modelID))
             truncated += max(0, memoryIDs.count - 128)
             for reference in memoryIDs.sorted().prefix(128) {
                 let id = key(requestID, "memory-ref", reference)

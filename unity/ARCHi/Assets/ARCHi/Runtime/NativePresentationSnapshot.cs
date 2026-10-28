@@ -27,6 +27,7 @@ namespace ARCHi.Port
         // descriptor below, so legacy snapshots remain descriptor-free.
         [NonSerialized] public NativePointPresentation pointPresentation;
         [NonSerialized] public LiminalPointStructure pointStructure;
+        [NonSerialized] public OrbPresentation orb;
         public string pointKnowledgeSHA256;
         public string pointFinishSHA256;
         public string pointLightStyle;
@@ -66,10 +67,26 @@ namespace ARCHi.Port
                     { reason = "Missing or repeated presentation field: " + field; return false; }
                 if (TopLevelFieldCount(json, "appearance") > 1)
                 { reason = "Repeated appearance field."; return false; }
-                foreach (var field in new[] { "staffPalette", "staffCrown", "sessionKind", "destination", "destinationRevision", "seedAppearance", "seedColor", "pointPresentation", "pointKnowledgeSHA256", "pointStructure", "pointFinishSHA256", "pointLightStyle" })
+                foreach (var field in new[] { "staffPalette", "staffCrown", "sessionKind", "destination", "destinationRevision", "seedAppearance", "seedColor", "pointPresentation", "pointKnowledgeSHA256", "pointStructure", "pointFinishSHA256", "pointLightStyle", "orb" })
                     if (TopLevelFieldCount(json, field) > 1)
                     { reason = "Repeated staff recipe field."; return false; }
                 var value = JsonUtility.FromJson<NativePresentationSnapshot>(json);
+                if (value != null && TopLevelField(json, "orb", out var orbJSON) == 1 && orbJSON != "null")
+                {
+                    if (string.IsNullOrEmpty(orbJSON) || orbJSON[0] != '{' || orbJSON[orbJSON.Length - 1] != '}')
+                    { reason = "Malformed orb presentation."; return false; }
+                    foreach (var field in new[] { "schemaVersion", "theme", "anchor", "listening", "speaking" })
+                        if (TopLevelFieldCount(orbJSON, field) != 1)
+                        { reason = "Missing or repeated orb presentation field."; return false; }
+                    foreach (var field in new[] { "listening", "speaking" })
+                        if (TopLevelField(orbJSON, field, out var flag) != 1 || (flag != "true" && flag != "false"))
+                        { reason = "Orb audio status must be a boolean."; return false; }
+                    if (TopLevelField(orbJSON, "schemaVersion", out var orbVersion) != 1 || orbVersion != "1")
+                    { reason = "Unsupported orb protocol version."; return false; }
+                    value.orb = JsonUtility.FromJson<OrbPresentation>(orbJSON);
+                    if (value.orb == null || !value.orb.IsValid || value.LocalPractice || value.Destination != "companion")
+                    { reason = "Unsupported orb presentation."; return false; }
+                }
                 if(value!=null && TopLevelField(json,"pointPresentation",out var descriptor)>0 && descriptor!="null"){
                     if(string.IsNullOrEmpty(descriptor)||descriptor[0]!='{'||descriptor[descriptor.Length-1]!='}')
                     {reason="Malformed point descriptor.";return false;}
@@ -194,6 +211,7 @@ namespace ARCHi.Port
             && (a.pointStructure?.Digest ?? "") == (b.pointStructure?.Digest ?? "")
             && (a.pointFinishSHA256 ?? "") == (b.pointFinishSHA256 ?? "")
             && (a.pointLightStyle ?? "") == (b.pointLightStyle ?? "")
-            && a.seedAssetSHA256 == b.seedAssetSHA256 && a.bodyAssetSHA256 == b.bodyAssetSHA256;
+            && a.seedAssetSHA256 == b.seedAssetSHA256 && a.bodyAssetSHA256 == b.bodyAssetSHA256
+            && OrbPresentation.Same(a.orb, b.orb);
     }
 }
