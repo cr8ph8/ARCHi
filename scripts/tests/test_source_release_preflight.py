@@ -60,6 +60,17 @@ class SourceReleasePreflightTests(unittest.TestCase):
         self.assertIn({"code": "SOURCE_BUILD_DEPENDENCY_MISSING", "path": recipe,
                        "dependency": helper}, blockers)
 
+    def test_swift_selection_inspector_is_a_required_build_recipe_dependency(self):
+        recipe = "script/build_and_run.sh"
+        helper = "script/inspect_first_signal_selection.swift"
+        self.put(recipe, b'swift "$REPO_ROOT/script/inspect_first_signal_selection.swift"\n')
+        self.put(helper, b"// synthetic inspector")
+        _, blockers = preflight.collect(self.root, {recipe}, {})
+        self.assertEqual(blockers, [{"code": "SOURCE_BUILD_DEPENDENCY_MISSING", "path": recipe, "dependency": helper}])
+        paths, blockers = preflight.collect(self.root, {recipe, helper}, {})
+        self.assertEqual(set(paths), {recipe, helper})
+        self.assertEqual(blockers, [])
+
     def test_native_local_package_is_exported_without_its_cache_or_private_data(self):
         package = "shared/ARCHiSpatial"
         self.put(package + "/Package.swift")

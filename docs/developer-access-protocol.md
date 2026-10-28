@@ -122,7 +122,7 @@ bash script/build_and_run.sh --stage-only \
   --unity-player /absolute/path/to/qualified-player.app
 ```
 
-The player path is a placeholder, not a download. After qualification, deliberately update the canonical app:
+The player path is a placeholder, not a download. The [First Signal preservation preflight](first-signal-installation-safeguard.md) now also requires a preserved working chapter or an explicit build with an independent resource manifest. Missing/conflicting chapter resources and stale selection metadata block promotion. Complete that guide's authoring-Mac evidence before replacing the working app. After qualification and deliberate installation authorization, update the canonical app:
 
 ```sh
 bash script/build_and_run.sh --unity-player /absolute/path/to/qualified-player.app

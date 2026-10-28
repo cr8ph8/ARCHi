@@ -1,0 +1,37 @@
+name: First Signal packaging safeguard
+on:
+  pull_request:
+    paths:
+      - 'script/**'
+      - 'scripts/tests/**'
+      - 'desktop/Sources/ARCHiDesktop/QiMonEmbeddedGame.swift'
+      - 'SOURCE_SHA256SUMS'
+      - '.github/workflows/first-signal-packaging.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-packaging:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check chapter preservation and promotion failure boundaries
+        run: >-
+          python3 -m unittest discover -s scripts/tests -p 'test_first_signal_preflight.py' -v
+      - run: python3 -m unittest discover -s scripts/tests -p 'test_build_and_run_staging.py' -v
+      - run: python3 -m unittest discover -s scripts/tests -p 'test_native_build_identity.py' -v
+      - run: python3 -m unittest discover -s scripts/tests -p 'test_source_release_preflight.py' -v
+  selection-inspector:
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      # Compile only. CI must not inspect even the runner's game/defaults owner.
+      - run: swiftc -typecheck script/inspect_first_signal_selection.swift
+      - run: swift test --package-path desktop --filter QiMonLocalGameTests
+      # Synthetic tests cannot qualify the real chapter, saves or installed app.
