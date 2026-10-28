@@ -86,10 +86,19 @@ final class OrbPresentationTests: XCTestCase {
         for change in invalid {
             XCTAssertNil(try request(change).resolve(matching: [snapshot], after: 0, now: now))
         }
-        snapshot.active = false
-        XCTAssertNil(good.resolve(matching: [snapshot], after: 0, now: now))
-        snapshot.active = true; snapshot.visible = false
-        XCTAssertNil(good.resolve(matching: [snapshot], after: 0, now: now))
+        // Snapshot identity/activity fields are immutable. Decode the synthetic
+        // wire variants instead of making production projections mutable for tests.
+        var snapshotWire = try XCTUnwrap(JSONSerialization.jsonObject(with:
+            JSONEncoder().encode(snapshot)) as? [String: Any])
+        snapshotWire["active"] = false
+        let inactive = try JSONDecoder().decode(UnityPresentationSnapshot.self,
+            from: JSONSerialization.data(withJSONObject: snapshotWire))
+        XCTAssertNil(good.resolve(matching: [inactive], after: 0, now: now))
+        snapshotWire["active"] = true
+        snapshotWire["visible"] = false
+        let hidden = try JSONDecoder().decode(UnityPresentationSnapshot.self,
+            from: JSONSerialization.data(withJSONObject: snapshotWire))
+        XCTAssertNil(good.resolve(matching: [hidden], after: 0, now: now))
         await fixture.store.shutdownAssistant()
     }
 

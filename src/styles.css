@@ -736,3 +736,12 @@ html[data-archi-ios-host] .scrim { background: rgba(2,12,16,.58); }
   html[data-archi-ios-host] .habitat-dock { border-color: var(--line); }
   html[data-archi-ios-host] .battle-setup { max-height: calc(100% - 82px); }
 }
+.qimon-memory-editor { border: 1px solid rgba(116, 205, 196, .28); border-radius: 12px; padding: 12px; }
+.qimon-memory-editor summary { cursor: pointer; font-weight: 650; }
+.qimon-memory-fields { display: grid; gap: 12px; padding-top: 12px; }
+.qimon-memory-fields label { display: grid; gap: 5px; }
+.qimon-memory-fields input, .qimon-memory-fields select { min-width: 0; width: 100%; padding: 9px; }
+.qimon-memory-provenance { overflow-wrap: anywhere; opacity: .75; }
+.battle-memory-guidance { grid-column: 1 / -1; padding: 12px; border: 1px solid rgba(116, 205, 196, .28); border-radius: 12px; }
+.battle-memory-guidance p, .battle-memory-guidance li { font-size: .8rem; line-height: 1.5; }
+.battle-memory-guidance button { margin-top: 8px; }

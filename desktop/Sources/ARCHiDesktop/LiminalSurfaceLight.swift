@@ -83,9 +83,26 @@ struct LiminalSurfaceLight: Sendable {
                     let t = Float(step) / 4, t2 = t * t, t3 = t2 * t
                     let constant: SIMD3<Float> = p1 * 2
                     let linear: SIMD3<Float> = (-p0 + p2) * t
-                    let quadratic: SIMD3<Float> = (p0 * 2 - p1 * 5 + p2 * 4 - p3) * t2
-                    let cubic: SIMD3<Float> = (-p0 + p1 * 3 - p2 * 3 + p3) * t3
-                    points.append((constant + linear + quadratic + cubic) * 0.5)
+                    // Keep each overloaded SIMD expression small enough for
+                    // the Swift 6.2 type checker; retain the same operation order.
+                    let twiceP0: SIMD3<Float> = p0 * Float(2)
+                    let fiveP1: SIMD3<Float> = p1 * Float(5)
+                    let fourP2: SIMD3<Float> = p2 * Float(4)
+                    var quadratic: SIMD3<Float> = twiceP0 - fiveP1
+                    quadratic += fourP2
+                    quadratic -= p3
+                    quadratic *= t2
+                    let threeP1: SIMD3<Float> = p1 * Float(3)
+                    let threeP2: SIMD3<Float> = p2 * Float(3)
+                    var cubic: SIMD3<Float> = -p0
+                    cubic += threeP1
+                    cubic -= threeP2
+                    cubic += p3
+                    cubic *= t3
+                    var interpolated: SIMD3<Float> = constant + linear
+                    interpolated += quadratic
+                    interpolated += cubic
+                    points.append(interpolated * Float(0.5))
                 }
             }
             let lengths = (0..<44).map { simd_distance(points[$0],points[$0+1]) }

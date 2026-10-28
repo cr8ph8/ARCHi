@@ -9,6 +9,7 @@ import { parseJsonWithoutDuplicateKeys } from "./strict-json";
 export const QIMON_ROSTER_SCHEMA = "archi-roster/v1" as const;
 export const QIMON_ROSTER_ARCHIVE_FORMAT = "archi-qimon-roster" as const;
 export const QIMON_ROSTER_ARCHIVE_VERSION = 1 as const;
+export const QIMON_MEMORY_ARCHIVE_VERSION = 2 as const;
 export const QIMON_ROSTER_LIMITS = Object.freeze({ members: 12, events: 256, trainingTier: 3, team: 3, archiveBytes: 256 * 1024 });
 
 const ROLE_NAMES: Readonly<Record<RoleId, string>> = Object.freeze({
@@ -16,6 +17,30 @@ const ROLE_NAMES: Readonly<Record<RoleId, string>> = Object.freeze({
   beacon: "Beacon QiMon", keeper: "Keeper QiMon", guardian: "Guardian QiMon",
 });
 const SHA256 = /^[a-f0-9]{64}$/;
+
+export const QIMON_MEMORY_CONTEXT = "practice-v1" as const;
+export const QIMON_MEMORY_ACTIONS = ["pulse", "guard", "signature", "swap"] as const;
+export type QiMonMemoryAction = typeof QIMON_MEMORY_ACTIONS[number];
+export interface QiMonMemoryAssessment {
+  readonly memberId: string;
+  readonly sourceEventId: string;
+  readonly context: typeof QIMON_MEMORY_CONTEXT;
+  readonly targetAction: QiMonMemoryAction;
+  readonly polarity: -1 | 0 | 1 | null;
+  readonly magnitude: number;
+  readonly confidence: number;
+  readonly retrievalSalience: number;
+}
+export interface QiMonMemoryInfluence extends QiMonMemoryAssessment {
+  readonly sourceEventSha256: string;
+  readonly assessmentEventId: string;
+}
+export interface QiMonMemorySource {
+  readonly eventId: string;
+  readonly digest: string;
+  readonly recordedAt: string;
+  readonly label: string;
+}
 
 export type QiMonRosterAction =
   | Readonly<{ kind: "discover"; sourceEventId: string; sourceEventSha256: string;
@@ -25,14 +50,16 @@ export type QiMonRosterAction =
       sourceEventSha256: string; replayDigest: string; tier: number }>
   | Readonly<{ kind: "bond"; memberIds: readonly [string, string]; sourceEventId: string;
       sourceEventSha256: string; replayDigest: string }>
-  | Readonly<{ kind: "team"; memberIds: readonly string[] }>;
+  | Readonly<{ kind: "team"; memberIds: readonly string[] }>
+  | Readonly<QiMonMemoryAssessment & { kind: "memory-influence"; sourceEventSha256: string }>;
 
 type QiMonRosterRequest =
   | Readonly<{ kind: "discover"; sourceEventId: string }>
   | Readonly<{ kind: "invite"; offerId: string }>
   | Readonly<{ kind: "train"; memberId: string; sourceEventId: string }>
   | Readonly<{ kind: "bond"; memberIds: readonly [string, string]; sourceEventId: string }>
-  | Readonly<{ kind: "team"; memberIds: readonly string[] }>;
+  | Readonly<{ kind: "team"; memberIds: readonly string[] }>
+  | Readonly<QiMonMemoryAssessment & { kind: "memory-influence" }>;
 
 export interface QiMonRosterEvent {
   readonly sequence: number;
@@ -46,7 +73,7 @@ export interface QiMonRosterEvent {
 
 export interface QiMonRoster {
   readonly schema: typeof QIMON_ROSTER_SCHEMA;
-  readonly version: 1;
+  readonly version: 1 | 2;
   readonly originDigest: string;
   readonly createdAt: string;
   readonly baseJourneyRevision: string;
@@ -84,6 +111,7 @@ export interface QiMonRosterProjection {
   readonly members: readonly RecruitedQiMon[];
   readonly bonds: readonly QiMonPairBond[];
   readonly team: readonly QiMonCard[];
+  readonly memoryInfluences: readonly QiMonMemoryInfluence[];
 }
 
 export type QiMonRosterInspection =
@@ -105,6 +133,7 @@ interface ReplayState {
   bonds: Map<string, QiMonPairBond>;
   teamIds: string[];
   creditedSources: Set<string>;
+  memoryInfluences: Map<string, QiMonMemoryInfluence>;
 }
 
 function fail(message: string, code: RosterError["code"] = "invalid-authority"): never {
@@ -159,7 +188,22 @@ function recruitIDs(originDigest: string, sourceEventId: string): { offerId: str
 function pairKey(first: string, second: string): string { return [first, second].sort().join(":"); }
 
 function emptyState(): ReplayState {
-  return { offers: new Map(), members: new Map(), bonds: new Map(), teamIds: [], creditedSources: new Set() };
+  return { offers: new Map(), members: new Map(), bonds: new Map(), teamIds: [], creditedSources: new Set(),
+    memoryInfluences: new Map() };
+}
+
+function memoryKey(value: QiMonMemoryAssessment): string {
+  return JSON.stringify([value.memberId, value.sourceEventId, value.context, value.targetAction]);
+}
+
+function unit(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+function isMemberMemory(source: JourneyEvent, member: MemberState): boolean {
+  if (source.eventId === member.sourceEventId && source.kind === "play-commit") return true;
+  return source.kind === "practice-complete" && source.sequence > member.invitedAtCount
+    && source.replay.teams[0].roster.some((card) => sameCard(card, member.card));
 }
 
 function validObservation(journey: Journey, roster: QiMonRoster, eventCount: number, head: string): void {
@@ -250,6 +294,28 @@ function deriveAction(journey: Journey, roster: QiMonRoster, state: ReplayState,
       }
       return { kind: "team", memberIds: [...requested.memberIds] };
     }
+    case "memory-influence": {
+      const member = state.members.get(requested.memberId);
+      const source = sourceAt(journey, eventCount, requested.sourceEventId);
+      if (!member || !isMemberMemory(source, member)) {
+        fail("Memory influence needs this recruit's exact kept origin or a practice after its invitation.");
+      }
+      if (requested.context !== QIMON_MEMORY_CONTEXT || !QIMON_MEMORY_ACTIONS.includes(requested.targetAction)
+          || ![null, -1, 0, 1].includes(requested.polarity)
+          || !unit(requested.magnitude) || !unit(requested.confidence) || !unit(requested.retrievalSalience)) {
+        fail("Memory influence needs a supported context, action, polarity and finite values from zero to one.");
+      }
+      const action = { kind: "memory-influence" as const, memberId: requested.memberId,
+        sourceEventId: source.eventId, sourceEventSha256: sourceDigest(source),
+        context: QIMON_MEMORY_CONTEXT, targetAction: requested.targetAction, polarity: requested.polarity,
+        magnitude: requested.magnitude, confidence: requested.confidence, retrievalSalience: requested.retrievalSalience };
+      const previous = state.memoryInfluences.get(memoryKey(action));
+      if (previous && ["polarity", "magnitude", "confidence", "retrievalSalience"].every((key) =>
+        previous[key as keyof QiMonMemoryInfluence] === action[key as keyof typeof action])) {
+        fail("This memory relationship is already assessed with those values.");
+      }
+      return action;
+    }
   }
 }
 
@@ -260,6 +326,8 @@ function actionKeys(kind: QiMonRosterAction["kind"]): readonly string[] {
     case "train": return ["kind", "memberId", "sourceEventId", "sourceEventSha256", "replayDigest", "tier"];
     case "bond": return ["kind", "memberIds", "sourceEventId", "sourceEventSha256", "replayDigest"];
     case "team": return ["kind", "memberIds"];
+    case "memory-influence": return ["kind", "memberId", "sourceEventId", "sourceEventSha256", "context",
+      "targetAction", "polarity", "magnitude", "confidence", "retrievalSalience"];
   }
 }
 
@@ -313,6 +381,11 @@ function applyState(state: ReplayState, event: QiMonRosterEvent): void {
       state.creditedSources.add(action.sourceEventId);
       break;
     case "team": state.teamIds = [...action.memberIds]; break;
+    case "memory-influence": {
+      const { kind: _kind, ...assessment } = action;
+      state.memoryInfluences.set(memoryKey(action), Object.freeze({ ...assessment, assessmentEventId: event.eventId }));
+      break;
+    }
   }
 }
 
@@ -321,7 +394,7 @@ function replayRoster(rosterValue: unknown, sourceJourney: Journey): { roster: Q
   if (!exactRecord(rosterValue, ["schema", "version", "originDigest", "createdAt", "baseJourneyRevision",
       "baseEventCount", "baseHeadEventId", "events"])) fail("The roster sidecar has unknown or missing fields.");
   const roster = rosterValue as unknown as QiMonRoster;
-  if (roster.schema !== QIMON_ROSTER_SCHEMA || roster.version !== 1) fail("Unsupported roster schema or version.", "unsupported-version");
+  if (roster.schema !== QIMON_ROSTER_SCHEMA || (roster.version !== 1 && roster.version !== 2)) fail("Unsupported roster schema or version.", "unsupported-version");
   if (!SHA256.test(roster.originDigest) || roster.originDigest !== journeyOriginSha256(journey)) {
     fail("This roster belongs to another Journey origin.", "origin-mismatch");
   }
@@ -351,11 +424,13 @@ function replayRoster(rosterValue: unknown, sourceJourney: Journey): { roster: Q
     validObservation(journey, roster, candidate.journeyEventCount as number, candidate.journeyHeadEventId);
     const supplied = candidate.action;
     if (!supplied || typeof supplied !== "object" || !("kind" in supplied) ||
-        !["discover", "invite", "train", "bond", "team"].includes(String(supplied.kind))) fail("Unknown roster action.");
+        !["discover", "invite", "train", "bond", "team", ...(roster.version === 2 ? ["memory-influence"] : [])]
+          .includes(String(supplied.kind))) fail("Unknown roster action.");
     const expectedAction = deriveAction(journey, roster, state, candidate.journeyEventCount as number,
       supplied as QiMonRosterRequest);
     if (!sameAction(supplied, expectedAction)) fail("The roster action does not match its source authority.");
-    if ((expectedAction.kind === "discover" || expectedAction.kind === "train" || expectedAction.kind === "bond") &&
+    if ((expectedAction.kind === "discover" || expectedAction.kind === "train" || expectedAction.kind === "bond"
+         || expectedAction.kind === "memory-influence") &&
         Date.parse(candidate.recordedAt) < Date.parse(sourceAt(journey, candidate.journeyEventCount as number,
           expectedAction.sourceEventId).committedAt)) fail("A roster action cannot precede its kept source event.");
     const eventBase = { sequence: candidate.sequence as number, previousEventId: previousId,
@@ -370,7 +445,14 @@ function replayRoster(rosterValue: unknown, sourceJourney: Journey): { roster: Q
     previousAt = event.journeyEventCount;
     previousTime = event.recordedAt;
   }
-  return { roster: Object.freeze({ schema: QIMON_ROSTER_SCHEMA, version: 1, originDigest: roster.originDigest,
+  if (roster.version === 2 && !state.memoryInfluences.size) fail("Roster version two requires an explicit memory assessment.");
+  // Each assessed relationship retains one append-only slot for explicit withdrawal.
+  // Ordinary roster actions and later edits cannot consume those reserved slots.
+  const assessedRelations = [...state.memoryInfluences.values()].filter((value) => value.polarity !== null).length;
+  if (roster.version === 2 && canonicalEvents.length + assessedRelations > QIMON_ROSTER_LIMITS.events) {
+    fail("The roster must retain an event slot to unassess every active memory relationship.");
+  }
+  return { roster: Object.freeze({ schema: QIMON_ROSTER_SCHEMA, version: roster.version, originDigest: roster.originDigest,
     createdAt: roster.createdAt, baseJourneyRevision: roster.baseJourneyRevision, baseEventCount: roster.baseEventCount,
     baseHeadEventId: roster.baseHeadEventId, events: Object.freeze(canonicalEvents) }), state, journey };
 }
@@ -389,7 +471,8 @@ function projection(roster: QiMonRoster, state: ReplayState): QiMonRosterProject
   return Object.freeze({ revision: revisionForQiMonRoster(roster), offers: Object.freeze(offers),
     members: Object.freeze(members), bonds: Object.freeze([...state.bonds.values()].map((bond) => Object.freeze({
       ...bond, memberIds: Object.freeze([...bond.memberIds]) as unknown as readonly [string, string],
-    }))), team: Object.freeze(state.teamIds.map((id) => Object.freeze({ ...state.members.get(id)!.card }))) });
+    }))), team: Object.freeze(state.teamIds.map((id) => Object.freeze({ ...state.members.get(id)!.card }))),
+    memoryInfluences: Object.freeze([...state.memoryInfluences.values()]) });
 }
 
 /** A new sidecar pins the current head; existing plays never become offers retroactively. */
@@ -433,7 +516,9 @@ function commit(journey: Journey, roster: QiMonRoster, requested: QiMonRosterReq
     ]))}`,
     recordedAt: now, journeyEventCount: eventCount, journeyHeadEventId: headAt(current.journey, eventCount), action };
   const event = Object.freeze({ ...eventBase, eventId: eventID(current.roster, eventBase) });
-  const updated: QiMonRoster = { ...current.roster, events: [...current.roster.events, event] };
+  const updated: QiMonRoster = { ...current.roster,
+    version: action.kind === "memory-influence" ? 2 : current.roster.version,
+    events: [...current.roster.events, event] };
   return replayRoster(updated, current.journey).roster;
 }
 
@@ -466,6 +551,26 @@ export function selectQiMonTeam(journey: Journey, roster: QiMonRoster, memberIds
     expectedRosterRevision, expectedJourneyRevision, now);
 }
 
+/** Explicit assessment through the existing roster owner. Source and identity are never rewritten. */
+export function assessQiMonMemory(journey: Journey, roster: QiMonRoster, assessment: QiMonMemoryAssessment,
+  expectedRosterRevision: string, expectedJourneyRevision: string, now = new Date().toISOString()): QiMonRoster {
+  if (!exactRecord(assessment, ["memberId", "sourceEventId", "context", "targetAction", "polarity",
+      "magnitude", "confidence", "retrievalSalience"])) fail("Memory assessment has unknown or missing fields.");
+  return commit(journey, roster, { ...assessment, kind: "memory-influence" },
+    expectedRosterRevision, expectedJourneyRevision, now);
+}
+
+/** Live source lookup: a missing, changed or replaced Journey invalidates the existing owner first. */
+export function qiMonMemorySources(journey: Journey, roster: QiMonRoster, memberId: string): readonly QiMonMemorySource[] {
+  const current = replayRoster(roster, journey);
+  const member = current.state.members.get(memberId);
+  if (!member) return Object.freeze([]);
+  return Object.freeze(current.journey.events.filter((event) => isMemberMemory(event, member)).map((event) =>
+    Object.freeze({ eventId: event.eventId, digest: sourceDigest(event), recordedAt: event.committedAt,
+      label: event.kind === "practice-complete" ? `Kept practice · ${event.committedAt.slice(0, 10)}`
+        : `Origin Field trace · ${event.committedAt.slice(0, 10)}` })));
+}
+
 /** Separate from the existing Journey archive; the caller previews before replacing local storage. */
 export function serializeQiMonRoster(roster: QiMonRoster, journey: Journey,
   exportedAt = new Date().toISOString()): string {
@@ -476,7 +581,8 @@ export function serializeQiMonRoster(roster: QiMonRoster, journey: Journey,
     eventCount: authority.events.length, memberCount: replayed.state.members.size,
     authoritySha256: sha256String(JSON.stringify(authority)) };
   const archive = `${JSON.stringify({ format: QIMON_ROSTER_ARCHIVE_FORMAT,
-    archiveVersion: QIMON_ROSTER_ARCHIVE_VERSION, exportedAt, authority, manifest }, null, 2)}\n`;
+    archiveVersion: authority.version === 2 ? QIMON_MEMORY_ARCHIVE_VERSION : QIMON_ROSTER_ARCHIVE_VERSION,
+    exportedAt, authority, manifest }, null, 2)}\n`;
   if (new TextEncoder().encode(archive).byteLength > QIMON_ROSTER_LIMITS.archiveBytes) fail("Roster archive exceeds the local size limit.", "too-large");
   return archive;
 }
@@ -493,12 +599,13 @@ export function inspectQiMonRoster(source: string, journey: Journey): QiMonRoste
       !exactRecord(parsed.manifest, ["originDigest", "rosterRevision", "eventCount", "memberCount", "authoritySha256"])) {
     return { status: "invalid", code: "invalid-envelope", message: "This is not a complete QiMon roster archive." };
   }
-  if (parsed.archiveVersion !== QIMON_ROSTER_ARCHIVE_VERSION) {
+  if (parsed.archiveVersion !== QIMON_ROSTER_ARCHIVE_VERSION && parsed.archiveVersion !== QIMON_MEMORY_ARCHIVE_VERSION) {
     return { status: "invalid", code: "unsupported-version", message: "This roster archive version is unsupported." };
   }
   try {
     const replayed = replayRoster(parsed.authority, journey);
     const authority = replayed.roster;
+    if (parsed.archiveVersion !== authority.version) fail("The roster archive version does not match its authority.", "unsupported-version");
     const manifest = parsed.manifest;
     if (manifest.originDigest !== authority.originDigest ||
         manifest.rosterRevision !== revisionForQiMonRoster(authority) ||

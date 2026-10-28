@@ -52,6 +52,7 @@ struct KeptLessonsCard: View {
                             Text("Taught after request \(origin.requestID)")
                                 .font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
                         }
+                        LessonMemoryInfluenceControls(store: store, lesson: lesson)
                         HStack {
                             Button("Revise…") { store.beginLessonCorrection(revisingID: lesson.id) }
                                 .accessibilityLabel("Revise lesson for \(lesson.topic)")

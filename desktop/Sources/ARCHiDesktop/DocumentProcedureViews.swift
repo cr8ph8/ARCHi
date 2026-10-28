@@ -72,7 +72,7 @@ struct DocumentProcedureLibraryView: View {
         DocumentMethodFinderView(store: store)
         DisclosureGroup("Saved procedures (\(store.documentProcedures.latestProcedures.count))") {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Keep a method after helpful applied work, or author an untested candidate from a reviewed concept. Matching methods use reviewed outcomes first. Ties use comparable local usage when fully measured. Choose a method for each new passage.")
+                Text("Keep a method after helpful applied work, or author an untested candidate from a reviewed concept. Matching methods use reviewed outcomes first. Within equal outcomes, explicitly assessed memory influence refines the local-usage order. Choose a method for each new passage.")
                     .foregroundStyle(.secondary)
                 if let error = store.documentProcedures.loadError { Text(error).foregroundStyle(.orange) }
                 ForEach(store.orderedDocumentProcedures) { procedure in
@@ -234,6 +234,9 @@ private struct DocumentProcedureVersionDetails: View {
                 knowledgeOriginDetails(origin)
             }
             MethodLearningView(store: store, procedure: procedure, isHistorical: isHistorical)
+            if !isHistorical {
+                DocumentMethodMemoryInfluenceSummary(store: store, procedure: procedure)
+            }
             DisclosureGroup("Local usage") {
                 if let usage = store.resources(for: procedure) {
                     let perHelpful = Double(usage.totalTokens) / Double(usage.helpfulResults)
