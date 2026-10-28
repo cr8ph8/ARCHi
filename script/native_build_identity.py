@@ -115,7 +115,7 @@ def source_inputs(repo):
     if not scripts.is_dir() or scripts.is_symlink():
         raise ValueError("Missing or linked packaging recipe directory")
     selected.extend(p.relative_to(repo).as_posix() for p in sorted(scripts.iterdir())
-                    if p.suffix in {".py", ".sh"})
+                    if p.suffix in {".py", ".sh", ".swift"})
     for name in ("build_and_run.sh", "native_build_identity.py"):
         if not (scripts / name).is_file():
             raise ValueError(f"Missing packaging recipe: {name}")

@@ -38,6 +38,9 @@ EXACT = RELEASE_FILES | ARC_REPLAY_FILES | {
     "script/verify_preserved_liminal_seed.py", "scripts/tests/test_preserved_liminal_seed.py",
     "scripts/tests/test_package_liminal_finish.py", "scripts/tests/test_package_liminal_light.py",
     "scripts/tests/test_build_and_run_staging.py",
+    "script/first_signal_preflight.py", "script/inspect_first_signal_selection.swift",
+    "scripts/tests/test_first_signal_preflight.py", "docs/first-signal-installation-safeguard.md",
+    ".github/workflows/first-signal-packaging.yml",
     "desktop/Sources/ARCHiDesktop/Resources/RecordReader/reader.qualified.json",
     "script/package_record_reader.py", "script/package_representation_runtime.py",
     "script/package_companion_supplement.py", "script/test_package_companion_supplement.py",
@@ -197,7 +200,7 @@ def collect(root: Path, exact=None, scopes=None):
     recipe = "script/build_and_run.sh"
     if recipe in allowed:
         dependencies = {path.decode("ascii") for path in re.findall(
-            rb"\$REPO_ROOT/(script/[A-Za-z0-9_.-]+\.py)", (root / recipe).read_bytes())}
+            rb"\$REPO_ROOT/(script/[A-Za-z0-9_.-]+\.(?:py|swift))", (root / recipe).read_bytes())}
         for dependency in sorted(dependencies - allowed):
             blockers.append(issue("SOURCE_BUILD_DEPENDENCY_MISSING", recipe, dependency=dependency))
     blockers.extend(replay_dependency_checks(root, allowed))

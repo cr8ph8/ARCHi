@@ -54,7 +54,7 @@ class NativeBuildIdentityTests(unittest.TestCase):
         before = identity.source_inputs(self.repo)["sourceContentID"]
         for name in ("desktop/Sources/main.swift", "desktop/Sources/new-untracked.swift",
                      "shared/ARCHiSpatial/Sources/ImageRegion.swift", "desktop/Sources/Resources/new.bin",
-                     "script/package_fixture.py", "desktop/Package.resolved"):
+                     "script/package_fixture.py", "script/inspect_first_signal_selection.swift", "desktop/Package.resolved"):
             with self.subTest(input=name):
                 path = self.repo / name
                 path.parent.mkdir(parents=True, exist_ok=True)

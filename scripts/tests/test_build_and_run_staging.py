@@ -21,9 +21,18 @@ name = pathlib.Path(sys.argv[0]).name
 with open(os.environ["ARCHI_TEST_TRACE"], "a") as log:
     log.write(json.dumps([name] + sys.argv[1:]) + "\n")
 if name == "pgrep":
+    marker = os.environ.get("ARCHI_TEST_APP_OPENED")
+    if marker and pathlib.Path(marker).exists():
+        print("42")
+        sys.exit(0)
     sys.exit(1)
+if name == "ps":
+    print(os.environ.get("ARCHI_TEST_RUNNING_APP", ""))
 if name == "open":
     sys.exit(90)
+if name == "PlistBuddy":
+    key = sys.argv[2].split(":", 1)[1]
+    print(plistlib.loads(pathlib.Path(sys.argv[3]).read_bytes())[key])
 if name == "plutil" and sys.argv[1] in ("-insert", "-replace"):
     path = pathlib.Path(sys.argv[-1])
     info = plistlib.loads(path.read_bytes())
@@ -37,6 +46,14 @@ if name == "mv":
         (target / "authored.txt").write_text("preserve concurrent bundle")
     os.execv("/bin/mv", ["mv"] + sys.argv[1:])
 if name == "swift":
+    if len(sys.argv) > 1 and sys.argv[1].endswith("inspect_first_signal_selection.swift"):
+        marker = os.environ.get("ARCHI_TEST_APP_OPENED")
+        if marker:
+            events = [json.loads(line) for line in pathlib.Path(os.environ["ARCHI_TEST_TRACE"]).read_text().splitlines()]
+            if sum(event[0] == "swift" and len(event) > 1 and event[1].endswith("inspect_first_signal_selection.swift") for event in events) == 2:
+                pathlib.Path(marker).write_text("synthetic app opened during final preflight")
+        print(pathlib.Path(os.environ["ARCHI_TEST_SELECTION"]).read_text())
+        sys.exit(0)
     if "--version" in sys.argv:
         print("Swift version fixture (no compiler invoked)")
         sys.exit(0)
@@ -49,6 +66,8 @@ if name == "swift":
             sys.exit(91)
     if "--show-bin-path" in sys.argv:
         print(os.environ["ARCHI_TEST_BIN"])
+    elif os.environ.get("ARCHI_TEST_BUILD_FAILURE"):
+        sys.exit(92)
     elif os.environ.get("ARCHI_TEST_SOURCE_MUTATION"):
         pathlib.Path(os.environ["ARCHI_TEST_SOURCE_MUTATION"]).write_text("changed during fake compile")
 if name == "codesign" and "--force" in sys.argv and pathlib.Path(sys.argv[-1]).name == "ARCHi.app":
@@ -60,6 +79,10 @@ if name == "codesign" and "--force" in sys.argv and pathlib.Path(sys.argv[-1]).n
     with open(os.environ["ARCHI_TEST_TRACE"], "a") as log:
         log.write(json.dumps(["identity-observed-at-outer-sign", receipt["candidateID"]]) + "\n")
 if name == "codesign" and "--verify" in sys.argv and ".archi-install." in sys.argv[-1]:
+    if os.environ.get("ARCHI_TEST_FINAL_RESOURCE_MISMATCH"):
+        (pathlib.Path(sys.argv[-1]) / "Contents/Resources/QiMonFirstSignalWeb/assets/chapter.js").write_bytes(b"corrupt final copy")
+    if os.environ.get("ARCHI_TEST_STAGING_FAILURE"):
+        sys.exit(93)
     collision = os.environ.get("ARCHI_TEST_COLLISION")
     if collision:
         target = pathlib.Path(collision)
@@ -73,11 +96,24 @@ class BuildAndRunStagingTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="archi-stage-contract-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        # Absolute macOS tools and destinations are substituted only in this
+        # disposable script copy. Copies/moves remain real and confined here.
+        self.installed = self.root / "installed/ARCHi.app"
+        self.installed.parent.mkdir()
+        private_tmp = self.root / "private-tmp"
+        private_tmp.mkdir()
         script = self.root / "repo/script/build_and_run.sh"
         script.parent.mkdir(parents=True)
-        shutil.copy2(SCRIPT, script)
+        recipe = SCRIPT.read_text().replace('/Applications/$APP_NAME.app', str(self.installed))
+        recipe = recipe.replace('/Applications/ARCHi.app', str(self.installed))
+        recipe = recipe.replace('/private/tmp/', str(private_tmp) + '/')
+        recipe = recipe.replace('/usr/libexec/PlistBuddy', str(self.root / 'tools/PlistBuddy'))
+        recipe = recipe.replace('/bin/cp -cR', '/bin/cp -R')
+        script.write_text(recipe)
         shutil.copy2(SCRIPT.parent / "verify_preserved_liminal_seed.py", script.parent)
         shutil.copy2(SCRIPT.parent / "native_build_identity.py", script.parent)
+        shutil.copy2(SCRIPT.parent / "first_signal_preflight.py", script.parent)
+        shutil.copy2(SCRIPT.parent / "inspect_first_signal_selection.swift", script.parent)
         # This suite exercises orchestration; the supplement's byte guards have
         # their own tests. Existing fixture artwork needs no optional supplement.
         (script.parent / "package_companion_supplement.py").write_text("# fixture: no optional portraits\n")
@@ -96,6 +132,24 @@ class BuildAndRunStagingTests(unittest.TestCase):
             target = resources / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(b"synthetic fixture resource")
+        shutil.copy2(SCRIPT.parent.parent / "desktop/Sources/ARCHiDesktop/QiMonEmbeddedGame.swift",
+                     resources.parent / "QiMonEmbeddedGame.swift")
+        (self.installed / "Contents/MacOS").mkdir(parents=True)
+        (self.installed / "Contents/MacOS/ARCHiDesktop").write_bytes(b"working app fixture")
+        (self.installed / "Contents/Info.plist").write_bytes(plistlib.dumps({
+            "CFBundleIdentifier": "com.quotient.archi.desktop.review", "CFBundlePackageType": "APPL",
+            "CFBundleExecutable": "ARCHiDesktop"}))
+        self.chapter = self.installed / "Contents/Resources/QiMonFirstSignalWeb"
+        (self.chapter / "assets").mkdir(parents=True)
+        (self.chapter / "qimon-build.json").write_text('{"schema":1,"game":"qimon-first-signal","entry":"index.html"}')
+        (self.chapter / "index.html").write_text('<script src="assets/chapter.js"></script>')
+        (self.chapter / "assets/chapter.js").write_bytes(b"synthetic First Signal chapter")
+        self.selection = self.root / "selection.json"
+        self.selection.write_text(json.dumps({"schema": "archi-first-signal-selection/v1", "owner": {
+            "appIdentifier": "com.quotient.archi.desktop.review", "origin": "http://127.0.0.1:8767/",
+            "dataStoreID": "A4A19A25-351B-45B6-9D70-3B15D0A02817", "saveKey": "qimon.first-signal.chapter.v1",
+            "defaultsSuite": "com.quotient.archi.qimon-local-play", "selectionKey": "selectedEmbeddedFolder.v1"},
+            "chapter": {"present": False}, "earlierAdventure": {"present": False}}))
         # Exercise the actual artwork guard with exact retained PNGs, without
         # reading any installed bundle or substituting a permissive validator.
         for name in ("hampton-liminal-seed-v1.png", "hampton-liminal-garnet-v1.png"):
@@ -174,13 +228,14 @@ print("b"*64)
 ''')
         tools = self.root / "tools"
         tools.mkdir()
-        for name in ["swift", "pgrep", "ps", "plutil", "codesign", "xattr", "open", "mv"]:
+        for name in ["swift", "pgrep", "ps", "plutil", "codesign", "xattr", "open", "mv", "PlistBuddy"]:
             target = tools / name
             target.write_text(FAKE_TOOL)
             target.chmod(0o755)
         self.trace = self.root / "commands.jsonl"
         self.env = {**os.environ, "PATH": str(tools) + os.pathsep + os.environ["PATH"],
                     "ARCHI_TEST_TRACE": str(self.trace), "ARCHI_TEST_BIN": str(self.bin),
+                    "ARCHI_TEST_SELECTION": str(self.selection),
                     "ARCHI_BUILD_SCRATCH_PATH": str(self.root / "scratch"),
                     "ARCHI_LIMINAL_PACKAGE": str(self.base), "ARCHI_LIMINAL_QUALIFICATION": str(self.qualification),
                     "ARCHI_REPRESENTATION_RUNTIME": str(self.representation)}
@@ -289,6 +344,8 @@ print("b"*64)
         self.assertIn("Contents/MacOS/ARCHiDesktop", payload)
         self.assertIn("Contents/Resources/UnityCompanion.app/Contents/Info.plist", payload)
         self.assertIn("Contents/Resources/LiminalV008/manifest.json", payload)
+        self.assertIn("Contents/Resources/QiMonFirstSignalWeb/assets/chapter.js", payload)
+        self.assertIn("Contents/Resources/FirstSignalPreservation.json", payload)
         self.assertNotIn("Contents/Resources/ARCHiBuildIdentity.json", payload)
         events = [json.loads(line) for line in self.trace.read_text().splitlines()]
         sign = next(i for i, event in enumerate(events) if event[0] == "identity-observed-at-outer-sign")
@@ -296,6 +353,52 @@ print("b"*64)
         promote = next(i for i, event in enumerate(events) if event[0] == "mv")
         self.assertLess(build, sign)
         self.assertLess(sign, promote)
+
+    def test_missing_chapter_blocks_stage_and_build_only_before_native_build(self):
+        shutil.rmtree(self.chapter)
+        before = (self.installed / "Contents/MacOS/ARCHiDesktop").read_bytes()
+        for flags in [("--stage-only", "--stage-dir", self.root / "missing-chapter"), ("--build-only",)]:
+            with self.subTest(flags=flags):
+                result = self.run_script(*flags)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("No preserved First Signal", result.stderr)
+        commands = [json.loads(line) for line in self.trace.read_text().splitlines()]
+        self.assertFalse(any(event[:2] == ["swift", "build"] or event[0] in ("mv", "open", "codesign") for event in commands))
+        self.assertEqual((self.installed / "Contents/MacOS/ARCHiDesktop").read_bytes(), before)
+
+    def test_failed_compile_or_final_staging_verification_never_promotes_or_changes_installed_chapter(self):
+        before = (self.chapter / "assets/chapter.js").read_bytes()
+        for failure in ("ARCHI_TEST_BUILD_FAILURE", "ARCHI_TEST_STAGING_FAILURE", "ARCHI_TEST_FINAL_RESOURCE_MISMATCH"):
+            with self.subTest(failure=failure):
+                self.trace.unlink(missing_ok=True)
+                stage = self.root / failure
+                result = self.run_script("--stage-only", "--stage-dir", stage, extra_env={failure: "1"})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse((stage / "ARCHi.app").exists())
+                self.assertEqual((self.chapter / "assets/chapter.js").read_bytes(), before)
+                commands = [json.loads(line)[0] for line in self.trace.read_text().splitlines()]
+                self.assertNotIn("mv", commands)
+                self.assertNotIn("open", commands)
+
+    def test_first_signal_path_options_require_a_pair_before_process_or_build_tools(self):
+        for flags in [("--first-signal-build",), ("--first-signal-manifest",),
+                      ("--first-signal-build", str(self.chapter)), ("--first-signal-manifest", "reference.json")]:
+            with self.subTest(flags=flags):
+                result = self.run_script(*flags)
+                self.assertEqual(result.returncode, 2)
+                self.assertFalse(self.trace.exists())
+
+    def test_app_opened_during_final_preflight_is_rechecked_before_promotion(self):
+        stage = self.root / "opened-during-preflight"
+        result = self.run_script("--stage-only", "--stage-dir", stage, extra_env={
+            "ARCHI_TEST_APP_OPENED": str(self.root / "synthetic-running-marker"),
+            "ARCHI_TEST_RUNNING_APP": str(stage / "ARCHi.app/Contents/MacOS/ARCHiDesktop")})
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("ARCHi is still running", result.stderr)
+        self.assertFalse((stage / "ARCHi.app").exists())
+        commands = [json.loads(line)[0] for line in self.trace.read_text().splitlines()]
+        self.assertNotIn("mv", commands)
+        self.assertNotIn("open", commands)
 
     def test_source_change_during_build_stops_before_outer_sign_or_promotion(self):
         source = self.root / "repo/shared/ARCHiSpatial/Sources/Fixture.swift"

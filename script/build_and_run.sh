@@ -13,6 +13,8 @@ LIMINAL_FINISH=""
 LIMINAL_FINISH_SHA=""
 LIMINAL_LIGHT=""
 LIMINAL_LIGHT_SHA=""
+FIRST_SIGNAL_BUILD=""
+FIRST_SIGNAL_MANIFEST=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --verify) VERIFY=1 ;;
@@ -24,17 +26,22 @@ while [[ $# -gt 0 ]]; do
             [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { echo "--stage-dir requires a new absolute directory path." >&2; exit 2; }
             shift; STAGE_DIR="$1" ;;
         --unity-player) shift; UNITY_PLAYER="${1:?--unity-player requires an app bundle path}" ;;
+        --first-signal-build|--first-signal-manifest)
+            [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { echo "$1 requires a path." >&2; exit 2; }
+            if [[ "$1" == --first-signal-build ]]; then FIRST_SIGNAL_BUILD="$2"; else FIRST_SIGNAL_MANIFEST="$2"; fi
+            shift ;;
         --liminal-finish)
             [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { echo "--liminal-finish requires a qualified finish directory." >&2; exit 2; }
             shift; LIMINAL_FINISH="$1" ;;
         --liminal-light)
             [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { echo "--liminal-light requires a qualified light directory." >&2; exit 2; }
             shift; LIMINAL_LIGHT="$1" ;;
-        *) echo "Usage: $0 [--verify] [--review] [--install] [--build-only] [--stage-only [--stage-dir NEW_ABSOLUTE_DIR]] [--unity-player APP] [--liminal-finish DIR] [--liminal-light DIR]" >&2; exit 2 ;;
+        *) echo "Usage: $0 [--verify] [--review] [--install] [--build-only] [--stage-only [--stage-dir NEW_ABSOLUTE_DIR]] [--unity-player APP] [--liminal-finish DIR] [--liminal-light DIR] [--first-signal-build DIR --first-signal-manifest FILE]" >&2; exit 2 ;;
     esac
     shift
 done
 [[ -z "$LIMINAL_LIGHT" || -n "$LIMINAL_FINISH" ]] || { echo "--liminal-light requires explicit --liminal-finish for the same qualified body." >&2; exit 2; }
+[[ ( -z "$FIRST_SIGNAL_BUILD" && -z "$FIRST_SIGNAL_MANIFEST" ) || ( -n "$FIRST_SIGNAL_BUILD" && -n "$FIRST_SIGNAL_MANIFEST" ) ]] || { echo "An explicit First Signal build requires its independent resource manifest." >&2; exit 2; }
 APP_NAME="ARCHi"
 # Retain the identifier/profile that owns the existing KIN. Renaming the
 # product must not silently create an empty identity or migrate authored saves.
@@ -122,6 +129,20 @@ BUNDLE_DIR="$PLAY_STAGE/$APP_NAME.app"
 INSTALL_STAGE=""
 trap 'rm -rf "$PLAY_STAGE"; if [[ -n "$INSTALL_STAGE" ]]; then rm -rf "$INSTALL_STAGE"; fi' EXIT
 
+# Read selection metadata only: never launch the game, refresh bookmarks or
+# read/write a save. A stale selection is a blocker even if a bundled copy exists.
+# All native update paths, including --build-only and --stage-only, preserve the
+# working chapter or require an independently inventoried explicit build.
+FIRST_SIGNAL_SELECTION="$PLAY_STAGE/first-signal-selection.json"
+FIRST_SIGNAL_PLAN="$PLAY_STAGE/first-signal-plan.json"
+swift "$REPO_ROOT/script/inspect_first_signal_selection.swift" > "$FIRST_SIGNAL_SELECTION"
+FIRST_SIGNAL_ARGS=(--repo "$REPO_ROOT" --selection "$FIRST_SIGNAL_SELECTION" --plan "$FIRST_SIGNAL_PLAN")
+FIRST_SIGNAL_CAPTURE_ARGS=(--installed-app "/Applications/ARCHi.app")
+if [[ -n "$FIRST_SIGNAL_BUILD" ]]; then
+    FIRST_SIGNAL_CAPTURE_ARGS+=(--build "$FIRST_SIGNAL_BUILD" --manifest "$FIRST_SIGNAL_MANIFEST")
+fi
+python3 "$REPO_ROOT/script/first_signal_preflight.py" capture "${FIRST_SIGNAL_ARGS[@]}" "${FIRST_SIGNAL_CAPTURE_ARGS[@]}"
+
 # Bind the working tree, including dirty/untracked native inputs and local
 # dependencies. Git HEAD alone cannot identify what this compiler will read.
 BUILD_INPUTS="$PLAY_STAGE/native-source-inputs.json"
@@ -134,6 +155,7 @@ mkdir -p "$BUNDLE_DIR/Contents/MacOS" "$BUNDLE_DIR/Contents/Resources"
 # immediately before replacing its executable or generated resources.
 require_selected_app_stopped
 cp "$BIN_DIR/ARCHiDesktop" "$BUNDLE_DIR/Contents/MacOS/ARCHiDesktop"
+python3 "$REPO_ROOT/script/first_signal_preflight.py" package "${FIRST_SIGNAL_ARGS[@]}" --candidate "$BUNDLE_DIR"
 # The native art loader uses this packaged location, never a development fallback.
 cp -R "$REPO_ROOT/desktop/Sources/ARCHiDesktop/Resources/CompanionArt" "$BUNDLE_DIR/Contents/Resources/CompanionArt"
 # Curated source omits some local artwork. Preserve only the two qualified
@@ -301,6 +323,14 @@ INSTALL_STAGE="$(mktemp -d "$(dirname "$APP_DIR")/.archi-install.XXXXXX")"
 # Documents. Clear it on this new staging copy before verifying its signature.
 xattr -cr "$INSTALL_STAGE/$APP_NAME.app"
 codesign --verify --deep --strict "$INSTALL_STAGE/$APP_NAME.app"
+require_selected_app_stopped
+# Re-inspect selection after the potentially long build and verify the actual
+# destination-filesystem copy. Refuse before moving the working app or reserving
+# rollback storage if source, resources, selection or app identity changed.
+swift "$REPO_ROOT/script/inspect_first_signal_selection.swift" > "$PLAY_STAGE/first-signal-selection-final.json"
+python3 "$REPO_ROOT/script/first_signal_preflight.py" verify --repo "$REPO_ROOT" \
+    --selection "$PLAY_STAGE/first-signal-selection-final.json" --plan "$FIRST_SIGNAL_PLAN" \
+    --candidate "$INSTALL_STAGE/$APP_NAME.app"
 require_selected_app_stopped
 PREVIOUS_BUNDLE=""
 if [[ -n "$STAGE_DIR" && ( -e "$APP_DIR" || -L "$APP_DIR" ) ]]; then

@@ -15,6 +15,8 @@ The native Memory map's **Manage memories** route reaches the existing kept-less
 
 The separately authored **QiMon First Signal** chapter is not in this source distribution. `QiMonEmbeddedGame` hosts a separately selected/bundled `QiMonFirstSignalWeb` build. Updating retained practice code does not modify that chapter or its save. No new host bridge exports native private memory to the chapter.
 
+The [First Signal installation safeguard](first-signal-installation-safeguard.md) adds a fail-closed packaging preflight and defines the outstanding authoring-Mac resource/save evidence. Its resource-preservation tests do not qualify installed gameplay or extend contextual-memory influence into the separately authored chapter.
+
 ## Use in native ARCHi
 
 1. Open the existing memory manager and a kept lesson.
