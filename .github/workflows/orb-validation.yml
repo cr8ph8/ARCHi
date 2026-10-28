@@ -28,8 +28,13 @@ jobs:
       - run: npm run build
   native:
     runs-on: macos-15
+    timeout-minutes: 25
+    env:
+      # Existing native views use Swift 6.2 isolated conformances.
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - uses: actions/checkout@v7.0.1
+      - run: xcodebuild -version
       - run: swift --version
       - run: swift test --package-path desktop --filter OrbPresentationTests
       - run: swift test --package-path desktop --filter UnityPresentationTests
