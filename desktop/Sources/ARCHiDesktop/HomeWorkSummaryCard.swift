@@ -18,7 +18,7 @@ struct HomeWorkSummaryCard: View {
         methods = store.documentProcedures
     }
 
-    var body: some View {
+    private var card: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Work that carries forward", systemImage: "arrow.triangle.branch")
                 .font(.system(size: 19, weight: .medium, design: .rounded))
@@ -63,6 +63,10 @@ struct HomeWorkSummaryCard: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("home.work-summary")
         .sheet(item: $detail) { selection in detailSheet(selection) }
+    }
+
+    private var observedCard: some View {
+        card
         .onAppear(perform: refresh)
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
             if scenePhase == .active { refresh() }
@@ -75,6 +79,10 @@ struct HomeWorkSummaryCard: View {
         .onChange(of: store.profileRecoveryBlock) { _, _ in refresh() }
         .onChange(of: store.isWorking) { _, _ in refresh() }
         .onChange(of: store.isShuttingDown) { _, _ in refresh() }
+    }
+
+    var body: some View {
+        observedCard
         .onChange(of: store.sourceRevision) { _, _ in refresh() }
         .onChange(of: store.keptLessons) { _, _ in refresh() }
         .onChange(of: store.readingSources.sources) { _, _ in refresh() }

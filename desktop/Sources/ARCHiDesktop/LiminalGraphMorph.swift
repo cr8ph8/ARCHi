@@ -136,12 +136,13 @@ struct LiminalGraphMorph: Equatable, Sendable {
             pieces += [String(seed.x.bitPattern), String(seed.y.bitPattern), String(seed.z)]
         }
         let digest = LiminalKnowledgeBindings.sha256(Data(pieces.map { "\($0.utf8.count):\($0)" }.joined().utf8))
+        let motionScale = max(0.0, min(Double(viewport.width), Double(viewport.height)) * 0.43 - 12.0)
         return .init(digest: digest, manifestSHA256: asset.manifestSHA256, originDigest: originDigest,
                      graphDigest: bindings.graphDigest, mapGraphDigest: mapDigest, viewport: viewport,
                      anchors: anchors, mapPoints: mapPoints, mapTargetsByRank: targets,
                      seedTargetsByRank: seedTargets,
-                     mapMotionScale: max(0, min(viewport.width, viewport.height) * 0.43 - 12) / frame.halfExtent,
-                     seedMotionScale: max(0, min(viewport.width, viewport.height) * 0.43 - 12) / seedFrame.halfExtent * 0.4,
+                     mapMotionScale: motionScale / frame.halfExtent,
+                     seedMotionScale: motionScale / seedFrame.halfExtent * 0.4,
                      clusterRanksByNodeID: clusterRanks,
                      finishDigest: asset.finish?.digest)
     }

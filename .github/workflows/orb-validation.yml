@@ -38,3 +38,7 @@ jobs:
       - run: swift --version
       - run: swift test --package-path desktop --filter OrbPresentationTests
       - run: swift test --package-path desktop --filter UnityPresentationTests
+      - name: Check existing graph and geometry contracts
+        run: >-
+          swift test --package-path desktop
+          --filter 'CompanionGraphTests|LiminalGraphMorphTests|LiminalSurfaceLightTests/testExpression|KnowledgeParticleFieldTests/test(Stable|Topology|Framing|Focus|Endpoint|Caps|SharedDisplay|Reviewed|SeedKeeps)|VelaRenderingTests/testReduceMotion'

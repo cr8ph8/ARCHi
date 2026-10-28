@@ -81,7 +81,11 @@ struct LiminalSurfaceLight: Sendable {
                 let p0 = knots[max(0,i-1)], p1 = knots[i], p2 = knots[i+1], p3 = knots[min(11,i+2)]
                 for step in 1...4 {
                     let t = Float(step) / 4, t2 = t * t, t3 = t2 * t
-                    points.append(0.5 * ((2 * p1) + (-p0+p2)*t + (2*p0-5*p1+4*p2-p3)*t2 + (-p0+3*p1-3*p2+p3)*t3))
+                    let constant: SIMD3<Float> = p1 * 2
+                    let linear: SIMD3<Float> = (-p0 + p2) * t
+                    let quadratic: SIMD3<Float> = (p0 * 2 - p1 * 5 + p2 * 4 - p3) * t2
+                    let cubic: SIMD3<Float> = (-p0 + p1 * 3 - p2 * 3 + p3) * t3
+                    points.append((constant + linear + quadratic + cubic) * 0.5)
                 }
             }
             let lengths = (0..<44).map { simd_distance(points[$0],points[$0+1]) }
