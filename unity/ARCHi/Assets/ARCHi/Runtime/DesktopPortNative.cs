@@ -9,6 +9,8 @@ namespace ARCHi.Port
         private NativePresentationSnapshot nativeSnapshot;
         private KinEvolutionStage nativeStage;
         private LiminalParticleRenderer nativePoints;
+        private OrbRoomStage nativeOrb;
+        private Image nativeOrbImage;
         public LiminalParticleRenderer PointRenderer => nativePoints;
         private string nativeAppearance = "kin";
         private Image nativeBodyImage;
@@ -35,6 +37,7 @@ namespace ARCHi.Port
         private void ConfigureNativeView()
         {
             if (!NativeBound || root == null) return;
+            ConfigureNativeOrb();
             foreach (var name in new[] { "nav-items", "nav-practice", "preview-seed", "preview-first-light" })
             {
                 var control = root.Q<VisualElement>(name);
@@ -75,7 +78,7 @@ namespace ARCHi.Port
                 nativeStage = null;
             }
             nativeAppearance = appearance;
-            if (nativeStage == null && nativeSnapshot?.SeedAppearance != "hamptonLiminal")
+            if (nativeStage == null && nativeSnapshot?.SeedAppearance != "hamptonLiminal" && nativeSnapshot?.orb == null)
             {
                 nativeAppearance = appearance;
                 seedTexture = SeedAppearanceRendering.Texture(nativeSnapshot);
@@ -110,7 +113,7 @@ namespace ARCHi.Port
                 bodyImage.parent.Insert(bodyImage.parent.IndexOf(bodyImage) + 1, nativeBodyImage);
             }
             nativeBodyImage.image = nativeStage?.Texture;
-            if (nativeSnapshot?.pointPresentation != null) {
+            if (nativeSnapshot?.pointPresentation != null && nativeSnapshot?.orb == null) {
                 if (nativePoints == null) {
                     var points = new GameObject("Liminal v008 point presentation");
                     nativePoints = points.AddComponent<LiminalParticleRenderer>();
@@ -190,6 +193,7 @@ namespace ARCHi.Port
         public void SuspendNativePresentation(string reason)
         {
             nativeFresh = false;
+            nativeOrb?.Suspend();
             nativePoints?.Suspend();
             arena?.Close();
             seedMotion.Apply(nativeSnapshot?.lightMode ?? "rest", true, Time.unscaledTimeAsDouble);
@@ -203,6 +207,7 @@ namespace ARCHi.Port
         private void StopNativeMotion()
         {
             nativeStopped = true;
+            nativeOrb?.Freeze(true);
             nativePoints?.Freeze(true);
             seedMotion.Apply(nativeSnapshot?.lightMode ?? "rest", true, Time.unscaledTimeAsDouble);
             nativeStage?.Apply(firstLight, true, nativeSnapshot?.lightMode ?? "rest", false);
@@ -213,6 +218,7 @@ namespace ARCHi.Port
         private void ResumeNativeMotion()
         {
             nativeStopped = false;
+            if (nativeSnapshot?.orb != null) nativeOrb?.Apply(nativeSnapshot.orb, nativeSnapshot.activity, NativeStaticMotion, nativeSnapshot.visible);
             nativePoints?.Freeze(NativeStaticMotion);
             seedMotion.Apply(nativeSnapshot?.lightMode ?? "rest", NativeStaticMotion, Time.unscaledTimeAsDouble);
             if (nativeSnapshot != null) nativeStage?.Apply(firstLight, NativeStaticMotion, nativeSnapshot.lightMode, false);
@@ -223,7 +229,8 @@ namespace ARCHi.Port
         private void Update()
         {
             if (!NativeBound || arena != null) return;
-            nativeStage?.Tick(nativeSnapshot != null && nativeSnapshot.visible && (firstLight || nativeStage.Progress > 0));
+            nativeOrb?.Tick(Time.unscaledDeltaTime);
+            if (nativeSnapshot?.orb == null) nativeStage?.Tick(nativeSnapshot != null && nativeSnapshot.visible && (firstLight || nativeStage.Progress > 0));
             RefreshNativeVisuals();
             RefreshNativePointControls();
         }
@@ -232,25 +239,28 @@ namespace ARCHi.Port
         {
             if (!NativeBound || bodyImage == null) return;
             var visible = nativeSnapshot != null && nativeSnapshot.visible && !nativeSnapshot.LocalPractice;
+            bool orbVisible = visible && nativeSnapshot?.orb != null && nativeOrb?.Ready == true;
+            if (nativeOrbImage != null) nativeOrbImage.style.display = orbVisible ? DisplayStyle.Flex : DisplayStyle.None;
             var progress = nativeStage == null ? 0 : nativeStage.Progress;
             bool pointVisible = nativePoints?.Visible == true || nativePoints?.EndpointTexture != null;
             // The Seed endpoint and reference badge share the authored art and chosen palette.
             bodyImage.image = seedTexture;
             if (firstLight && nativeAppearance == "proto") bodyTitle.text = "First Light · Proto expression";
             bodyImage.style.rotate = new Rotate(new Angle((float)seedMotion.Sample(Time.unscaledTimeAsDouble).angle));
-            bodyImage.style.opacity = visible && !pointVisible ? 1 - progress : 0;
+            bodyImage.style.opacity = visible && !pointVisible && !orbVisible ? 1 - progress : 0;
             if (nativeBodyImage != null) {
                 nativeBodyImage.image = pointVisible ? (nativePoints.EndpointTexture != null ? (UnityEngine.Texture)nativePoints.EndpointTexture : nativePoints.Texture) : nativeStage?.Texture;
-                nativeBodyImage.style.opacity = visible ? (pointVisible ? 1 : progress) : 0;
+                nativeBodyImage.style.opacity = visible && !orbVisible ? (pointVisible ? 1 : progress) : 0;
                 nativeBodyImage.pickingMode = nativePoints?.Inspection == true ? PickingMode.Position : PickingMode.Ignore;
             }
             if (nativeSnapshot?.LocalPractice == true) bodyTitle.text = "Local roster";
-            staff.style.display = visible && equipped ? DisplayStyle.Flex : DisplayStyle.None;
+            staff.style.display = visible && equipped && !orbVisible ? DisplayStyle.Flex : DisplayStyle.None;
             cueHalo.style.opacity = 0;
         }
 
         private void BuildNativeCompanion()
         {
+            if (nativeSnapshot?.orb != null) { BuildNativeOrbControls(); return; }
             if (nativeSnapshot?.LocalPractice == true) {
                 var practice = DetailCard("LOCAL ROSTER · THIS SESSION ONLY", "Enter the Resonance Garden");
                 practice.Add(Paragraph("Try the KIN and Proto character studies in Arena. These are local roster previews; no saved companion is created or changed.", 13));

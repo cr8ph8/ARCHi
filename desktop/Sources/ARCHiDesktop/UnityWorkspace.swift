@@ -60,6 +60,7 @@ struct UnityWorkspace: View {
                                     icon: "square.grid.3x3", identifier: "arena.return-to-arc") { store.openArena(.arc) }
                             }
                             QiMonLocalGameCard()
+                            OrbRoomControls(store: store)
                             arenaCard
                             if connection.isSharing { sessionStatus }
                             if connection.isSharing { WorldOutcomeCard(connection: connection) }

@@ -1,3 +1,13 @@
+## 28 October 2026 — Unified orb source candidate
+
+Adds an optional orb/room presentation through the existing native Unity snapshot and acknowledgment owners. Native assistant routing, reviewed dictation, identity, preferences, memory and development retain their existing owners. Closed room/navigation requests return through a current session/revision check; First Signal opens through its existing host, and Arena remains explicitly labeled practice. The verified SIGGRAPH Relay/Journey paths are reused; the separate complete SIGGRAPH and QiMon authoring trees were unavailable in this checkout.
+
+The same procedural orb and room-theme implementation serves the desktop renderer and a tracked-camera adapter. A development HTTPS transport projects the existing file protocol to a certificate-pinned, token-paired external renderer. It does not supply an XR SDK, an automated headset microphone/pairing UI or a packaged headset build.
+
+Executed here: 37 actual-source C# orb boundary/expression checks with an explicit test JSON shim, 10 HTTPS transport tests, 79 retained Relay/Journey/battle/presence tests, 24 source-preflight helper tests and the existing TypeScript/PWA production build. These are distinct suites, not headset or native rendering acceptance. Native owner tests and a focused Actions workflow are included; no macOS/Unity compile, actual speech playback, installed app or headset result is claimed by this entry. No live model calls or personal profiles were used.
+
+Reconcile this focused branch against the current authoring source before promotion. Current native/Unity compilation, shader import, target XR setup, real-room/stereo and end-to-end visible acceptance remain required. The generic release preflight's prior asset/review gates remain separate. See [implementation, setup and limits](docs/archi-orb-integration.md).
+
 ## 6 October 2026 — Shared particle physics and desktop area attention
 
 The Memory Map, floating companion and authenticated Liminal clusters use one session-bound particle-motion owner. Explicit window or normalized-area selection supplies temporary bounded attraction goals; release returns the same records through the shared simulation. Metadata following does not read window content, save a memory or award growth. Selected-image region drawing uses the same affine projection. Camera experiments are preserved outside the active application and are not shipped by this change.

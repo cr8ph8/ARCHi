@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>CS0649;SYSLIB0050</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../unity/ARCHi/Assets/ARCHi/Runtime/OrbPresentation.cs" />
+    <Compile Include="../../unity/ARCHi/Assets/ARCHi/Runtime/NativePresentationSnapshot.cs" />
+    <Compile Include="../../unity/ARCHi/Assets/ARCHi/Editor/OrbPresentationChecks.cs" />
+    <Compile Include="ProtocolHarness.cs" />
+  </ItemGroup>
+</Project>

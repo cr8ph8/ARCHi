@@ -2551,6 +2551,7 @@ final class CompanionStore: ObservableObject {
             status = "Finish or cancel voice input before sending. Your draft is unchanged."
             return false
         }
+        if unityPresentation.handleOrbCommand(question, store: self) { return true }
         if route.providers.contains(.qwen), !requireCurrentLocalPreferenceMemory() { return false }
         if !localConversationRequestIDs.isEmpty {
             do { try tokenSteward.refresh() } catch {

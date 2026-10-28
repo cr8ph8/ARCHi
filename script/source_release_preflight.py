@@ -27,6 +27,9 @@ ARC_REPLAY_FILES = {
 RELEASE_FILES = {"LICENSE", "ASSET_ATTRIBUTION.md", "THIRD_PARTY_NOTICES.md", "README.md", "docs/ALPHA_VALIDATION.md"}
 RELEASE_FILES.add("docs/native-qwen.md")
 EXACT = RELEASE_FILES | ARC_REPLAY_FILES | {
+    ".github/workflows/orb-validation.yml", "docs/archi-orb-integration.md",
+    "scripts/check_orb_protocol.py", "scripts/orb-session-bridge.mjs", "scripts/orb-session-bridge.test.mjs",
+    "scripts/orb-checks/.gitignore", "scripts/orb-checks/OrbChecks.csproj", "scripts/orb-checks/ProtocolHarness.cs",
     ".gitignore", ".postcssrc.json", "index.html", "tsconfig.json", "package.json", "package-lock.json",
     "desktop/Package.swift", "shared/ARCHiSpatial/Package.swift", "desktop/README.md", "arc/README.md", "arc/tsconfig.json",
     "script/native_build_identity.py", "scripts/tests/test_native_build_identity.py",
