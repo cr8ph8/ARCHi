@@ -206,7 +206,8 @@ class FirstSignalPreflightTests(unittest.TestCase):
         copy = shutil.copytree
         def corrupt(*args, **kwargs):
             result = copy(*args, **kwargs)
-            (Path(args[1]) / "index.html").write_bytes(b"broken copy")
+            if Path(args[0]) == self.bundled:
+                (Path(args[1]) / "index.html").write_bytes(b"broken copy")
             return result
         with patch.object(guard.shutil, "copytree", side_effect=corrupt):
             with self.assertRaisesRegex(ValueError, "copy does not match"):
@@ -219,7 +220,10 @@ class FirstSignalPreflightTests(unittest.TestCase):
         copy = shutil.copytree
         def mutate(*args, **kwargs):
             result = copy(*args, **kwargs)
-            (self.bundled / "index.html").write_bytes(b"changed after copy")
+            # shutil recursively calls its own module-level copytree. Mutate
+            # only after the entire root copy, independent of readdir order.
+            if Path(args[0]) == self.bundled:
+                (self.bundled / "index.html").write_bytes(b"changed after copy")
             return result
         with patch.object(guard.shutil, "copytree", side_effect=mutate):
             with self.assertRaisesRegex(ValueError, "resources changed"):

@@ -331,6 +331,7 @@ swift "$REPO_ROOT/script/inspect_first_signal_selection.swift" > "$PLAY_STAGE/fi
 python3 "$REPO_ROOT/script/first_signal_preflight.py" verify --repo "$REPO_ROOT" \
     --selection "$PLAY_STAGE/first-signal-selection-final.json" --plan "$FIRST_SIGNAL_PLAN" \
     --candidate "$INSTALL_STAGE/$APP_NAME.app"
+require_selected_app_stopped
 PREVIOUS_BUNDLE=""
 if [[ -n "$STAGE_DIR" && ( -e "$APP_DIR" || -L "$APP_DIR" ) ]]; then
     echo "The reserved staging destination now contains an app. Nothing was replaced; choose a new --stage-dir." >&2

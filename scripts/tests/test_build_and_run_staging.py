@@ -21,7 +21,13 @@ name = pathlib.Path(sys.argv[0]).name
 with open(os.environ["ARCHI_TEST_TRACE"], "a") as log:
     log.write(json.dumps([name] + sys.argv[1:]) + "\n")
 if name == "pgrep":
+    marker = os.environ.get("ARCHI_TEST_APP_OPENED")
+    if marker and pathlib.Path(marker).exists():
+        print("42")
+        sys.exit(0)
     sys.exit(1)
+if name == "ps":
+    print(os.environ.get("ARCHI_TEST_RUNNING_APP", ""))
 if name == "open":
     sys.exit(90)
 if name == "PlistBuddy":
@@ -41,6 +47,11 @@ if name == "mv":
     os.execv("/bin/mv", ["mv"] + sys.argv[1:])
 if name == "swift":
     if len(sys.argv) > 1 and sys.argv[1].endswith("inspect_first_signal_selection.swift"):
+        marker = os.environ.get("ARCHI_TEST_APP_OPENED")
+        if marker:
+            events = [json.loads(line) for line in pathlib.Path(os.environ["ARCHI_TEST_TRACE"]).read_text().splitlines()]
+            if sum(event[0] == "swift" and len(event) > 1 and event[1].endswith("inspect_first_signal_selection.swift") for event in events) == 2:
+                pathlib.Path(marker).write_text("synthetic app opened during final preflight")
         print(pathlib.Path(os.environ["ARCHI_TEST_SELECTION"]).read_text())
         sys.exit(0)
     if "--version" in sys.argv:
@@ -376,6 +387,18 @@ print("b"*64)
                 result = self.run_script(*flags)
                 self.assertEqual(result.returncode, 2)
                 self.assertFalse(self.trace.exists())
+
+    def test_app_opened_during_final_preflight_is_rechecked_before_promotion(self):
+        stage = self.root / "opened-during-preflight"
+        result = self.run_script("--stage-only", "--stage-dir", stage, extra_env={
+            "ARCHI_TEST_APP_OPENED": str(self.root / "synthetic-running-marker"),
+            "ARCHI_TEST_RUNNING_APP": str(stage / "ARCHi.app/Contents/MacOS/ARCHiDesktop")})
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("ARCHi is still running", result.stderr)
+        self.assertFalse((stage / "ARCHi.app").exists())
+        commands = [json.loads(line)[0] for line in self.trace.read_text().splitlines()]
+        self.assertNotIn("mv", commands)
+        self.assertNotIn("open", commands)
 
     def test_source_change_during_build_stops_before_outer_sign_or_promotion(self):
         source = self.root / "repo/shared/ARCHiSpatial/Sources/Fixture.swift"
