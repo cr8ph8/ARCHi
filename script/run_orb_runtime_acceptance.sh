@@ -107,21 +107,4 @@ else
     exit "$ARCHI_EXIT"
 fi
 
-python3 - "$ARCHI_OUTPUT" <<'PY'
-import json, pathlib, sys
-directory = pathlib.Path(sys.argv[1])
-receipt_path = directory / 'acceptance.json'
-try:
-    receipt = json.loads(receipt_path.read_text())
-except (OSError, ValueError) as error:
-    sys.exit(f'Unity exited without a readable acceptance receipt: {error}')
-if (receipt.get('schema') != 'archi-orb-room-runtime-acceptance/v1'
-        or receipt.get('passed') is not True
-        or receipt.get('failedAssertions') != 0
-        or not isinstance(receipt.get('passedAssertions'), int)
-        or receipt['passedAssertions'] < 1
-        or receipt.get('errors') != []):
-    sys.exit(f'Orb runtime acceptance did not pass: {receipt_path}')
-print(f'Orb runtime acceptance passed: {receipt_path}')
-print('Review the PNG captures. Native app input, installed-player behavior and device performance remain separate checks.')
-PY
+python3 "$ARCHI_REPO/script/orb_runtime_receipt.py" --repo "$ARCHI_REPO" --output "$ARCHI_OUTPUT"

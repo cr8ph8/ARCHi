@@ -5,6 +5,8 @@ on:
       - 'desktop/**'
       - 'unity/ARCHi/Assets/ARCHi/**'
       - 'scripts/*orb*'
+      - 'script/*orb*'
+      - 'scripts/tests/test_orb_runtime_acceptance.py'
       - 'scripts/orb-checks/**'
       - '.github/workflows/orb-validation.yml'
   workflow_dispatch:
@@ -23,6 +25,8 @@ jobs:
           dotnet-version: '8.0.x'
       - run: npm ci --ignore-scripts
       - run: python3 scripts/check_orb_protocol.py
+      - name: Check synthetic runtime evidence and launcher failure boundaries
+        run: python3 -m unittest scripts.tests.test_orb_runtime_acceptance -v
       - run: node --test scripts/orb-session-bridge.test.mjs
       - run: npx vitest run src/companion-activities/broken-relay.test.ts src/journey-activity.test.ts src/battle-engine.test.ts src/presence-sequence.test.ts
       - run: npm run build
