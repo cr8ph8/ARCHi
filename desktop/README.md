@@ -16,6 +16,13 @@ The latest [native method workflow](../docs/native-memory-dashboard.md#from-a-co
 
 ## Build and launch
 
+Run `python3 script/check_local_system.py` from the repository root for a
+read-only prerequisite and installed-build inspection. It checks source identity,
+tooling, resource requirements and installed bundle metadata without launching
+ARCHi, contacting a model or reading a profile. A static inspection cannot qualify
+an installed workflow; see [local system readiness](../docs/local-system-readiness.md)
+for the remaining runtime and installation gates.
+
 For model configuration without opening the interface, see locked-screen maintenance (local reference). The prepared executable can inspect saved model settings or queue a verified local-model change for its next native launch. This leaves the currently running companion session intact.
 
 Building requires macOS 14+ and Xcode's Swift toolchain. The Swift package uses the existing local `shared/ARCHiSpatial` package and has no remote SwiftPM dependencies. Local Qwen assistance needs installed Ollama and a supported installed model; ARCHi starts or reuses that local runtime automatically. The companion and local ARC solver run without a model connection. See [Native Qwen and bounded fallback](../docs/native-qwen.md).
@@ -27,6 +34,12 @@ Export any working draft, keep the choices you want to retain, and **Quit ARCHi 
 ```
 
 The script updates the single `/Applications/ARCHi.app`, preserving the existing Review bundle identifier and profile ownership. `--review` is a compatibility alias; it does not create another personal app. The script retains the installed Unity helper, or requires `--unity-player /path/to/qualified-player.app` for a first installation. It refuses to replace any running ARCHi session and preserves the previous bundle for recovery. Normal updates now keep rollback bundles in `~/Library/Application Support/ARCHiRecovery/Rollbacks`, outside Applications. See [one-app operation and recovery](../docs/one-app-system.md).
+
+The optional Reactor runtime is copied from the authoring runtime when present,
+otherwise preserved from the installed app. A selected runtime with a missing or
+unusable Python executable stops packaging before promotion. If neither source
+contains the optional runtime, it remains absent; packaging never downloads it
+or starts a Reactor session.
 
 Use `--stage-only --stage-dir /private/tmp/unique-candidate-directory` to build a candidate without replacing or launching the installed app. Generated build products use `/private/tmp/archi-desktop-build-<user-id>`; `ARCHI_BUILD_SCRATCH_PATH` can select another scratch directory. `--verify` also runs the native test suite. These locally signed builds are not notarized distribution releases. Reopen the installed app normally instead of rebuilding just to open it.
 

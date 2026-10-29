@@ -330,9 +330,110 @@ print("b"*64)
         info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
         self.assertEqual(info["CFBundleIdentifier"], "com.quotient.archi.desktop.review")
         self.assertEqual(info["ARCHiReactorPython"], str(app.resolve() / "Contents/Resources/ReactorRuntime/bin/python3"))
+        self.assertFalse((app / "Contents/Resources/ReactorRuntime").exists(), "An absent optional runtime stays absent")
         self.assertEqual(stage.stat().st_mode & 0o777, 0o700)
         self.assertNotIn("open", [json.loads(line)[0] for line in self.trace.read_text().splitlines()])
         self.assertEqual(sorted(p.name for p in stage.iterdir()), ["ARCHi.app"])
+
+    def reactor_runtime_fixture(self, root, label):
+        (root / "bin").mkdir(parents=True)
+        (root / "bin/python3").write_bytes(b"synthetic interpreter: " + label)
+        (root / "bin/python3").chmod(0o755)
+        (root / "lib").mkdir()
+        (root / "lib/runtime-data").write_bytes(b"synthetic runtime data: " + label)
+        return {str(path.relative_to(root)): path.read_bytes() for path in root.rglob("*") if path.is_file()}
+
+    def test_installed_reactor_runtime_is_preserved_in_new_stage(self):
+        runtime = self.installed / "Contents/Resources/ReactorRuntime"
+        expected = self.reactor_runtime_fixture(runtime, b"installed")
+        stage = self.root / "reactor-preservation"
+        result = self.run_script("--stage-only", "--stage-dir", stage)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        copied = stage / "ARCHi.app/Contents/Resources/ReactorRuntime"
+        actual = {str(path.relative_to(copied)): path.read_bytes() for path in copied.rglob("*") if path.is_file()}
+        self.assertEqual(actual, expected)
+        self.assertTrue(os.access(copied / "bin/python3", os.X_OK))
+        self.assertEqual({str(path.relative_to(runtime)): path.read_bytes() for path in runtime.rglob("*") if path.is_file()}, expected)
+        self.assertEqual((self.installed / "Contents/MacOS/ARCHiDesktop").read_bytes(), b"working app fixture")
+
+    def test_installed_reactor_runtime_survives_synthetic_install_and_rollback_copy(self):
+        runtime = self.installed / "Contents/Resources/ReactorRuntime"
+        expected = self.reactor_runtime_fixture(runtime, b"installed")
+        # Use the real rollback helper, with only its home root confined to this
+        # fixture. This never changes HOME or accesses the user's recovery store.
+        fixture_home = self.root / "fixture-home"
+        fixture_home.mkdir()
+        rollback = (SCRIPT.parent / "app_rollback_destination.py").read_text()
+        self.assertEqual(rollback.count("Path.home()"), 1)
+        (self.script.parent / "app_rollback_destination.py").write_text(
+            rollback.replace("Path.home()", f"Path({str(fixture_home)!r})"))
+        result = self.run_script("--build-only")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((self.installed / "Contents/MacOS/ARCHiDesktop").read_bytes(), b"synthetic native program")
+        self.assertEqual({str(path.relative_to(runtime)): path.read_bytes() for path in runtime.rglob("*") if path.is_file()}, expected)
+        previous = list((fixture_home / "Library/Application Support/ARCHiRecovery/Rollbacks").glob("*/ARCHi.app"))
+        self.assertEqual(len(previous), 1)
+        self.assertEqual((previous[0] / "Contents/MacOS/ARCHiDesktop").read_bytes(), b"working app fixture")
+        preserved = previous[0] / "Contents/Resources/ReactorRuntime"
+        self.assertEqual({str(path.relative_to(preserved)): path.read_bytes() for path in preserved.rglob("*") if path.is_file()}, expected)
+        self.assertNotIn("open", [json.loads(line)[0] for line in self.trace.read_text().splitlines()])
+
+    def test_authoring_reactor_runtime_keeps_precedence_and_copies_launcher_by_value(self):
+        installed_runtime = self.installed / "Contents/Resources/ReactorRuntime"
+        original = self.reactor_runtime_fixture(installed_runtime, b"installed")
+        source = self.root / "repo/output/creative-tools/reactor/runtime"
+        expected = self.reactor_runtime_fixture(source, b"authoring")
+        interpreter = self.root / "external-fixture-python"
+        (source / "bin/python3").rename(interpreter)
+        (source / "bin/python3").symlink_to(interpreter)
+        stage = self.root / "reactor-authoring"
+        result = self.run_script("--stage-only", "--stage-dir", stage)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        copied = stage / "ARCHi.app/Contents/Resources/ReactorRuntime"
+        self.assertEqual({str(path.relative_to(copied)): path.read_bytes() for path in copied.rglob("*") if path.is_file()}, expected)
+        self.assertFalse((copied / "bin/python3").is_symlink())
+        self.assertTrue(os.access(copied / "bin/python3", os.X_OK))
+        self.assertTrue((source / "bin/python3").is_symlink())
+        self.assertEqual({str(path.relative_to(installed_runtime)): path.read_bytes() for path in installed_runtime.rglob("*") if path.is_file()}, original)
+
+    def test_malformed_selected_reactor_runtime_blocks_promotion(self):
+        installed_runtime = self.installed / "Contents/Resources/ReactorRuntime"
+        source = self.root / "repo/output/creative-tools/reactor/runtime"
+        before = (self.installed / "Contents/MacOS/ARCHiDesktop").read_bytes()
+        for origin in ("installed", "authoring"):
+            for fault in ("missing-interpreter", "non-executable", "directory-interpreter", "dangling-root"):
+                with self.subTest(origin=origin, fault=fault):
+                    for existing in (source, installed_runtime):
+                        if existing.is_symlink():
+                            existing.unlink()
+                        elif existing.exists():
+                            shutil.rmtree(existing)
+                    selected = installed_runtime if origin == "installed" else source
+                    if origin == "authoring":
+                        self.reactor_runtime_fixture(installed_runtime, b"valid fallback must not hide a broken selected source")
+                    selected.parent.mkdir(parents=True, exist_ok=True)
+                    if fault == "dangling-root":
+                        selected.symlink_to(self.root / "absent-runtime")
+                    else:
+                        self.reactor_runtime_fixture(selected, b"invalid")
+                        interpreter = selected / "bin/python3"
+                        if fault == "non-executable":
+                            interpreter.chmod(0o644)
+                        else:
+                            interpreter.unlink()
+                            if fault == "directory-interpreter":
+                                interpreter.mkdir()
+                    self.trace.unlink(missing_ok=True)
+                    stage = self.root / (origin + "-" + fault)
+                    result = self.run_script("--stage-only", "--stage-dir", stage)
+                    self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                    self.assertIn("selected Reactor runtime", result.stderr)
+                    self.assertFalse((stage / "ARCHi.app").exists())
+                    self.assertEqual((self.installed / "Contents/MacOS/ARCHiDesktop").read_bytes(), before)
+                    events = [json.loads(line)[0] for line in self.trace.read_text().splitlines()]
+                    self.assertNotIn("mv", events)
+                    self.assertNotIn("open", events)
+                    self.assertNotIn("identity-observed-at-outer-sign", events)
 
     def test_identity_is_bound_after_packaging_before_signing_and_promotion(self):
         stage = self.root / "identity-review"
