@@ -351,6 +351,10 @@ final class UnityPresentationTests: XCTestCase {
     }
 
     @MainActor func testProtoExpressionPreservesIdentitySeedGrowthAndExplicitPreferenceSave() async throws {
+        // Fail before starting a synthetic store when the reviewed artwork is unavailable.
+        _ = try XCTUnwrap(CompanionVisualAsset.protoImage,
+            "Required Proto artwork is missing or invalid: CompanionArt/\(CompanionVisualAsset.protoFilename).png "
+                + "(SHA-256 \(CompanionVisualAsset.protoDigest)). Restore the qualified asset before testing Proto appearance.")
         let fixture = try makeFixture()
         defer { fixture.clean() }
         let store = fixture.store
@@ -367,7 +371,6 @@ final class UnityPresentationTests: XCTestCase {
         XCTAssertEqual(seed, CompanionPresenceArt.png(form: .kinSeed, family: nil, treatment: .protoStudy))
         XCTAssertEqual(CompanionVisualAsset.appearanceID(form: .kinSeed, family: nil, treatment: .original),
             CompanionVisualAsset.appearanceID(form: .kinSeed, family: nil, treatment: .protoStudy))
-        XCTAssertNotNil(CompanionVisualAsset.protoImage)
         XCTAssertNotEqual(CompanionPresenceArt.png(form: .kin, family: nil),
             CompanionPresenceArt.png(form: .kin, family: nil, treatment: .protoStudy))
         let request = try retainLessonUse(store)
