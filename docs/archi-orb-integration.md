@@ -51,12 +51,52 @@ This implements the registered 3D room adapter and shared particle body. `OrbSpa
 
 Use the existing Unity 6000.5.4f1 Built-in project and normal authoring/build workflow. No render-pipeline or package migration is included.
 
-1. Run the existing Unity preparation/validation and build helper (`script/build_unity_port.sh`). Orb protocol and room-navigation checks are part of `ARCHiPortBuild` validation, along with import/support checks for all three orb shaders. The helper advertises `ARCHiOrbPresentationVersion = 1` in the Mac player bundle; this local interaction update does not change the bridge schema.
-2. Run native focused tests, then stage the native candidate through the existing `script/build_and_run.sh --stage-only --stage-dir <new-directory>` workflow. Preserve the installed app and its normal Quit/rollback rules.
+1. Run the isolated room acceptance below, then the existing Unity preparation/validation and build helper (`script/build_unity_port.sh`). Orb protocol and room-navigation checks are part of `ARCHiPortBuild` validation, along with import/support checks for all three orb shaders. The helper advertises `ARCHiOrbPresentationVersion = 1` in the Mac player bundle; this local interaction update does not change the bridge schema.
+2. Run native focused tests, then stage the native candidate through the existing `script/build_and_run.sh --stage-only --stage-dir <new-directory> --unity-player <exact-new-player.app>` workflow. Supplying the exact player prevents an older installed helper from standing in for this change. Preserve the installed app and its normal Quit/rollback rules.
 3. In Arena, the ARCHi Orb card opens the new view. Old helpers remain usable for their existing features but do not falsely advertise an orb.
 4. Select a room object, run one exploration tour, return home and verify Pause/Resume before changing themes. Use existing Ask ARCHi dictation and optionally read completed replies. Quiet, Reduce Motion, Stop, profile change and shutdown retain their native behavior.
 
 This candidate has not been built or installed on the authoring Mac. Source tests are not installation or visible acceptance.
+
+## Isolated Unity runtime acceptance
+
+The opt-in `OrbRoomRuntimeValidation` runner exercises the real `OrbRoomStage`, `OrbBody` and `OrbParticleBody` in an empty Play Mode scene. It uses a synthetic session and the procedural room, so it does not require the withheld Proto or Liminal artwork. The whole Unity project must still import and compile successfully. It does not create the native bridge, load a profile or invoke the desktop app.
+
+On the machine with the pinned Unity **6000.5.4f1** Editor and a working graphics device, run from the reconciled authoring source:
+
+```sh
+bash script/run_orb_runtime_acceptance.sh
+```
+
+The launcher writes each run to a fresh directory beneath `output/orb-runtime-acceptance/`, with an adjacent Editor log. `--editor /absolute/path/to/Unity` selects another installed copy of the pinned version; `--output /absolute/new/run-directory` selects a fresh evidence directory. It does not download Unity. It refuses existing output and source-directory destinations, propagates an unsuccessful Editor exit, and requires a passing `acceptance.json` even if Unity exits with status zero. A ten-minute external timeout also covers failures before the runner starts.
+
+The Editor menu entry **ARCHi / Orb / Validate Room Runtime** runs the same fixture. Preserve unsaved scenes before using the menu: the runner refuses to discard or save them. It temporarily clears any Play Mode start-scene override, uses an empty scene, and restores the prior scene setup and Editor settings after normal completion or handled failure. Use the launcher for unattended runs and keep graphics enabled; `-quit` would interrupt the asynchronous run and `-nographics` cannot qualify rendering.
+
+The runner produces an `archi-orb-room-runtime-acceptance/v1` receipt and frame captures. Its checks cover:
+
+- Shader support and diagnostics, room texture creation and the actual particle mesh/material.
+- RGB frame differences with the particle renderer enabled and disabled at a frozen pose, so an opaque room alone cannot satisfy the rendering check.
+- The four registered targets, target approach and attention, room-local movement clearance, and programmatic viewport picking.
+- Theme/activity updates retaining position and navigation, pause holding the body and shader clock, and one exploration tour ending at home.
+- Invalidated targets, stale references, changed sessions and stopped presentation clearing local attention.
+- Repeated creation/destruction with real frame yields and release of the owned mesh, materials and render texture.
+
+These are programmatic room-renderer checks. Pointer/keyboard delivery through the real UI, native Stop/expiry delivery, app speech, visual quality and target-device performance still need the built app. Screenshot readback establishes a rendered image; it does not establish a performance budget or acceptable art direction. A receipt records only the machine and source exercised by that run.
+
+After a passing receipt and image review, build a new player into the build helper's evidence directory, then stage the native candidate with that exact player:
+
+```sh
+bash script/build_unity_port.sh \
+  -archiBuildOutput "$PWD/output/unity-port-2026-09-16/ARCHi-Orb-NEW.app"
+
+bash script/build_and_run.sh --stage-only \
+  --stage-dir /private/tmp/archi-orb-review-NEW \
+  --unity-player "$PWD/output/unity-port-2026-09-16/ARCHi-Orb-NEW.app"
+```
+
+Replace both `NEW` destinations with fresh paths and retain the applicable existing resource-qualification arguments from the authoring workflow. Full player/native builds still require their qualified artwork and resources. `--stage-only` creates a review candidate without installing or launching it; `--build-only` is not a substitute because that path still installs. Follow [First Signal installation safeguards](first-signal-installation-safeguard.md) and inspect the candidate's resource and build-identity receipts before app acceptance.
+
+The runner and launcher were authored in the Linux source workspace. The launch attempt there stops because the pinned Editor is absent; no real Unity acceptance receipt or capture is claimed. Run the command above in the Unity environment to obtain that evidence.
 
 ## Headset development connection
 
@@ -98,6 +138,7 @@ Executed for the spatial particle update in the Linux code workspace:
 - Actual pure orb/navigation runtime compiles as C# 9 against .NET Standard 2.1 references with warnings treated as errors.
 - A separate temporary Unity/UI adapter compile checks the source integration of the body, particles, theme, stage and room controls. This is a syntax check, not a compile against Unity assemblies or a rendering test.
 - All 10 existing HTTPS transport tests pass, including session expiry, duplicate delivery, certificate pinning and closed action routes.
+- The runtime-acceptance launcher passes eight isolated command/receipt checks, including missing Editor, existing output, source-directory output, unsuccessful process status, and missing/failed receipts. The subprocess fixture is synthetic; it does not stand in for Unity rendering. All 25 existing source-export preflight tests pass with the launcher added to the explicit export scope.
 
 The preceding orb integration also recorded 79 retained Relay/Journey/battle/presence tests and the TypeScript/PWA production build. Those earlier results do not establish this update's visible Unity behavior. The existing Actions workflow reruns its protocol, transport, TypeScript and native subsets on a pull request.
 
