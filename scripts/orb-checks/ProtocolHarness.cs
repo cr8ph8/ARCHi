@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 
 ARCHi.Port.Editor.OrbPresentationChecks.Run();
+ARCHi.Port.Editor.OrbRoomNavigationChecks.Run();
 
 namespace UnityEngine
 {

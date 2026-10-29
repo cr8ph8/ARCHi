@@ -56,7 +56,9 @@ namespace ARCHi.Port
             var notice = root.Q<Label>("port-connection-notice");
             if (notice != null) notice.text = local ? "Local roster · this visit only" : "Your companion · connected to ARCHi";
             var explanation = root.Q<Label>("body-preview-explanation");
-            if (explanation != null) explanation.text = "The same companion, here and on your desktop.";
+            if (explanation != null) explanation.text = nativeSnapshot?.orb != null
+                ? "Select a room object to highlight it and guide ARCHi."
+                : "The same companion, here and on your desktop.";
             var comfortNote = root.Q<Label>("comfort-note");
             if (comfortNote != null) comfortNote.text = "Follows your desktop settings. Escape pauses motion.";
             var nameLabel = root.Q<Label>("kin-greeting");
@@ -218,7 +220,7 @@ namespace ARCHi.Port
         private void ResumeNativeMotion()
         {
             nativeStopped = false;
-            if (nativeSnapshot?.orb != null) nativeOrb?.Apply(nativeSnapshot.orb, nativeSnapshot.activity, NativeStaticMotion, nativeSnapshot.visible);
+            if (nativeSnapshot?.orb != null) ConfigureNativeOrb();
             nativePoints?.Freeze(NativeStaticMotion);
             seedMotion.Apply(nativeSnapshot?.lightMode ?? "rest", NativeStaticMotion, Time.unscaledTimeAsDouble);
             if (nativeSnapshot != null) nativeStage?.Apply(firstLight, NativeStaticMotion, nativeSnapshot.lightMode, false);
@@ -233,6 +235,7 @@ namespace ARCHi.Port
             if (nativeSnapshot?.orb == null) nativeStage?.Tick(nativeSnapshot != null && nativeSnapshot.visible && (firstLight || nativeStage.Progress > 0));
             RefreshNativeVisuals();
             RefreshNativePointControls();
+            RefreshNativeOrbControls();
         }
 
         private void RefreshNativeVisuals()
@@ -240,7 +243,10 @@ namespace ARCHi.Port
             if (!NativeBound || bodyImage == null) return;
             var visible = nativeSnapshot != null && nativeSnapshot.visible && !nativeSnapshot.LocalPractice;
             bool orbVisible = visible && nativeSnapshot?.orb != null && nativeOrb?.Ready == true;
-            if (nativeOrbImage != null) nativeOrbImage.style.display = orbVisible ? DisplayStyle.Flex : DisplayStyle.None;
+            if (nativeOrbImage != null) {
+                nativeOrbImage.style.display = orbVisible ? DisplayStyle.Flex : DisplayStyle.None;
+                nativeOrbImage.pickingMode = NativeOrbInteractive ? PickingMode.Position : PickingMode.Ignore;
+            }
             var progress = nativeStage == null ? 0 : nativeStage.Progress;
             bool pointVisible = nativePoints?.Visible == true || nativePoints?.EndpointTexture != null;
             // The Seed endpoint and reference badge share the authored art and chosen palette.
@@ -254,6 +260,7 @@ namespace ARCHi.Port
                 nativeBodyImage.pickingMode = nativePoints?.Inspection == true ? PickingMode.Position : PickingMode.Ignore;
             }
             if (nativeSnapshot?.LocalPractice == true) bodyTitle.text = "Local roster";
+            else if (orbVisible) bodyTitle.text = "ARCHi · Spatial room";
             staff.style.display = visible && equipped && !orbVisible ? DisplayStyle.Flex : DisplayStyle.None;
             cueHalo.style.opacity = 0;
         }

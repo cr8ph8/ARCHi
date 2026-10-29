@@ -131,6 +131,14 @@ public static class ARCHiPortBuild
             receipt.relayAssertions = ARCHi.Port.Editor.RelayPracticeChecks.Run();
             receipt.nativePresentationAssertions = ARCHi.Port.Editor.NativePresentationChecks.Run();
             receipt.nativePresentationAssertions += ARCHi.Port.Editor.OrbPresentationChecks.Run();
+            receipt.nativePresentationAssertions += ARCHi.Port.Editor.OrbRoomNavigationChecks.Run();
+            foreach (var resource in new[] { "Orb/OrbEnergy", "Orb/OrbParticles", "Orb/OrbRoomSurface" })
+            {
+                var shader = Resources.Load<Shader>(resource);
+                if (shader == null || !shader.isSupported || ShaderUtil.GetShaderMessages(shader).Length != 0)
+                    throw new InvalidOperationException("The orb shader must import without diagnostics: " + resource);
+                receipt.nativePresentationAssertions++;
+            }
             receipt.status = "EDITOR_SCENE_VALIDATED_RUNTIME_NOT_EXERCISED";
             WriteReceipt(receipt, "scene-validation");
             Debug.Log("ARCHI_PORT_SCENE_VALIDATED " + StartupScene);
