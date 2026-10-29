@@ -36,9 +36,14 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - run: xcodebuild -version
       - run: swift --version
-      - run: swift test --package-path desktop --filter OrbPresentationTests
-      - run: swift test --package-path desktop --filter UnityPresentationTests
+      - name: Check native orb contracts
+        id: orb_native
+        run: swift test --package-path desktop --filter OrbPresentationTests
+      - name: Check Unity presentation and artwork contracts
+        run: swift test --package-path desktop --filter UnityPresentationTests
       - name: Check existing graph and geometry contracts
+        # Keep independent results visible after a presentation failure; the job still fails.
+        if: ${{ !cancelled() && steps.orb_native.outcome == 'success' }}
         run: >-
           swift test --package-path desktop
           --filter 'CompanionGraphTests|LiminalGraphMorphTests|LiminalSurfaceLightTests/testExpression|KnowledgeParticleFieldTests/test(Stable|Topology|Framing|Focus|Endpoint|Caps|SharedDisplay|Reviewed|SeedKeeps)|VelaRenderingTests/testReduceMotion'

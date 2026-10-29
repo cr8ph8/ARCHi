@@ -112,6 +112,26 @@ swift test --package-path desktop --filter OrbPresentationTests
 swift test --package-path desktop --filter UnityPresentationTests
 ```
 
+### Proto artwork prerequisite
+
+The curated source omits some later artwork. At `54eb82d2745f47de4c23b08fbe2687b46388a7ae`, the [native CI job](https://github.com/cr8ph8/ARCHi/actions/runs/40830728651/job/123304087448) passed all five `OrbPresentationTests`, then reported five assertions in `testProtoExpressionPreservesIdentitySeedGrowthAndExplicitPreferenceSave` because the qualified Proto portrait was unavailable. The native loader correctly fell back to KIN; the test required a real Proto appearance. These assertions did not establish five separate orb defects.
+
+The Proto appearance test now unwraps its artwork prerequisite before creating a synthetic companion store. Missing or invalid artwork remains a test failure, with the resource name and current loader digest in the diagnostic. When artwork qualifies, the existing identity, Seed, growth, appearance and explicit preference-save assertions still run. Neither the production fallback nor its asset qualification changes.
+
+The published loader requires:
+
+- Resource: `desktop/Sources/ARCHiDesktop/Resources/CompanionArt/archi-proto-blender-v1.png`.
+- SHA-256: `f64051b207446340c9e813c35e89087afc6fac068ca0d7ec38d22d86e56ac688`.
+- One decodable 512 × 512 PNG image, with a byte count greater than zero and strictly less than 1,400,000.
+
+SwiftPM tests load the module's `CompanionArt` resource; a packaged app loads its own `Contents/Resources/CompanionArt`. An image elsewhere on the Mac does not meet that prerequisite. Restore the exact reviewed resource through the existing authoring/publication process, then rerun the focused tests above. [Asset attribution](../ASSET_ATTRIBUTION.md) records the withheld originals and pending redistribution review. The authored originals and metadata-sanitized publication assets have separately reviewed pins in [source parity policy](source-parity-policy.json); do not replace authored pins with publication pins or accept both digests to force a pass. The existing `script/package_companion_supplement.py` qualifies approved inputs for a separate generated bundle; it does not recover missing artwork or authorize publication.
+
+The orb workflow now runs its existing graph/geometry step after a presentation failure, provided the earlier native orb checks succeeded and the workflow has not been cancelled. A failed presentation step still fails the job. This preserves the prerequisite while making independent check results visible; it does not turn missing artwork into a skip or a passing Proto result.
+
+Use the [First Signal installation safeguard](first-signal-installation-safeguard.md) for the later authoring handoff. This diagnostic change neither supplies the missing portrait nor qualifies Unity rendering, the existing chapter build or installed save continuity.
+
+### Runtime acceptance
+
 Native tests are authored for the macOS owner boundary. Unity shader/API compilation, Play Mode, actual macOS speech playback, room scanning, stereo rendering, tracking loss, recentering, on-device frame time and an installed end-to-end workflow still require their real environments. No headset performance, native build or full-game integration result is inferred from protocol tests. The optional Actions workflow runs protocol and native focused checks; a passing run must be verified separately.
 
 For the particle update's visible acceptance, verify all four named objects through both pointer and keyboard controls; no selection through walls or UI letterbox gutters; the complete orb and rings clearing furniture; one tour returning home; theme/reply updates preserving movement; Pause/Quiet/Reduce Motion preserving a static frame; target removal and session loss clearing highlights; and resource cleanup on repeated open/close. Test the built player and tracked-camera host separately, including stereo and target-device frame time where applicable.
