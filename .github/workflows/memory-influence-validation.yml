@@ -82,5 +82,11 @@ jobs:
         run: >-
           swift test --package-path desktop
           --filter 'ContextualMemoryInfluenceTests|MemoryInfluenceIntegrationTests|KeptLessonsTests|LessonStoreTests|KeptLessonRequestTests|CoreMemoryFreshnessTests|HamptonMethodOutcomesTests|HamptonMethodResourceOutcomesTests|ReadingCorrectionMemoryTests|LiminalSurfaceLightTests/testExpression'
+      - name: Check bounded Q2E mathematics and active domain consumers
+        run: >-
+          swift test --package-path desktop
+          --filter 'HamptonNumericalDynamicsTests|HamptonQ2EOutcomeAdapterTests|HamptonNumericalDocumentControlTests|HamptonNumericalReadingControlTests|HamptonNumericalARC3ControlTests|HamptonArenaAdviceTests'
+      - name: Check shared spatial geometry and source identity
+        run: swift test --package-path shared/ARCHiSpatial --filter ImageRegionTests
       # Synthetic records only. No app install, provider call, live profile,
       # artwork-dependent qualification or game save is accessed by this job.

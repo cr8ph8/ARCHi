@@ -27,7 +27,10 @@ ARC_REPLAY_FILES = {
 RELEASE_FILES = {"LICENSE", "ASSET_ATTRIBUTION.md", "THIRD_PARTY_NOTICES.md", "README.md", "docs/ALPHA_VALIDATION.md"}
 RELEASE_FILES.add("docs/native-qwen.md")
 EXACT = RELEASE_FILES | ARC_REPLAY_FILES | {
+    "CONTRIBUTING.md",
     ".github/workflows/orb-validation.yml", "docs/archi-orb-integration.md",
+    ".github/workflows/memory-influence-validation.yml",
+    "script/check_local_system.py", "scripts/tests/test_local_system_readiness.py", "docs/local-system-readiness.md",
     "scripts/check_orb_protocol.py", "scripts/orb-session-bridge.mjs", "scripts/orb-session-bridge.test.mjs",
     "scripts/orb-checks/.gitignore", "scripts/orb-checks/OrbChecks.csproj", "scripts/orb-checks/ProtocolHarness.cs",
     ".gitignore", ".postcssrc.json", "index.html", "tsconfig.json", "package.json", "package-lock.json",
@@ -50,7 +53,7 @@ EXACT = RELEASE_FILES | ARC_REPLAY_FILES | {
     "arc/fixtures/smoke/synthetic-increment-001.json", "arc/fixtures/portable/smoke-evaluation-v1.json",
     "arc/fixtures/portable/third-rate-evaluation-v1.json", "arc/fixtures/golden/third-rate-evidence-v1.json",
     "docs/native-arc-capabilities.md", "docs/native-arc-solving.md", "docs/native-arc-workspace-integration.md", "docs/native-arc-qwen-proposals.md", "docs/active-arc-assistant.md", "docs/active-arc3.md", "docs/active-document-work.md", "script/test_arc3_bridge.py", "docs/native-marketplace.md", "script/build_and_run.sh",
-    "script/build_unity_port.sh", "script/source_release_preflight.py",
+    "script/build_unity_port.sh", "script/run_orb_runtime_acceptance.sh", "script/source_release_preflight.py",
     "script/prepare_source_candidate.py", "script/archive_source_candidate.py",
     "scripts/tests/test_prepare_source_candidate.py", "scripts/tests/test_archive_source_candidate.py",
     "scripts/tests/test_source_release_preflight.py", "scripts/archi-reactor-mcp.py",

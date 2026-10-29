@@ -27,6 +27,13 @@ For broader retained TypeScript verification with Node.js 24 and npm:
     npm ci
     npm run check
 
+The combined check also runs the archived ARC replay qualification. That replay
+requires the exact Darwin arm64 Node executable and dependencies recorded in
+`scripts/arc-replay-pins.json`; Node 24 alone is insufficient. On other hosts,
+report its prerequisite failure separately and run the remaining source tests
+and build independently. Do not weaken or repin the archived qualification to
+obtain a passing result. See [local system readiness](docs/local-system-readiness.md).
+
 For native source on macOS 14+ with Swift 6 and the macOS SDK:
 
     swift build --package-path desktop --scratch-path "/private/tmp/archi-desktop-build-$(id -u)"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile/run the actual orb C# boundary checks with an explicit test-only JSON adapter.
+"""Compile/run orb C# boundary, navigation and viewport checks with a test-only JSON adapter.
 
 This does not compile Unity rendering APIs, shaders, or the native macOS target.
 The direct SDK compiler invocation also works on hosts where dotnet CLI telemetry
@@ -28,8 +28,10 @@ def main():
         parser.error("The selected dotnet installation must include the .NET 8 SDK and runtime.")
     root = Path(__file__).resolve().parents[1]
     sources = ["unity/ARCHi/Assets/ARCHi/Runtime/OrbPresentation.cs",
+               "unity/ARCHi/Assets/ARCHi/Runtime/OrbRoomNavigation.cs",
                "unity/ARCHi/Assets/ARCHi/Runtime/NativePresentationSnapshot.cs",
-               "unity/ARCHi/Assets/ARCHi/Editor/OrbPresentationChecks.cs", "scripts/orb-checks/ProtocolHarness.cs"]
+               "unity/ARCHi/Assets/ARCHi/Editor/OrbPresentationChecks.cs",
+               "unity/ARCHi/Assets/ARCHi/Editor/OrbRoomNavigationChecks.cs", "scripts/orb-checks/ProtocolHarness.cs"]
     with tempfile.TemporaryDirectory(prefix="archi-orb-checks-") as folder:
         output = Path(folder) / "OrbChecks.dll"
         options = ["/nologo", "/target:exe", "/langversion:latest", "/warnaserror+", "/nowarn:0649,SYSLIB0050", "/out:" + str(output)]

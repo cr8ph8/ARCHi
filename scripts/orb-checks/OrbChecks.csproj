@@ -8,8 +8,10 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../unity/ARCHi/Assets/ARCHi/Runtime/OrbPresentation.cs" />
+    <Compile Include="../../unity/ARCHi/Assets/ARCHi/Runtime/OrbRoomNavigation.cs" />
     <Compile Include="../../unity/ARCHi/Assets/ARCHi/Runtime/NativePresentationSnapshot.cs" />
     <Compile Include="../../unity/ARCHi/Assets/ARCHi/Editor/OrbPresentationChecks.cs" />
+    <Compile Include="../../unity/ARCHi/Assets/ARCHi/Editor/OrbRoomNavigationChecks.cs" />
     <Compile Include="ProtocolHarness.cs" />
   </ItemGroup>
 </Project>

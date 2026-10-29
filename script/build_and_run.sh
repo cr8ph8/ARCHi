@@ -256,10 +256,21 @@ fi
 # never waits on a repository-local pyvenv.cfg or site-packages privacy prompt.
 REACTOR_SOURCE_RUNTIME="$REPO_ROOT/output/creative-tools/reactor/runtime"
 REACTOR_APP_RUNTIME="$APP_DIR/Contents/Resources/ReactorRuntime"
-if [[ -x "$REACTOR_SOURCE_RUNTIME/bin/python3" ]]; then
+if [[ ! -e "$REACTOR_SOURCE_RUNTIME" && ! -L "$REACTOR_SOURCE_RUNTIME" ]]; then
+    # A native-only checkout need not contain the authoring runtime. Retain the
+    # installed helper instead of silently removing an available connection.
+    REACTOR_SOURCE_RUNTIME="/Applications/ARCHi.app/Contents/Resources/ReactorRuntime"
+fi
+if [[ -e "$REACTOR_SOURCE_RUNTIME" || -L "$REACTOR_SOURCE_RUNTIME" ]]; then
+    [[ -d "$REACTOR_SOURCE_RUNTIME" && -f "$REACTOR_SOURCE_RUNTIME/bin/python3" && -x "$REACTOR_SOURCE_RUNTIME/bin/python3" ]] || {
+        echo "The selected Reactor runtime has no usable Python executable. Nothing was installed." >&2; exit 2;
+    }
     # Copy interpreter launchers by value: signed app bundles cannot contain
     # symlinks escaping to the external Python framework.
     cp -RL "$REACTOR_SOURCE_RUNTIME" "$BUNDLE_DIR/Contents/Resources/ReactorRuntime"
+    [[ -f "$BUNDLE_DIR/Contents/Resources/ReactorRuntime/bin/python3" && -x "$BUNDLE_DIR/Contents/Resources/ReactorRuntime/bin/python3" ]] || {
+        echo "The copied Reactor runtime has no usable Python executable. Nothing was installed." >&2; exit 2;
+    }
 fi
 cat > "$BUNDLE_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
