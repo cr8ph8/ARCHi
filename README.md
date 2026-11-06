@@ -43,6 +43,8 @@ To check the retained TypeScript source separately, use Node.js 24 or later and 
 
 The public package commands operate on the included source. Private development research and accountability records are not build dependencies.
 
+The optional [visual influence evaluation](research/visual-influence/README.md) prepares synthetic text or image conditions and collects bounded results from an explicitly selected local Ollama model. `npm run visual:test` runs offline harness checks using Node.js 24 and Python 3; it makes no real model calls. The native boundary tests require the macOS toolchain separately. This developer experiment does not add image forwarding to ARCHi, execute generated code, or certify semantic accuracy or native admission from a strategy-choice result.
+
 The [source-check workflow template](docs/source-checks.yml.example) verifies the complete checksum manifest and retained TypeScript on Linux, then compiles Swift and runs selected deterministic domain tests on macOS. It uses official actions pinned to commits, read-only repository permissions, no artifact upload and no live providers or native visual tests. It is not enabled: the publishing credential lacks GitHub workflow permission. A maintainer with that permission can place this template at `.github/workflows/source-checks.yml` in a later commit, refresh the source checksums, and run it. Local validation results are recorded separately.
 
 ## Try the Unity companion/play source
