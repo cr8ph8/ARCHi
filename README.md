@@ -21,6 +21,8 @@ The exported source passed retained TypeScript checks and fresh native compilati
 
 The [architecture](docs/ARCHITECTURE.md) identifies the existing owners and boundaries. [Node Lab](docs/NODE_LAB.md) explains the inspection surface. The Unity preview's Seed badge is a stationary reference, not an implemented following cursor or 3D rig.
 
+Node Lab's [Representations & peers](docs/PEER_REPRESENTATIONS.md) surface adds typed particle, graph, neural and pixel references, an offline gossip example and explicitly reviewed local graph-inspection reports. This source increment does not add network discovery or distributed writes; native build and UI qualification remain separate from the portable core checks.
+
 ## Build the native desktop app
 
 Native build requirements are macOS 14 or later and a Swift 6 toolchain with the macOS SDK. From the repository root:

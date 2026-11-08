@@ -25,14 +25,35 @@ extension CompanionStore {
 @MainActor
 struct CompanionGraphWorkspace: View {
     @ObservedObject var store: CompanionStore
+    @State private var selectedSurface = Surface.records
+
+    private enum Surface: String, CaseIterable, Identifiable {
+        case records = "Records"
+        case peers = "Representations & peers"
+        var id: String { rawValue }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Expiry gets a bounded refresh even when no other store event occurs.
-            // This clock does not animate nodes or invoke any model.
-            TimelineView(.periodic(from: .now, by: 30)) { context in
-                CompanionGraphView(snapshot: store.companionGraphSnapshot(at: context.date),
-                    onOpen: store.openGraphTarget)
+            Picker("Node Lab view", selection: $selectedSurface) {
+                ForEach(Surface.allCases) { surface in
+                    Text(surface.rawValue).tag(surface)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 440)
+            .padding(.horizontal, 20).padding(.vertical, 10)
+            .accessibilityIdentifier("node-lab.surface")
+
+            if selectedSurface == .records {
+                // Expiry gets a bounded refresh even when no other store event occurs.
+                // This clock does not animate nodes or invoke any model.
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    CompanionGraphView(snapshot: store.companionGraphSnapshot(at: context.date),
+                        onOpen: store.openGraphTarget)
+                }
+            } else {
+                CompanionPeerWorkspace(store: store)
             }
             HStack(spacing: 10) {
                 Label("Assistant: " + store.assistantActivity.title,

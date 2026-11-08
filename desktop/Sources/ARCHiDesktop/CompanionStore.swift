@@ -118,6 +118,9 @@ final class CompanionStore: ObservableObject {
     @Published private(set) var desktopInterestExternalDigest: String?
     @Published var sourceName: String?
     @Published var sourceRevision: UInt64 = 0
+    /// Session-only peer observations and read-only reports; never a saved graph,
+    /// memory owner, provider route, or authority for external work.
+    @Published var peerLab = CompanionPeerLabState()
     @Published private(set) var textSelection: DocumentSelection?
     @Published private(set) var replySourceSelection: DocumentSelection?
     @Published private(set) var spatialPreview: SpatialPreview?
@@ -907,6 +910,7 @@ final class CompanionStore: ObservableObject {
     }
 
     func cancelWork(reason: String = "Stopped.") {
+        cancelPeerInspection(reason: reason)
         voiceInput.cancel()
         stopKinLightPreview()
         stopHarmonyTheme()
@@ -1392,6 +1396,7 @@ final class CompanionStore: ObservableObject {
     }
 
     private func cancelLocalWork(reason: String) {
+        cancelPeerInspection(reason: reason)
         let hadLocalWork = replyOwners[.qwen] != nil
         cancelLane(.qwen, reason: reason)
         if hadLocalWork && !isWorking && route == .local { workGeneration &+= 1 }
@@ -1606,6 +1611,13 @@ final class CompanionStore: ObservableObject {
 
     func contextTicket() -> ContextTicket {
         ContextTicket(generation: workGeneration, placement: placementRevision, source: sourceRevision, selection: selectionRevision)
+    }
+
+    /// Reuse the owner's injected clocks. Presentation clocks and remote dates
+    /// cannot extend an inspection permit or restore retired request ownership.
+    func peerInspectionTime() -> TimeInterval { monotonicTime() }
+    func peerInspectionGraph() -> CompanionGraphSnapshot {
+        companionGraphSnapshot(at: wallClock())
     }
 
     /// Only the native document and window adapters supply observations. A reply

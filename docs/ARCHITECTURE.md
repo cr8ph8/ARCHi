@@ -10,6 +10,8 @@ Selection, proposals and Apply bind to the current working-copy revision. The ex
 
 Node Lab derives nodes and links from current native source metadata, kept lessons, temporary records and lane receipts. Provider/request scope keeps repeated reference labels distinct. Historical metadata cannot restore withdrawn lesson text. The graph is an inspection/navigation projection with bounded input and output; it creates no persistence, model calls, agent swarm or inferred relationship database.
 
+Its optional Representations & peers surface keeps typed artifact references and gossip observations separate from authority. Four in-process fixture workers demonstrate bounded relaying and evidence-preserving deduplication. A separate explicitly requested worker inspects only the current graph's metadata. CompanionStore binds that attempt to the existing source/context revisions and clocks, and acceptance appends only a session report. No transport, peer authentication, model execution or saved-state mutation is added. See [peer representations](PEER_REPRESENTATIONS.md).
+
 CompanionEvolution, saved preferences/lessons and the retained game's Journey have distinct existing retention boundaries. Recovery controls do not make temporary replies or the shared working copy durable. Inspect and export wanted work before restore or quit experiments.
 
 The current native desktop build does not start the retained WebKit Habitat/Arena. The Journey and battle reducers, Relay and the native/TypeScript bridge remain in source with their tests. They are not replaced by a second authoritative game save in Unity.

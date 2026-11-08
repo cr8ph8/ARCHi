@@ -20,6 +20,12 @@ For native source on macOS 14+ with Swift 6 and the macOS SDK:
     swift build --package-path desktop
     swift test --package-path desktop
 
+The representation/peer core also has a focused portable Swift 6 harness:
+
+    script/test_representation_peers.sh
+
+Set `SWIFT_BIN` to an absolute Swift executable path if needed. It tests the same Foundation-only source and XCTest file in a disposable package outside the checkout. It does not qualify the native adapter or SwiftUI presentation; those still require the Mac checks above.
+
 The [CI workflow template](docs/source-checks.yml.example) uses a smaller deterministic native subset suitable for unattended runners. It is not enabled because the current publishing credential lacks workflow permission. The full suite intentionally skips opt-in tests whose external or windowed prerequisites are absent. Report skips separately. Do not enable live-provider, real-profile or native capture tests merely to make a skipped count smaller; use explicitly chosen synthetic fixtures and required permissions when validating those paths.
 
 The [Unity guide](unity/ARCHi/README.md) covers the pinned Editor, build helper and explicit smoke runner. A build is separate from runtime interaction, accessibility, long-session and distribution qualification.
