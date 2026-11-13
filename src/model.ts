@@ -818,7 +818,7 @@ export function commitRelayCompletion(
     throw new Error("This Relay completion is stale because the Journey changed.");
   }
   if (previous) return journey;
-  return appendJourneyEvent(canonical, {
+  return commitJourneyOperation(canonical, {
     kind: "activity-complete", activityId: "broken-relay", rulesVersion: 1, sessionId: reviewed.sessionId, actions: reviewed.actions,
   }, now);
 }
@@ -841,7 +841,7 @@ export function commitPracticeCompletion(journey: Journey, attempt: PracticeAtte
     throw new Error("A different completion already uses this practice ID.");
   }
   if (attempt.baseRevision !== revisionForJourney(canonical)) throw new Error("The Journey changed. Start a fresh practice before keeping another result.");
-  return appendJourneyEvent(canonical, { kind: "practice-complete", originDigest: attempt.originDigest,
+  return commitJourneyOperation(canonical, { kind: "practice-complete", originDigest: attempt.originDigest,
     baseRevision: attempt.baseRevision, sessionId: attempt.sessionId, replay: verified.replay }, now);
 }
 
@@ -896,7 +896,7 @@ export function serializeJourney(journey: Journey): string {
   });
 }
 
-function appendJourneyEvent(journey: Journey, payload: JourneyEventPayload, requestedAt: string): Journey {
+function makeJourneyEvent(journey: Journey, payload: JourneyEventPayload, requestedAt: string): JourneyEvent {
   if (!isIsoTimestamp(requestedAt)) throw new Error("A journey event requires a canonical timestamp.");
   const committedAt = monotonicTimestamp(journey.updatedAt, requestedAt);
   const sequence = journey.events.length + 1;
@@ -919,7 +919,139 @@ function appendJourneyEvent(journey: Journey, payload: JourneyEventPayload, requ
           signals: [...payload.signals],
           generator: payload.generator,
         };
-  return reduceJourneyEvent(journey, event);
+  return event;
+}
+
+function appendJourneyEvent(journey: Journey, payload: JourneyEventPayload, requestedAt: string): Journey {
+  return reduceJourneyEvent(journey, makeJourneyEvent(journey, payload, requestedAt));
+}
+
+/** Owner-created evidence for one already authorized action; never a permission token. */
+export interface JourneyTransitionContract {
+  readonly schema: "archi-journey-transition/v1";
+  readonly originDigest: string;
+  readonly baseRevision: string;
+  readonly beforeAuthority: string;
+  readonly expectedEvent: string;
+}
+
+export interface JourneyTransitionCheck {
+  readonly id: "contract" | "snapshot" | "identity" | "history" | "requested-effect" | "scope" | "replay" | "projection";
+  readonly status: "PASS" | "FAIL" | "ERROR";
+}
+
+/** Reject accessors/cycles without executing them during the postcondition check. */
+function continuityData(value: unknown, ancestors = new Set<object>(), depth = 0): boolean {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value !== "object" || depth > 32 || ancestors.has(value)) return false;
+  const isArray = Array.isArray(value);
+  if (isArray ? !denseDataArray(value) : !plainDataRecord(value)) return false;
+  ancestors.add(value);
+  const result = Object.values(Object.getOwnPropertyDescriptors(value)).every((descriptor) =>
+    "value" in descriptor && continuityData(descriptor.value, ancestors, depth + 1));
+  ancestors.delete(value);
+  return result;
+}
+
+function journeyProjectionTuple(journey: Journey): readonly unknown[] {
+  return [journey.version, journey.id, journey.seed, journey.createdAt, journey.updatedAt,
+    journey.plays, journey.bond, journey.expression, ROLE_ORDER.map((role) => journey.affinities[role]),
+    journey.careStartedAt, journey.care, provenanceTuple(journey.provenance), journey.core];
+}
+
+/**
+ * A synchronous semantic guard in the current Journey owner. It derives every
+ * check itself, accepts no submitted PASS flags, and writes no state. Persistence,
+ * browser locks, cancellation and explicit user review remain in the caller.
+ * Replay shares the production reducer; scope/effect checks are separate checks,
+ * not an independent implementation or a quantum fault-tolerance claim.
+ */
+export function verifyJourneyTransition(
+  before: Journey, candidate: Journey, contract: JourneyTransitionContract,
+): Readonly<{ accepted: boolean; checks: readonly JourneyTransitionCheck[] }> {
+  return verifyJourneyTransitionWithBase(before, candidate, contract);
+}
+
+function verifyJourneyTransitionWithBase(
+  before: Journey, candidate: Journey, contract: JourneyTransitionContract, validatedOriginal?: Journey,
+): Readonly<{ accepted: boolean; checks: readonly JourneyTransitionCheck[] }> {
+  const checks: JourneyTransitionCheck[] = [];
+  const check = (id: JourneyTransitionCheck["id"], predicate: () => boolean): void => {
+    let status: JourneyTransitionCheck["status"];
+    try { status = predicate() ? "PASS" : "FAIL"; }
+    catch { status = "ERROR"; }
+    checks.push(Object.freeze({ id, status }));
+  };
+  let inputsAreData = false;
+  let original: Journey | null = null;
+  let expected: JourneyEvent | null = null;
+  let replayed: Journey | null = null;
+  check("contract", () => {
+    inputsAreData = continuityData(before) && continuityData(candidate) && continuityData(contract);
+    if (!inputsAreData || !exactDataRecord(contract, ["schema", "originDigest", "baseRevision", "beforeAuthority", "expectedEvent"]) ||
+        contract.schema !== "archi-journey-transition/v1" || typeof contract.originDigest !== "string" ||
+        typeof contract.baseRevision !== "string" || typeof contract.beforeAuthority !== "string" ||
+        typeof contract.expectedEvent !== "string") return false;
+    const authority = JSON.parse(contract.beforeAuthority);
+    original = validatedOriginal ?? hydrateJourney(authority);
+    expected = JSON.parse(contract.expectedEvent) as JourneyEvent;
+    return original !== null && original.events.length === authority.events.length && continuityData(expected) &&
+      ["care-action", "play-commit", "activity-complete", "practice-complete"].includes(expected.kind);
+  });
+  const bound = (): boolean => inputsAreData && checks[0]?.status === "PASS" && original !== null && expected !== null;
+  check("snapshot", () => bound() && serializeJourney(before) === contract.beforeAuthority &&
+    revisionForJourney(before) === contract.baseRevision && journeyOriginSha256(before) === contract.originDigest &&
+    JSON.stringify(journeyProjectionTuple(before)) === JSON.stringify(journeyProjectionTuple(original!)));
+  check("identity", () => bound() && journeyOriginSha256(candidate) === contract.originDigest &&
+    candidate.id === original!.id && JSON.stringify(candidate.core) === JSON.stringify(CORE_CONTINUITY));
+  check("history", () => bound() && candidate.events.length === original!.events.length + 1 &&
+    JSON.stringify(candidate.events.slice(0, -1)) === JSON.stringify(original!.events));
+  check("requested-effect", () => bound() && JSON.stringify(candidate.events.at(-1)) === contract.expectedEvent);
+  check("scope", () => {
+    if (!bound() || !exactDataRecord(candidate, ["version", "id", "seed", "createdAt", "updatedAt", "plays", "bond",
+        "expression", "affinities", "careStartedAt", "care", "provenance", "events", "core"]) ||
+        !exactDataRecord(candidate.affinities, ROLE_ORDER) ||
+        !exactDataRecord(candidate.care, ["energy", "calm", "curiosity", "updatedAt"])) return false;
+    const kind = expected!.kind;
+    const unchanged = (keys: readonly (keyof Journey)[]): boolean =>
+      keys.every((key) => JSON.stringify(candidate[key]) === JSON.stringify(original![key]));
+    return unchanged(["id", "seed", "createdAt", "careStartedAt", "provenance", "core"]) &&
+      (kind === "care-action" || unchanged(["care"])) &&
+      (kind === "play-commit" || unchanged(["plays", "bond", "expression", "affinities"])) &&
+      ((kind === "activity-complete" || kind === "practice-complete") || unchanged(["version"]));
+  });
+  check("replay", () => {
+    if (!bound() || checks.find((entry) => entry.id === "history")?.status !== "PASS") return false;
+    // Induction over the verified prefix: unchanged old events plus one checked
+    // new event verifies the complete chain without replaying every old battle.
+    replayed = replayJourneyEvent(original!, candidate.events.at(-1), candidate.version >= 4, candidate.version === 5);
+    return replayed !== null && replayed.events.length === candidate.events.length &&
+      serializeJourney(replayed) === serializeJourney(candidate);
+  });
+  check("projection", () => bound() && replayed !== null &&
+    JSON.stringify(journeyProjectionTuple(candidate)) === JSON.stringify(journeyProjectionTuple(replayed)));
+  return Object.freeze({ accepted: checks.every((entry) => entry.status === "PASS"), checks: Object.freeze(checks) });
+}
+
+function commitJourneyOperation(journey: Journey, payload: JourneyEventPayload, requestedAt: string): Journey {
+  // Every caller has already obtained this base from canonicalJourneyForCommit.
+  // A detached copy preserves its projections even if a faulty reducer mutates
+  // the input. This proof is private; submitted data cannot mark itself verified.
+  const validatedOriginal = structuredClone(journey);
+  const event = makeJourneyEvent(journey, payload, requestedAt);
+  // Capture immutable values before the reducer runs. Neither an altered event
+  // nor a mutation of the supplied base can rewrite this operation's contract.
+  const contract: JourneyTransitionContract = Object.freeze({
+    schema: "archi-journey-transition/v1", originDigest: journeyOriginSha256(journey),
+    baseRevision: revisionForJourney(journey), beforeAuthority: serializeJourney(journey), expectedEvent: JSON.stringify(event),
+  });
+  const candidate = reduceJourneyEvent(journey, event);
+  const result = verifyJourneyTransitionWithBase(journey, candidate, contract, validatedOriginal);
+  if (!result.accepted) {
+    throw new Error(`Journey continuity check did not pass: ${result.checks.filter((entry) => entry.status !== "PASS").map((entry) => entry.id).join(", ")}.`);
+  }
+  return candidate;
 }
 
 function reduceJourneyEvent(journey: Journey, event: JourneyEvent): Journey {
@@ -1079,7 +1211,7 @@ export function commitCareAction(
   }
   if (!isIsoTimestamp(now)) throw new Error("A care choice requires a canonical timestamp.");
 
-  return appendJourneyEvent(canonicalJourney, { kind: "care-action", action: intent.action }, now);
+  return commitJourneyOperation(canonicalJourney, { kind: "care-action", action: intent.action }, now);
 }
 
 function replayLegacyCareTrace(
@@ -1760,7 +1892,7 @@ export function commitSession(
   const signals = session.collected
     .map((id) => canonical.echoes.find((echo) => echo.id === id)?.aura)
     .filter((aura): aura is AuraId => Boolean(aura));
-  return appendJourneyEvent(
+  return commitJourneyOperation(
     canonicalJourney,
     {
       kind: "play-commit",

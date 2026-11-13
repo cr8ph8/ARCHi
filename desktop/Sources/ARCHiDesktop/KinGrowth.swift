@@ -33,6 +33,12 @@ struct KinGrowthRecord: Codable, Equatable, Identifiable, Sendable {
         Self(id: id, originDigest: originDigest, active: active, receipt: receipt)
     }
 
+    /// Uses the complete retained reference, including its request binding. This
+    /// projection is never persisted and cannot recreate the referenced lesson.
+    var continuityRecord: KinGrowthContinuity<EvolutionUsefulReceipt>.Record {
+        .init(id: id, originDigest: originDigest, active: active, evidence: receipt)
+    }
+
     private enum CodingKeys: String, CodingKey { case version, id, originDigest, active, receipt }
     private struct InputKey: CodingKey {
         let stringValue: String
