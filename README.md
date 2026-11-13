@@ -4,6 +4,8 @@ ARCHi is a local-first macOS companion with text assistance, explicitly kept les
 
 **Source Alpha update · package version 0.7.0.** The earlier [September 7 source Alpha](https://github.com/cr8ph8/ARCHi/releases/tag/v0.7.0-alpha.1) remains available at its original tag. This update has separate exported-source checks and is not a Beta release. See [validation and remaining work](docs/ALPHA_VALIDATION.md). No notarized installer, model weights, commerce service or release date is included.
 
+[Continuity during transformation](docs/CONTINUITY_UNDER_TRANSFORMATION.md) checks the exact requested body or Journey transition while preserving identity and retained history. See its [executed checks and native handoff](docs/CONTINUITY_VALIDATION.md); native installation and the separately authored QiMon game remain distinct qualification steps.
+
 The exported source passed retained TypeScript checks and fresh native compilation. The full native run reported **594 XCTest cases, including 31 skipped, with zero failures**; Swift Testing separately reported **234 tests in 28 suites passed**, with the installed-worker public preflight explicitly skipped. These reporting systems are not added into one pass total. A separate focused selection passed **76 checks with zero failures/skips**, including native UI fixtures. The exported native candidate passed plist and local signature verification without installation or launch. The Unity build/runtime was not rerun from this export, and native ordinary-use acceptance remains separate.
 
 ## Current source

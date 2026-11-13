@@ -12,6 +12,8 @@ Node Lab derives nodes and links from current native source metadata, kept lesso
 
 CompanionEvolution, saved preferences/lessons and the retained game's Journey have distinct existing retention boundaries. Recovery controls do not make temporary replies or the shared working copy durable. Inspect and export wanted work before restore or quit experiments.
 
+[Continuity during transformation](CONTINUITY_UNDER_TRANSFORMATION.md) adds exact requested-effect checks inside EvolutionStore's body transitions and the retained Journey's four commit paths. These checks preserve origin, retained history and allowed changes while existing owners retain authorization, cancellation and persistence. They implement bounded classical postconditions; they add no quantum runtime or new save owner.
+
 The current native desktop build does not start the retained WebKit Habitat/Arena. The Journey and battle reducers, Relay and the native/TypeScript bridge remain in source with their tests. They are not replaced by a second authoritative game save in Unity.
 
 The [Unity source project](../unity/ARCHi/README.md) uses bundled KIN artwork, session-only equipment/cues and a pure C# Relay practice domain. The runtime is explicitly disconnected from saved KIN, does not own assistant clients, does not write native memories, and uses a stationary Seed reference badge. A future native/Unity handoff needs a defined contract through these existing owners.

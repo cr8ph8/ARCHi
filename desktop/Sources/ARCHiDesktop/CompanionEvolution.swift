@@ -468,16 +468,23 @@ final class EvolutionStore: ObservableObject {
             status = "That growth preview is no longer current. Review the useful moment and preview again."
             return false
         }
-        kinGrowthRecord = KinGrowthRecord(originDigest: candidate.originDigest, active: true, receipt: candidate.receipt)
-        changed("First Light kept as KIN’s body in this session. His Seed cursor stays available. Save evolution explicitly to restore this body choice later.")
-        return true
+        let check = KinGrowthContinuity<EvolutionUsefulReceipt>(
+            before: .init(originDigest: candidate.originDigest, revision: candidate.revision, record: nil),
+            effect: .keepFirstLight(id: candidate.id, evidence: candidate.receipt))
+        let next = KinGrowthRecord(id: candidate.id, originDigest: candidate.originDigest,
+            active: true, receipt: candidate.receipt)
+        return commitKinGrowth(next, checkedBy: check,
+            status: "First Light kept as KIN’s body in this session. His Seed cursor stays available. Save evolution explicitly to restore this body choice later.")
     }
 
     func returnKinToSeed(originDigest: String) {
         guard let origin = currentKinOrigin(originDigest), let record = kinGrowthRecord,
               record.originDigest == origin, record.active else { return }
-        kinGrowthRecord = record.settingActive(false)
-        changed("KIN’s body returned to Core Seed. His Seed cursor stays available, and the kept First Light choice remains. Save to retain this choice.")
+        let check = KinGrowthContinuity<EvolutionUsefulReceipt>(
+            before: .init(originDigest: origin, revision: revision, record: record.continuityRecord),
+            effect: .returnToSeed)
+        _ = commitKinGrowth(record.settingActive(false), checkedBy: check,
+            status: "KIN’s body returned to Core Seed. His Seed cursor stays available, and the kept First Light choice remains. Save to retain this choice.")
     }
 
     @discardableResult
@@ -487,8 +494,29 @@ final class EvolutionStore: ObservableObject {
             status = "There is no returned First Light choice for this individual."
             return false
         }
-        kinGrowthRecord = record.settingActive(true)
-        changed("KIN’s kept First Light body restored for this session. His Seed cursor stays available. This reuses the earlier choice, without claiming new lesson evidence. Save to retain it.")
+        let check = KinGrowthContinuity<EvolutionUsefulReceipt>(
+            before: .init(originDigest: origin, revision: revision, record: record.continuityRecord),
+            effect: .resumeFirstLight)
+        return commitKinGrowth(record.settingActive(true), checkedBy: check,
+            status: "KIN’s kept First Light body restored for this session. His Seed cursor stays available. This reuses the earlier choice, without claiming new lesson evidence. Save to retain it.")
+    }
+
+    /// Candidate construction and its requested effect are checked separately at
+    /// the existing mutation boundary. Rejection leaves the kept record intact;
+    /// successful changes still require the existing explicit Save action.
+    private func commitKinGrowth(_ candidate: KinGrowthRecord,
+                                 checkedBy check: KinGrowthContinuity<EvolutionUsefulReceipt>,
+                                 status nextStatus: String) -> Bool {
+        guard candidate.isValid,
+              let origin = currentKinOrigin(check.before.originDigest),
+              check.accepts(current: .init(originDigest: origin, revision: revision,
+                                          record: kinGrowthRecord?.continuityRecord),
+                            candidate: candidate.continuityRecord) else {
+            status = "That body change no longer matches this individual and the reviewed choice. Review the current body and try again."
+            return false
+        }
+        kinGrowthRecord = candidate
+        changed(nextStatus)
         return true
     }
 

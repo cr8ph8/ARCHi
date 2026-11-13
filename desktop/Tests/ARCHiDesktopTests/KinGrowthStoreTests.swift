@@ -23,6 +23,7 @@ final class KinGrowthStoreTests: XCTestCase {
         XCTAssertTrue(store.keepKinGrowth(proposal), store.status)
         let record = try XCTUnwrap(store.kinGrowthRecord)
         XCTAssertTrue(record.active)
+        XCTAssertEqual(record.id, proposal.id, "Keep binds the retained record to the exact reviewed proposal")
         XCTAssertEqual(record.originDigest, origin)
         XCTAssertEqual(record.receipt, receipt)
         XCTAssertNil(store.kinGrowthProposal)
@@ -51,6 +52,34 @@ final class KinGrowthStoreTests: XCTestCase {
         XCTAssertTrue(store.forget())
         XCTAssertNil(store.kinGrowthRecord)
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @MainActor
+    func testValidRecordShapeDoesNotAdmitAnUnrequestedContinuityChange() throws {
+        let store = EvolutionStore()
+        let receipt = try addUsefulLesson(to: store)
+        let proposal = try XCTUnwrap(store.proposeKinGrowth(originDigest: origin, receipt: receipt))
+        let before = KinGrowthContinuity<EvolutionUsefulReceipt>.Snapshot(
+            originDigest: origin, revision: proposal.revision, record: nil)
+        let check = KinGrowthContinuity<EvolutionUsefulReceipt>(before: before,
+            effect: .keepFirstLight(id: proposal.id, evidence: receipt))
+        let differentReference = EvolutionUsefulReceipt(requestID: UUID(), sourceDigest: receipt.sourceDigest,
+            requestBinding: receipt.requestBinding, lessonUse: receipt.lessonUse)
+        let unwanted = [
+            KinGrowthRecord(id: proposal.id, originDigest: foreignOrigin, active: true, receipt: receipt),
+            KinGrowthRecord(id: UUID(), originDigest: origin, active: true, receipt: receipt),
+            KinGrowthRecord(id: proposal.id, originDigest: origin, active: false, receipt: receipt),
+            KinGrowthRecord(id: proposal.id, originDigest: origin, active: true, receipt: differentReference)
+        ]
+        for candidate in unwanted {
+            XCTAssertTrue(candidate.isValid, "These faults pass the record's structural validator")
+            XCTAssertFalse(check.accepts(current: before, candidate: candidate.continuityRecord))
+        }
+        XCTAssertNil(store.kinGrowthRecord)
+        XCTAssertEqual(store.kinGrowthProposal, proposal)
+        XCTAssertEqual(store.revision, before.revision)
+        XCTAssertTrue(store.keepKinGrowth(proposal), "The exact reviewed choice still uses the existing owner")
+        XCTAssertEqual(store.kinGrowthRecord?.id, proposal.id)
     }
 
     @MainActor

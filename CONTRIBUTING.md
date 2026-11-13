@@ -8,6 +8,8 @@ Native Swift owns assistance, permissions, shared working copies, kept lessons a
 
 The Unity companion/play preview is disconnected from native saves. The retained TypeScript Journey/battle engine remains its existing source owner, and Habitat/Arena is disabled in the current native desktop build. Read [architecture](docs/ARCHITECTURE.md) before changing these boundaries. Source freshness, cancellation, explicit review and external-copy allowances belong in the current owners rather than parallel stores.
 
+For changes to companion form or Journey transitions, preserve the [continuity contract](docs/CONTINUITY_UNDER_TRANSFORMATION.md): bind the exact requested effect before constructing a candidate, retain the existing identity and history, and reject unrelated changes. A candidate passing schema checks does not establish that it performs the requested action. Extend the owner-side postconditions and negative tests when adding a new operation; do not let an optimizer, renderer or submitted PASS field bypass them.
+
 ## Local checks
 
 For retained TypeScript source with Node.js 24 and npm:
