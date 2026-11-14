@@ -735,12 +735,20 @@ final class EvolutionStore: ObservableObject {
     @discardableResult
     func load() -> Bool {
         guard persistenceAllowed else { return false }
-        guard let url = saveURL else { status = "No evolution save location is configured."; return false }
+        guard let url = saveURL else {
+            kinGrowthProposal = nil
+            status = "No evolution save location is configured."
+            return false
+        }
+        return loadEvolution(at: url, ifAbsent: noSavedEvolution)
+    }
+
+    private func loadEvolution(at url: URL, ifAbsent: () -> Bool) -> Bool {
         do {
             return try DesktopProfileLock.withLockIfDirectoryExists(at: url) {
                 try DesktopProfileBackup.requireNoJournal(url)
-                return loadSavedEvolution(at: url)
-            } ?? noSavedEvolution()
+                return loadSavedEvolution(at: url, ifAbsent: ifAbsent)
+            } ?? ifAbsent()
         } catch {
             status = "The saved evolution could not be loaded. \(boundedError(error))"
             return false
@@ -753,10 +761,10 @@ final class EvolutionStore: ObservableObject {
         return false
     }
 
-    private func loadSavedEvolution(at url: URL) -> Bool {
+    private func loadSavedEvolution(at url: URL, ifAbsent: () -> Bool) -> Bool {
         kinGrowthProposal = nil
         do {
-            guard try entryType(url) != nil else { return noSavedEvolution() }
+            guard try entryType(url) != nil else { return ifAbsent() }
             try admitSavedEvolution(readBounded(url))
             return true
         } catch {
@@ -789,23 +797,32 @@ final class EvolutionStore: ObservableObject {
     /// An explicitly absent Evolution member clears this session without a file
     /// deletion or another save; a present member uses the ordinary owner decoder.
     @discardableResult
+    func loadRestoredProfile(origin restoredOrigin: CompanionForm = .companion) -> Bool {
+        guard persistenceAllowed else { return false }
+        guard let url = saveURL else { status = "No evolution save location is configured."; return false }
+        return loadEvolution(at: url) { clearRestoredEvolution(origin: restoredOrigin) }
+    }
+
+    @discardableResult
     func loadRestoredProfile(_ bytes: Data?, origin restoredOrigin: CompanionForm = .companion) -> Bool {
         guard persistenceAllowed else { return false }
-        guard let bytes else {
-            clearForgottenSession()
-            origin = restoredOrigin
-            observedJourneyOriginDigest = nil
-            saveBaseline = nil
-            hasUnsavedChanges = false; requiresReplacement = false
-            status = "The restored profile has no saved evolution. Its development session is clear."
-            return true
-        }
+        guard let bytes else { return clearRestoredEvolution(origin: restoredOrigin) }
         do {
             try admitSavedEvolution(bytes)
             return true
         } catch {
             return reportInvalidSave(error)
         }
+    }
+
+    private func clearRestoredEvolution(origin restoredOrigin: CompanionForm) -> Bool {
+        clearForgottenSession()
+        origin = restoredOrigin
+        observedJourneyOriginDigest = nil
+        saveBaseline = nil
+        hasUnsavedChanges = false; requiresReplacement = false
+        status = "The restored profile has no saved evolution. Its development session is clear."
+        return true
     }
 
     private var persistenceAllowed: Bool {
