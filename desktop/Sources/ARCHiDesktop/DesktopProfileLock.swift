@@ -28,10 +28,25 @@ enum DesktopProfileLock {
     }
 
     static func withLockIfDirectoryExists<T>(at member: URL, _ operation: () throws -> T) throws -> T? {
+        try withOpenLock(at: member, forWriting: true, operation)
+    }
+
+    /// Capture profile bytes without creating files. The snapshot may be read twice.
+    static func read<T>(at member: URL, _ snapshot: () throws -> T) throws -> T {
+        if let saved = try withOpenLock(at: member, forWriting: false, snapshot) { return saved }
+        // A first writer creates the stable lock before touching either file.
+        // If it appeared during the read, discard that snapshot and read under it.
+        let first = Result(catching: snapshot)
+        if let saved = try withOpenLock(at: member, forWriting: false, snapshot) { return saved }
+        return try first.get()
+    }
+
+    private static func withOpenLock<T>(at member: URL, forWriting: Bool, _ operation: () throws -> T) throws -> T? {
         guard member.isFileURL else { throw Failure.invalidLocation }
         let lock = member.deletingLastPathComponent().appendingPathComponent(filename)
+        let access = forWriting ? O_RDWR | O_CREAT : O_RDONLY
         let descriptor = lock.path.withCString {
-            Darwin.open($0, O_RDWR | O_CREAT | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC, 0o600)
+            Darwin.open($0, access | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC, 0o600)
         }
         if descriptor < 0 {
             if errno == ENOENT { return nil }
@@ -42,7 +57,8 @@ enum DesktopProfileLock {
         var info = stat()
         guard fstat(descriptor, &info) == 0 else { throw posixError() }
         guard info.st_mode & S_IFMT == S_IFREG else { throw Failure.invalidLocation }
-        while flock(descriptor, LOCK_EX | LOCK_NB) != 0 {
+        let mode = forWriting ? LOCK_EX : LOCK_SH
+        while flock(descriptor, mode | LOCK_NB) != 0 {
             if errno == EINTR { continue }
             if errno == EWOULDBLOCK { throw Failure.busy }
             throw posixError()

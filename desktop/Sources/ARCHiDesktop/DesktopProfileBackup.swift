@@ -193,13 +193,14 @@ enum DesktopProfileBackup {
     }
 
     static func pendingRecovery(profile: ProfileKind, preferenceURL: URL) throws -> RecoveryPreview? {
-        try DesktopProfileLock.withLockIfDirectoryExists(at: preferenceURL) {
+        try DesktopProfileLock.read(at: preferenceURL) {
             try readPendingRecovery(profile: profile, preferenceURL: preferenceURL)
-        } ?? nil
+        }
     }
 
     static func recoverInterrupted(profile: ProfileKind, preferenceURL: URL) throws {
-        _ = try DesktopProfileLock.withLockIfDirectoryExists(at: preferenceURL) {
+        guard hasPendingJournal(preferenceURL: preferenceURL) else { return }
+        try DesktopProfileLock.withLock(at: preferenceURL) {
             if let pending = try readPendingRecovery(profile: profile, preferenceURL: preferenceURL) {
                 _ = try finishRecovery(pending)
             }
@@ -308,10 +309,10 @@ enum DesktopProfileBackup {
         guard !hasPendingJournal(preferenceURL: preferenceURL) else { throw Failure.recoveryRequired }
     }
     private static func readUninterruptedPair(_ preferenceURL: URL) throws -> Pair {
-        try DesktopProfileLock.withLockIfDirectoryExists(at: preferenceURL) {
+        try DesktopProfileLock.read(at: preferenceURL) {
             try requireNoJournal(preferenceURL)
             return try readPair(preferenceURL)
-        } ?? Pair(preferences: Entry(nil), evolution: Entry(nil))
+        }
     }
     private static func readPair(_ preferenceURL: URL) throws -> Pair {
         Pair(preferences: Entry(try read(preferenceURL, limit: NativePreferenceDocument.maximumBytes)),
