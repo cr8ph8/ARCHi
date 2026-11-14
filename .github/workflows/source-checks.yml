@@ -18,5 +18,4 @@ jobs:
         run: swift --version
       - name: Test profile writes and recovery
         run: >-
-          swift test --package-path desktop
-          --filter 'KeptLessonsTests|LessonStoreTests|DesktopRecoveryIntegrationTests|DesktopProfileBackupTests|DesktopProfileRecoveryTests|DesktopRetentionStateTests|EvolutionSaveConflictTests|MarketplacePersistenceTests'
+          swift test --package-path desktop --filter 'KeptLessonsTests|LessonStoreTests|DesktopRecoveryIntegrationTests|DesktopProfileBackupTests|DesktopProfileRecoveryTests|DesktopRetentionStateTests|EvolutionSaveConflictTests|EvolutionRequestBindingTests|MarketplacePersistenceTests'
