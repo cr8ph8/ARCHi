@@ -258,24 +258,33 @@ enum NativePreferenceError: LocalizedError {
 
 enum NativePreferencePersistence {
     static func read(_ url: URL) throws -> (document: NativePreferenceDocument, baseline: Data?) {
-        guard let data = try rawData(at: url) else { return (NativePreferenceDocument(), nil) }
+        let data = try DesktopProfileLock.read(at: url) {
+            try DesktopProfileBackup.requireNoJournal(url)
+            return try rawData(at: url)
+        }
+        guard let data else { return (NativePreferenceDocument(), nil) }
         return (try NativePreferenceDocument.decode(data), data)
     }
 
-    /// Compare the exact loaded bytes before writing and again immediately before
-    /// replacement. Existing state is published by the caller only after success.
-    /// This detects external edits; it is not a cross-process database transaction.
+    /// Check the exact loaded bytes and publish the replacement or deletion under
+    /// the same lock used by every ARCHi writer for this profile.
     @discardableResult
     static func write(document: NativePreferenceDocument, to url: URL, expected: Data?) throws -> Data? {
         let data = try document.encoded()
-        guard try rawData(at: url) == expected else { throw NativePreferenceError.conflict }
-        if document.preferences == nil && document.lessons.isEmpty && document.focusGesture == nil && document.qiMon == nil && document.itemLibrary.isEmpty {
-            if expected != nil { try FileManager.default.removeItem(at: url) }
-            return nil
+        return try DesktopProfileLock.withLock(at: url) {
+            try DesktopProfileBackup.requireNoJournal(url)
+            guard try rawData(at: url) == expected else { throw NativePreferenceError.conflict }
+            if document.preferences == nil && document.lessons.isEmpty && document.focusGesture == nil && document.qiMon == nil && document.itemLibrary.isEmpty {
+                if expected != nil { try FileManager.default.removeItem(at: url) }
+                return nil
+            }
+            try replace(data, at: url, expected: expected)
+            return data
         }
+    }
+
+    private static func replace(_ data: Data, at url: URL, expected: Data?) throws {
         let directory = url.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700])
         let temporary = directory.appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).tmp")
         let descriptor = temporary.path.withCString { Darwin.open($0, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600) }
         guard descriptor >= 0 else { throw posixError() }
@@ -300,7 +309,6 @@ enum NativePreferencePersistence {
         guard try rawData(at: url) == expected else { throw NativePreferenceError.conflict }
         let replaced = temporary.path.withCString { source in url.path.withCString { target in Darwin.rename(source, target) } }
         guard replaced == 0 else { throw posixError() }
-        return data
     }
 
     private static func rawData(at url: URL) throws -> Data? {

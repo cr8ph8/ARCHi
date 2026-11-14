@@ -451,13 +451,18 @@ final class CompanionStore: ObservableObject {
             itemLibrary = loaded.document.itemLibrary
             lessonRevision = loaded.document.revision
         } catch {
+            switch error {
+            case DesktopProfileLock.Failure.busy, DesktopProfileBackup.Failure.recoveryRequired:
+                profileRecoveryBlock = error.localizedDescription
+            default: break
+            }
             preferenceFileReadable = false
             lessonMessage = "The saved settings file could not be read. It has been preserved; reopen after restoring a valid file before saving."
         }
         let initialPreferences = preferenceDocument.preferences
         self.evolution = EvolutionStore(origin: initialPreferences?.form ?? .companion,
             saveURL: resolvedPreferenceURL.deletingPathExtension().appendingPathExtension("evolution.json"))
-        self.evolution.persistenceBlockedReason = startupRecoveryBlock
+        self.evolution.persistenceBlockedReason = profileRecoveryBlock
         if let saved = initialPreferences {
             preferences = saved
             rememberPreferences = true
@@ -1957,7 +1962,7 @@ extension CompanionStore {
                     break
                 }
             }
-            lessonMessage = "Could not save: \(error.localizedDescription) Previous saved choices are unchanged."
+            lessonMessage = "Could not save: \(error.localizedDescription)"
             status = lessonMessage
             return false
         }
@@ -1996,10 +2001,11 @@ extension CompanionStore {
             lessonRevision: lessonRevision, evolutionRevision: evolution.revision)
     }
 
-    /// The caller has already verified the restored pair and retained rollback.
-    /// No provider invocation, new identity, or save is performed during reload.
-    func admitRestoredProfile() throws {
-        let loaded = try NativePreferencePersistence.read(preferenceURL)
+    /// Admit the installed pair from the restore report, or take one coherent
+    /// snapshot after recovery. The existing owners still validate their bytes.
+    func admitRestoredProfile(_ restoredFiles: DesktopProfileBackup.SavedFiles? = nil) throws {
+        let files = try restoredFiles ?? DesktopProfileBackup.readSavedFiles(preferenceURL: preferenceURL)
+        let document = try files.preferences.map(NativePreferenceDocument.decode) ?? NativePreferenceDocument()
         cancelWork(reason: "Saved profile restored. Earlier replies and references cleared.")
         clearSessionContext()
         compareResults = [:]
@@ -2008,21 +2014,21 @@ extension CompanionStore {
         stopFocusGesture()
         reactor.stop(reason: "Saved profile restored. Local artwork is active.")
         evolution.persistenceBlockedReason = nil
-        guard evolution.loadRestoredProfile(origin: loaded.document.preferences?.form ?? .companion) else {
+        guard evolution.loadRestoredProfile(files.evolution, origin: document.preferences?.form ?? .companion) else {
             throw DesktopRecoveryError.blocked("The restored development could not be loaded. " + evolution.status)
         }
         importedMarketItem = nil
-        preferenceDocument = loaded.document
-        preferenceBaseline = loaded.baseline
+        preferenceDocument = document
+        preferenceBaseline = files.preferences
         preferenceFileReadable = true
         preferenceBaselineKnownCurrent = true
-        preferences = loaded.document.preferences ?? CompanionPreferences()
-        rememberPreferences = loaded.document.preferences != nil
-        keptLessons = loaded.document.lessons
-        keptFocusGesture = loaded.document.focusGesture
-        keptQiMon = loaded.document.qiMon
-        itemLibrary = loaded.document.itemLibrary
-        lessonRevision = loaded.document.revision
+        preferences = document.preferences ?? CompanionPreferences()
+        rememberPreferences = document.preferences != nil
+        keptLessons = document.lessons
+        keptFocusGesture = document.focusGesture
+        keptQiMon = document.qiMon
+        itemLibrary = document.itemLibrary
+        lessonRevision = document.revision
         profileRecoveryBlock = nil
         lessonMessage = "Saved lessons restored. Historical development references do not recreate forgotten lessons."
         reply = "Your saved profile is restored. Your current typed draft and working document are still here."

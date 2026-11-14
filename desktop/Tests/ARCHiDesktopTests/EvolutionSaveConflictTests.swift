@@ -28,7 +28,8 @@ final class EvolutionSaveConflictTests: XCTestCase {
         XCTAssertEqual(stale.kinGrowthRecord?.active, false)
         XCTAssertTrue(stale.save(), stale.status)
         XCTAssertEqual(try Data(contentsOf: url), newer)
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path), [url.lastPathComponent])
+        XCTAssertEqual(Set(try FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path)),
+                       [url.lastPathComponent, DesktopProfileLock.filename])
     }
 
     @MainActor

@@ -184,6 +184,11 @@ final class DesktopProfileBackupTests: XCTestCase {
         XCTAssertThrowsError(try DesktopProfileBackup.preview(archiveURL: archiveURL, profile: .custom, preferenceURL: fixture.destination))
         let pending = try XCTUnwrap(DesktopProfileBackup.pendingRecovery(profile: .custom, preferenceURL: fixture.destination))
         let intermediate = try pair(fixture.destination)
+        let proposed = NativePreferenceDocument(lessons: [KeptLesson(topic: "Planning", text: "Do not admit during recovery.")])
+        XCTAssertThrowsError(try NativePreferencePersistence.write(document: proposed, to: fixture.destination, expected: intermediate[0])) { error in
+            guard case DesktopProfileBackup.Failure.recoveryRequired = error else { return XCTFail("Unexpected write failure: \(error)") }
+        }
+        XCTAssertEqual(try pair(fixture.destination), intermediate)
         let external = Data("an unrelated external edit".utf8)
         try external.write(to: evolutionURL(fixture.destination))
         XCTAssertThrowsError(try DesktopProfileBackup.recover(pending))

@@ -553,16 +553,6 @@ final class EvolutionStore: ObservableObject {
     @discardableResult
     func forget() -> Bool {
         guard persistenceAllowed else { return false }
-        // The existing explicit Forget behavior still clears unreadable saves.
-        // A newer valid save belongs to another writer: neither this session nor
-        // that file may be cleared by a stale owner. Load it explicitly first.
-        let observedBytes = saveURL.flatMap { try? readBounded($0) }
-        let observedValid = observedBytes.flatMap { (try? decode($0)) == nil ? nil : $0 }
-        if let observedValid, observedValid != saveBaseline {
-            requiresReplacement = false
-            status = "Evolution was not forgotten. \(boundedError(EvolutionFileError.conflict))"
-            return false
-        }
         guard let url = saveURL else {
             clearForgottenSession()
             hasUnsavedChanges = false; requiresReplacement = false
@@ -570,21 +560,38 @@ final class EvolutionStore: ObservableObject {
             return true
         }
         do {
+            return try DesktopProfileLock.withLockIfDirectoryExists(at: url) {
+                try DesktopProfileBackup.requireNoJournal(url)
+                return forgetSavedEvolution(at: url)
+            } ?? finishForgettingEvolution()
+        } catch {
+            status = "Evolution was not forgotten. \(boundedError(error))"
+            return false
+        }
+    }
+
+    private func forgetSavedEvolution(at url: URL) -> Bool {
+        // The existing explicit Forget behavior still clears unreadable saves.
+        // A newer valid save belongs to another writer: neither this session nor
+        // that file may be cleared by a stale owner. Load it explicitly first.
+        let observedBytes = try? readBounded(url)
+        let observedValid = observedBytes.flatMap { (try? decode($0)) == nil ? nil : $0 }
+        if let observedValid, observedValid != saveBaseline {
+            requiresReplacement = false
+            status = "Evolution was not forgotten. \(boundedError(EvolutionFileError.conflict))"
+            return false
+        }
+        do {
             if let type = try entryType(url) {
                 guard type == .typeRegular || type == .typeSymbolicLink else { throw EvolutionFileError.unsupportedItem }
                 let latest = try? readBounded(url)
                 let latestValid = latest.flatMap { (try? decode($0)) == nil ? nil : $0 }
-                // Recheck immediately before deletion, still before publishing
-                // cleared session state. This is not an interprocess lock.
+                // Recheck immediately before deletion for edits outside ARCHi.
                 guard (observedValid == nil || latest == observedValid),
                       latestValid == nil || latestValid == saveBaseline else { throw EvolutionFileError.conflict }
                 try deleteFile(url)
             }
-            clearForgottenSession()
-            hasUnsavedChanges = false; requiresReplacement = false
-            saveBaseline = nil
-            status = "Evolution choices and evidence cleared; no saved evolution remains at this location."
-            return true
+            return finishForgettingEvolution()
         } catch {
             if case EvolutionFileError.conflict = error {
                 requiresReplacement = false
@@ -596,6 +603,14 @@ final class EvolutionStore: ObservableObject {
             status = "This session is cleared, but the saved evolution could not be deleted. It may still be loaded. \(boundedError(error))"
             return false
         }
+    }
+
+    private func finishForgettingEvolution() -> Bool {
+        clearForgottenSession()
+        hasUnsavedChanges = false; requiresReplacement = false
+        saveBaseline = nil
+        status = "Evolution choices and evidence cleared; no saved evolution remains at this location."
+        return true
     }
 
     private func clearForgottenSession() {
@@ -611,67 +626,71 @@ final class EvolutionStore: ObservableObject {
         guard persistenceAllowed else { return false }
         guard let url = saveURL else { status = "No evolution save location is configured."; return false }
         do {
-            let existingType = try entryType(url)
-            guard existingType == nil || existingType == .typeRegular || existingType == .typeSymbolicLink else {
-                throw EvolutionFileError.unsupportedItem
+            return try DesktopProfileLock.withLock(at: url) {
+                try DesktopProfileBackup.requireNoJournal(url)
+                return try saveEvolution(at: url, replacingInvalidFile: replacingInvalidFile)
             }
-            let existingMetadata = try saveTargetMetadata(url)
-            var existingBytes: Data?
-            var replacingUnreadable = false
-            if existingType != nil {
-                do {
-                    let bytes = try readBounded(url)
-                    existingBytes = bytes
-                    _ = try decode(bytes)
-                }
-                catch {
-                    guard replacingInvalidFile else {
-                        requiresReplacement = true
-                        status = "The existing save could not be validated and was preserved. Choose Replace saved evolution explicitly to replace it. \(boundedError(error))"
-                        return false
-                    }
-                    replacingUnreadable = true
-                }
-            }
-            if !replacingUnreadable {
-                // A stale invalid-file confirmation must not overwrite a file
-                // another writer has since repaired into a valid save.
-                requiresReplacement = false
-                guard existingBytes == saveBaseline else { throw EvolutionFileError.conflict }
-            }
-            let bytes = try encodeCurrentState()
-            guard bytes.count <= Self.maximumSaveBytes else { throw EvolutionFileError.invalid }
-            try writeAtomically(bytes, to: url) {
-                if replacingUnreadable {
-                    // Explicit repair replaces the invalid entry itself. Small
-                    // malformed files are compared exactly; unreadable/oversized
-                    // entries and symlinks are checked by bounded metadata.
-                    guard try self.saveTargetMetadata(url) == existingMetadata else { throw EvolutionFileError.conflict }
-                    if let existingBytes {
-                        guard try self.readBounded(url) == existingBytes else { throw EvolutionFileError.conflict }
-                    }
-                } else {
-                    let current = try self.entryType(url) == nil ? nil : self.readBounded(url)
-                    guard current == self.saveBaseline else { throw EvolutionFileError.conflict }
-                }
-            }
-            saveBaseline = bytes
-            hasUnsavedChanges = false; requiresReplacement = false
-            status = "Evolution choices, evidence identifiers, and kept appearance saved on this Mac."
-            return true
         } catch {
             status = "Evolution was not saved. \(boundedError(error))"
             return false
         }
     }
 
-    /// Match the preference owner's two-read write pattern. The final compare
-    /// follows the temporary file's completed write and immediately precedes
-    /// atomic rename. This detects stale writers, not simultaneous transactions.
+    private func saveEvolution(at url: URL, replacingInvalidFile: Bool) throws -> Bool {
+        let existingType = try entryType(url)
+        guard existingType == nil || existingType == .typeRegular || existingType == .typeSymbolicLink else {
+            throw EvolutionFileError.unsupportedItem
+        }
+        let existingMetadata = try saveTargetMetadata(url)
+        var existingBytes: Data?
+        var replacingUnreadable = false
+        if existingType != nil {
+            do {
+                let bytes = try readBounded(url)
+                existingBytes = bytes
+                _ = try decode(bytes)
+            }
+            catch {
+                guard replacingInvalidFile else {
+                    requiresReplacement = true
+                    status = "The existing save could not be validated and was preserved. Choose Replace saved evolution explicitly to replace it. \(boundedError(error))"
+                    return false
+                }
+                replacingUnreadable = true
+            }
+        }
+        if !replacingUnreadable {
+            // A stale invalid-file confirmation must not overwrite a file
+            // another writer has since repaired into a valid save.
+            requiresReplacement = false
+            guard existingBytes == saveBaseline else { throw EvolutionFileError.conflict }
+        }
+        let bytes = try encodeCurrentState()
+        guard bytes.count <= Self.maximumSaveBytes else { throw EvolutionFileError.invalid }
+        try writeAtomically(bytes, to: url) {
+            if replacingUnreadable {
+                // Explicit repair replaces the invalid entry itself. Small
+                // malformed files are compared exactly; unreadable/oversized
+                // entries and symlinks are checked by bounded metadata.
+                guard try self.saveTargetMetadata(url) == existingMetadata else { throw EvolutionFileError.conflict }
+                if let existingBytes {
+                    guard try self.readBounded(url) == existingBytes else { throw EvolutionFileError.conflict }
+                }
+            } else {
+                let current = try self.entryType(url) == nil ? nil : self.readBounded(url)
+                guard current == self.saveBaseline else { throw EvolutionFileError.conflict }
+            }
+        }
+        saveBaseline = bytes
+        hasUnsavedChanges = false; requiresReplacement = false
+        status = "Evolution choices, evidence identifiers, and kept appearance saved on this Mac."
+        return true
+    }
+
+    /// Under the profile lock, recheck the target just before rename to also
+    /// detect edits from outside ARCHi during staging.
     private func writeAtomically(_ bytes: Data, to url: URL, validate: () throws -> Void) throws {
         let directory = url.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700])
         let temporary = directory.appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).tmp")
         let descriptor = temporary.path.withCString { Darwin.open($0, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600) }
         guard descriptor >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
@@ -716,53 +735,94 @@ final class EvolutionStore: ObservableObject {
     @discardableResult
     func load() -> Bool {
         guard persistenceAllowed else { return false }
-        kinGrowthProposal = nil
-        guard let url = saveURL else { status = "No evolution save location is configured."; return false }
-        do {
-            guard try entryType(url) != nil else {
-                status = "No saved evolution was found. This session is unchanged."; return false
-            }
-            let bytes = try readBounded(url)
-            let loaded = try decode(bytes)
-            origin = loaded.origin
-            preferences = loaded.preferences; usefulReceipts = loaded.receipts
-            activeFamily = loaded.active; history = loaded.history
-            practiceJourneyOriginDigest = loaded.practiceOrigin
-            reviewedPractices = loaded.practices; keptBasis = loaded.basis
-            keptAppearanceRecipe = loaded.recipe
-            kinGrowthRecord = loaded.kinGrowth
-            saveBaseline = bytes
-            proposal = nil; previewFamily = nil; kinGrowthProposal = nil; revision &+= 1
-            hasUnsavedChanges = false; requiresReplacement = false
-            status = "Saved evolution choices loaded. Their receipt identifiers are retained records, not fresh assistant observations."
-            return true
-        } catch {
-            requiresReplacement = true
-            status = "The saved evolution could not be loaded. This session and the file are unchanged. \(boundedError(error))"
+        guard let url = saveURL else {
+            kinGrowthProposal = nil
+            status = "No evolution save location is configured."
             return false
         }
+        return loadEvolution(at: url, ifAbsent: noSavedEvolution)
+    }
+
+    private func loadEvolution(at url: URL, ifAbsent: () -> Bool) -> Bool {
+        let snapshot: Result<Data?, Error>
+        do {
+            snapshot = try DesktopProfileLock.read(at: url) {
+                try DesktopProfileBackup.requireNoJournal(url)
+                return Result {
+                    guard try entryType(url) != nil else { return nil }
+                    return try readBounded(url)
+                }
+            }
+        } catch {
+            status = "The saved evolution could not be loaded. \(boundedError(error))"
+            return false
+        }
+        kinGrowthProposal = nil
+        do {
+            guard let bytes = try snapshot.get() else { return ifAbsent() }
+            try admitSavedEvolution(bytes)
+            return true
+        } catch {
+            return reportInvalidSave(error)
+        }
+    }
+
+    private func noSavedEvolution() -> Bool {
+        status = "No saved evolution was found. This session is unchanged."
+        return false
+    }
+
+    private func admitSavedEvolution(_ bytes: Data) throws {
+        let loaded = try decode(bytes)
+        origin = loaded.origin
+        preferences = loaded.preferences; usefulReceipts = loaded.receipts
+        activeFamily = loaded.active; history = loaded.history
+        practiceJourneyOriginDigest = loaded.practiceOrigin
+        reviewedPractices = loaded.practices; keptBasis = loaded.basis
+        keptAppearanceRecipe = loaded.recipe
+        kinGrowthRecord = loaded.kinGrowth
+        saveBaseline = bytes
+        proposal = nil; previewFamily = nil; kinGrowthProposal = nil; revision &+= 1
+        hasUnsavedChanges = false; requiresReplacement = false
+        status = "Saved evolution choices loaded. Their receipt identifiers are retained records, not fresh assistant observations."
+    }
+
+    private func reportInvalidSave(_ error: Error) -> Bool {
+        requiresReplacement = true
+        status = "The saved evolution could not be loaded. This session and the file are unchanged. \(boundedError(error))"
+        return false
     }
 
     /// Called only after the existing profile owner validates/restores its pair.
     /// An explicitly absent Evolution member clears this session without a file
-    /// deletion or another save; a present member uses the ordinary Load boundary.
+    /// deletion or another save; a present member uses the ordinary owner decoder.
     @discardableResult
     func loadRestoredProfile(origin restoredOrigin: CompanionForm = .companion) -> Bool {
         guard persistenceAllowed else { return false }
         guard let url = saveURL else { status = "No evolution save location is configured."; return false }
+        return loadEvolution(at: url) { clearRestoredEvolution(origin: restoredOrigin) }
+    }
+
+    @discardableResult
+    func loadRestoredProfile(_ bytes: Data?, origin restoredOrigin: CompanionForm = .companion) -> Bool {
+        guard persistenceAllowed else { return false }
+        guard let bytes else { return clearRestoredEvolution(origin: restoredOrigin) }
         do {
-            if try entryType(url) != nil { return load() }
-            clearForgottenSession()
-            origin = restoredOrigin
-            observedJourneyOriginDigest = nil
-            saveBaseline = nil
-            hasUnsavedChanges = false; requiresReplacement = false
-            status = "The restored profile has no saved evolution. Its development session is clear."
+            try admitSavedEvolution(bytes)
             return true
         } catch {
-            status = "Restored evolution could not be read. This session is unchanged. \(boundedError(error))"
-            return false
+            return reportInvalidSave(error)
         }
+    }
+
+    private func clearRestoredEvolution(origin restoredOrigin: CompanionForm) -> Bool {
+        clearForgottenSession()
+        origin = restoredOrigin
+        observedJourneyOriginDigest = nil
+        saveBaseline = nil
+        hasUnsavedChanges = false; requiresReplacement = false
+        status = "The restored profile has no saved evolution. Its development session is clear."
+        return true
     }
 
     private var persistenceAllowed: Bool {
