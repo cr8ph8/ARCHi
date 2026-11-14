@@ -35,9 +35,7 @@ enum DesktopRecoveryStartup {
 
     static func recoverIfNeeded(at url: URL) -> String? {
         do {
-            if let pending = try DesktopProfileBackup.pendingRecovery(profile: profile(at: url), preferenceURL: url) {
-                _ = try DesktopProfileBackup.recover(pending)
-            }
+            try DesktopProfileBackup.recoverInterrupted(profile: profile(at: url), preferenceURL: url)
             return nil
         } catch {
             return "Profile recovery needs review. Saved data has been preserved and saving is paused. " + error.localizedDescription
@@ -72,9 +70,10 @@ extension CompanionStore {
         let rollbackDirectory = recoveryPreferenceURL.deletingLastPathComponent().appendingPathComponent("Recovery", isDirectory: true)
         let report: DesktopProfileBackup.RestoreReport
         do {
-            // Synchronous on MainActor: no in-app writer runs between preflight,
-            // file replacement and re-admission. Other processes are rechecked.
+            // Restore serializes both file replacements with other ARCHi sessions.
             report = try DesktopProfileBackup.restore(review.preview, rollbackDirectory: rollbackDirectory)
+        } catch DesktopProfileLock.Failure.busy {
+            throw DesktopProfileLock.Failure.busy
         } catch {
             if DesktopProfileBackup.hasPendingJournal(preferenceURL: recoveryPreferenceURL) {
                 blockProfileForRecovery("Restore could not finish. Saved data is preserved for recovery. " + error.localizedDescription)
@@ -82,7 +81,7 @@ extension CompanionStore {
             throw error
         }
         do {
-            try admitRestoredProfile()
+            try admitRestoredProfile(report.savedFiles)
             return report
         } catch {
             do {

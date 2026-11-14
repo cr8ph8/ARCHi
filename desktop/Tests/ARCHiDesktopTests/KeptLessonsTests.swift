@@ -184,7 +184,8 @@ final class KeptLessonsTests: XCTestCase {
         XCTAssertEqual(reloaded.baseline, bytes)
         XCTAssertEqual((try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber)?.intValue, 0o600)
         XCTAssertEqual((try FileManager.default.attributesOfItem(atPath: url.deletingLastPathComponent().path)[.posixPermissions] as? NSNumber)?.intValue, 0o700)
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path), ["preferences.json"])
+        XCTAssertEqual(Set(try FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path)),
+                       ["preferences.json", DesktopProfileLock.filename])
     }
 
     func testOutsideEditAndDeletionConflictPreserveExternalState() throws {
@@ -202,6 +203,59 @@ final class KeptLessonsTests: XCTestCase {
         try FileManager.default.removeItem(at: url)
         XCTAssertThrowsError(try NativePreferencePersistence.write(document: original, to: url, expected: outsideBytes))
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @MainActor
+    func testConcurrentWritersFromSameBaselineKeepExactlyOneLesson() async throws {
+        let fixture = try directory()
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let url = fixture.appendingPathComponent("preferences.json")
+        let initial = NativePreferenceDocument(revision: 1, preferences: CompanionPreferences())
+        let baseline = try NativePreferencePersistence.write(document: initial, to: url, expected: nil)
+        let candidates = [lesson(topic: "first writer"), lesson(topic: "second writer")]
+        let attempts = candidates.map { lesson in
+            Task.detached {
+                Result {
+                    var document = initial
+                    document.revision += 1
+                    document.lessons.append(lesson)
+                    return try NativePreferencePersistence.write(document: document, to: url, expected: baseline)
+                }
+            }
+        }
+        let results = [await attempts[0].value, await attempts[1].value]
+        let winners = zip(candidates, results).compactMap { lesson, result -> KeptLesson? in
+            switch result {
+            case .success: return lesson
+            case .failure(let error):
+                switch error {
+                case DesktopProfileLock.Failure.busy, NativePreferenceError.conflict: break
+                default: XCTFail("Unexpected write failure: \(error)")
+                }
+                return nil
+            }
+        }
+        XCTAssertEqual(winners.count, 1)
+        let reopened = try NativePreferencePersistence.read(url).document
+        XCTAssertEqual(reopened.revision, 2)
+        XCTAssertEqual(reopened.preferences, initial.preferences)
+        XCTAssertEqual(reopened.lessons, winners)
+    }
+
+    func testOccupiedProfileLockPreventsReplacementAndDeletion() throws {
+        let fixture = try directory()
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let url = fixture.appendingPathComponent("preferences.json")
+        let initial = NativePreferenceDocument(revision: 1, lessons: [lesson()])
+        let baseline = try NativePreferencePersistence.write(document: initial, to: url, expected: nil)
+        try DesktopProfileLock.withLock(at: url) {
+            for proposed in [NativePreferenceDocument(revision: 2, lessons: [lesson()]), NativePreferenceDocument(revision: 2)] {
+                XCTAssertThrowsError(try NativePreferencePersistence.write(document: proposed, to: url, expected: baseline)) { error in
+                    guard case DesktopProfileLock.Failure.busy = error else { return XCTFail("Unexpected write failure: \(error)") }
+                }
+            }
+        }
+        XCTAssertEqual(try NativePreferencePersistence.read(url).document, initial)
     }
 
     func testFailedWritesLeavePriorBytesUntouchedAndDoNotCreatePartialSave() throws {

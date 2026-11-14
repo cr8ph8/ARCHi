@@ -41,6 +41,61 @@ final class DesktopRecoveryIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testKeepDuringRestorePreservesItsDraftAndReopensTheRestoredPair() throws {
+        let directory = try root(); defer { try? FileManager.default.removeItem(at: directory) }
+        let client = RecoveryIntegrationNoCalls()
+        let source = directory.appendingPathComponent("source/preferences.json")
+        try write(tone: "Warm", to: source)
+        let incoming = makeStore(source, client)
+        incoming.beginLessonCorrection()
+        var incomingDraft = try XCTUnwrap(incoming.lessonDraft)
+        incomingDraft.topic = "planning"
+        incomingDraft.text = "Keep the archived plan."
+        XCTAssertTrue(incoming.keepLesson(incomingDraft))
+        incoming.evolution.confirmRole(.muse)
+        XCTAssertTrue(incoming.evolution.save())
+        let archive = directory.appendingPathComponent("profile.archibackup")
+        _ = try incoming.createProfileBackup(at: archive)
+
+        let target = directory.appendingPathComponent("target/preferences.json")
+        try write(tone: "Direct", to: target)
+        let writer = makeStore(target, client)
+        writer.evolution.confirmRole(.guardian)
+        XCTAssertTrue(writer.evolution.save())
+        writer.evolution.confirmRole(.keeper)
+        writer.share(text: "The working copy belongs to this visit.", name: "plan.txt")
+        writer.beginLessonCorrection()
+        var draft = try XCTUnwrap(writer.lessonDraft)
+        draft.topic = "planning"
+        draft.text = "Keep the competing plan."
+        draft.source = try XCTUnwrap(writer.currentLessonSource)
+        writer.lessonDraft = draft
+
+        let preview = try DesktopProfileBackup.preview(archiveURL: archive, profile: .custom, preferenceURL: target)
+        _ = try DesktopProfileBackup.restore(preview, rollbackDirectory: directory.appendingPathComponent("rollback")) { step in
+            guard case .journalPrepared = step else { return }
+            // The competing writer still has the exact on-disk preference baseline.
+            XCTAssertFalse(writer.keepLesson(draft))
+            XCTAssertTrue(writer.lessonMessage.contains("Another ARCHi session"))
+            XCTAssertFalse(writer.evolution.save())
+            XCTAssertFalse(writer.evolution.forget())
+            XCTAssertEqual(writer.evolution.confirmedRole, .keeper)
+            XCTAssertTrue(writer.evolution.hasUnsavedChanges)
+        }
+        XCTAssertEqual(writer.lessonDraft, draft)
+        XCTAssertFalse(writer.keepLesson(draft), "The winning restore changed the baseline")
+        XCTAssertEqual(writer.lessonDraft, draft)
+
+        let reopened = makeStore(target, client)
+        XCTAssertEqual(reopened.preferences.tone, "Warm")
+        XCTAssertEqual(reopened.keptLessons, incoming.keptLessons)
+        XCTAssertTrue(reopened.evolution.load())
+        XCTAssertEqual(reopened.evolution.confirmedRole, .muse)
+        XCTAssertFalse(DesktopProfileBackup.hasPendingJournal(preferenceURL: target))
+        XCTAssertEqual(client.calls, 0)
+    }
+
+    @MainActor
     func testChangedVisitOrBusyRequestCannotUseEarlierRestorePreview() throws {
         let directory = try root(); defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("profile/preferences.json")

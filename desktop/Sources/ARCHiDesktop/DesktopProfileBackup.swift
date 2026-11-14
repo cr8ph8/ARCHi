@@ -2,13 +2,12 @@ import Foundation
 import CryptoKit
 import Darwin
 
-/// A portable checkpoint of the existing two owners, not another state model.
-/// Call while the app has stopped its writers. The journal must be resolved
-/// before admitting either owner at startup. Other processes are not locked.
+/// A portable checkpoint of the two saved owners. Restore and recovery hold
+/// the shared profile lock from the destination check through journal removal.
 @MainActor
 enum DesktopProfileBackup {
     enum ProfileKind: String, Codable, Sendable { case review, preview, custom }
-    static let journalFilename = ".archi-desktop-profile-restore.json"
+    nonisolated static let journalFilename = ".archi-desktop-profile-restore.json"
     static let maximumArchiveBytes = 160 * 1024
 
     struct ArchiveSummary: Equatable, Sendable {
@@ -29,12 +28,17 @@ enum DesktopProfileBackup {
         fileprivate let expected: Pair
         fileprivate let preferenceURL: URL
     }
+    struct SavedFiles: Sendable {
+        let preferences: Data?
+        let evolution: Data?
+    }
     struct RestoreReport: Sendable {
         let summary: ArchiveSummary
         let rollbackArchiveURL: URL
         fileprivate let preferenceURL: URL
         fileprivate let journalData: Data
         fileprivate let restoredPair: Pair
+        var savedFiles: SavedFiles { restoredPair.savedFiles }
     }
     struct RecoveryPreview: Sendable {
         let profile: ProfileKind
@@ -69,7 +73,7 @@ enum DesktopProfileBackup {
     enum Checkpoint { case journalPrepared, firstFileInstalled, pairInstalled }
     struct Interrupted: Error {}
 
-    static func hasPendingJournal(preferenceURL: URL) -> Bool {
+    nonisolated static func hasPendingJournal(preferenceURL: URL) -> Bool {
         var info = stat()
         let result = journalURL(preferenceURL).path.withCString { lstat($0, &info) }
         return result == 0 || errno != ENOENT
@@ -94,13 +98,13 @@ enum DesktopProfileBackup {
         guard ![preferenceURL, evolutionURL(preferenceURL), journalURL(preferenceURL)]
             .map(resolvedDestination)
             .contains(where: { $0.caseInsensitiveCompare(outputPath) == .orderedSame }) else { throw Failure.invalidLocation }
-        let pair = try readPair(preferenceURL)
+        let pair = try readUninterruptedPair(preferenceURL)
         let archive = Archive(profile: profile, createdAt: now, purpose: .checkpoint, pair: pair)
         let summary = try validateOwners(archive)
-        guard try readPair(preferenceURL) == pair else { throw Failure.stalePreview }
+        guard try readUninterruptedPair(preferenceURL) == pair else { throw Failure.stalePreview }
         try writeNew(try encode(archive), to: archiveURL)
         guard try readArchive(archiveURL) == archive else { throw Failure.invalidArchive }
-        guard try readPair(preferenceURL) == pair else { throw Failure.stalePreview }
+        guard try readUninterruptedPair(preferenceURL) == pair else { throw Failure.stalePreview }
         return summary
     }
 
@@ -111,7 +115,7 @@ enum DesktopProfileBackup {
         // A rollback can be deliberately restored later only if its raw prior
         // state also passes the normal owners. Invalid rollback bytes remain recovery-only.
         let summary = try validateOwners(archive)
-        let expected = try readPair(preferenceURL) // Preserve invalid prior bytes as rollback, never repair them.
+        let expected = try readUninterruptedPair(preferenceURL) // Preserve invalid prior bytes as rollback.
         return RestorePreview(summary: summary, destinationPreferencesPresent: expected.preferences.data != nil,
             destinationEvolutionPresent: expected.evolution.data != nil,
             archive: archive, expected: expected, preferenceURL: preferenceURL)
@@ -119,9 +123,16 @@ enum DesktopProfileBackup {
 
     static func restore(_ preview: RestorePreview, rollbackDirectory: URL,
                         checkpoint: (Checkpoint) throws -> Void = { _ in }) throws -> RestoreReport {
+        _ = try validateOwners(preview.archive)
+        return try DesktopProfileLock.withLock(at: preview.preferenceURL) {
+            try restoreLocked(preview, rollbackDirectory: rollbackDirectory, checkpoint: checkpoint)
+        }
+    }
+
+    private static func restoreLocked(_ preview: RestorePreview, rollbackDirectory: URL,
+                                      checkpoint: (Checkpoint) throws -> Void) throws -> RestoreReport {
         let preferenceURL = preview.preferenceURL
         try requireNoJournal(preferenceURL)
-        _ = try validateOwners(preview.archive)
         guard try readPair(preferenceURL) == preview.expected else { throw Failure.stalePreview }
         try makePrivateDirectory(rollbackDirectory)
         let before = Archive(profile: preview.archive.profile, createdAt: Date(), purpose: .rollback, pair: preview.expected)
@@ -141,8 +152,7 @@ enum DesktopProfileBackup {
         let journal = Journal(profile: before.profile, preferenceName: preferenceURL.lastPathComponent,
             transaction: transactionName, beforeHash: digest(beforeData), targetHash: digest(targetData))
         let journalData = try encode(journal)
-        // A second check follows all staging IO. An exclusive journal admits at
-        // most one restoring process, although ordinary profile writers do not share that lock.
+        // Recheck after staging to detect edits from outside the app's lock.
         guard try readPair(preferenceURL) == preview.expected else { throw Failure.stalePreview }
         try writeNew(journalData, to: journalURL(preferenceURL))
         do {
@@ -172,15 +182,35 @@ enum DesktopProfileBackup {
     /// Immediate admission failure after a successful pair install can return
     /// to the captured prior bytes, provided nobody has changed the installed pair.
     static func undoRestore(_ report: RestoreReport) throws -> URL {
-        try requireNoJournal(report.preferenceURL)
-        guard try readPair(report.preferenceURL) == report.restoredPair else { throw Failure.stalePreview }
-        try writeNew(report.journalData, to: journalURL(report.preferenceURL))
-        guard let pending = try pendingRecovery(profile: report.summary.profile, preferenceURL: report.preferenceURL)
-        else { throw Failure.recoveryRequired }
-        return try recover(pending)
+        try DesktopProfileLock.withLock(at: report.preferenceURL) {
+            try requireNoJournal(report.preferenceURL)
+            guard try readPair(report.preferenceURL) == report.restoredPair else { throw Failure.stalePreview }
+            try writeNew(report.journalData, to: journalURL(report.preferenceURL))
+            guard let pending = try readPendingRecovery(profile: report.summary.profile, preferenceURL: report.preferenceURL)
+            else { throw Failure.recoveryRequired }
+            return try finishRecovery(pending)
+        }
     }
 
     static func pendingRecovery(profile: ProfileKind, preferenceURL: URL) throws -> RecoveryPreview? {
+        try DesktopProfileLock.withLockIfDirectoryExists(at: preferenceURL) {
+            try readPendingRecovery(profile: profile, preferenceURL: preferenceURL)
+        } ?? nil
+    }
+
+    static func recoverInterrupted(profile: ProfileKind, preferenceURL: URL) throws {
+        _ = try DesktopProfileLock.withLockIfDirectoryExists(at: preferenceURL) {
+            if let pending = try readPendingRecovery(profile: profile, preferenceURL: preferenceURL) {
+                _ = try finishRecovery(pending)
+            }
+        }
+    }
+
+    static func readSavedFiles(preferenceURL: URL) throws -> SavedFiles {
+        try readUninterruptedPair(preferenceURL).savedFiles
+    }
+
+    private static func readPendingRecovery(profile: ProfileKind, preferenceURL: URL) throws -> RecoveryPreview? {
         guard hasPendingJournal(preferenceURL: preferenceURL) else { return nil }
         guard let journalData = try read(journalURL(preferenceURL), limit: 4096) else { throw Failure.invalidArchive }
         let journal: Journal = try decodeCanonical(journalData)
@@ -207,9 +237,15 @@ enum DesktopProfileBackup {
     /// Recovery preserves the raw prior pair even when a prior file was invalid.
     /// Re-admit through the usual owners afterward; this does not bless its contents.
     static func recover(_ preview: RecoveryPreview) throws -> URL {
-        let fresh = try pendingRecovery(profile: preview.profile, preferenceURL: preview.preferenceURL)
-        guard let fresh, fresh.journalData == preview.journalData, fresh.old == preview.old,
-              fresh.target == preview.target, fresh.expected == preview.expected else { throw Failure.stalePreview }
+        try DesktopProfileLock.withLock(at: preview.preferenceURL) {
+            let fresh = try readPendingRecovery(profile: preview.profile, preferenceURL: preview.preferenceURL)
+            guard let fresh, fresh.journalData == preview.journalData, fresh.old == preview.old,
+                  fresh.target == preview.target, fresh.expected == preview.expected else { throw Failure.stalePreview }
+            return try finishRecovery(fresh)
+        }
+    }
+
+    private static func finishRecovery(_ preview: RecoveryPreview) throws -> URL {
         try rollback(old: preview.old, target: preview.target, preferenceURL: preview.preferenceURL)
         try removeJournal(preview.preferenceURL, expected: preview.journalData)
         return preview.rollbackArchiveURL
@@ -231,6 +267,7 @@ enum DesktopProfileBackup {
     fileprivate struct Pair: Codable, Equatable, Sendable {
         var preferences: Entry
         var evolution: Entry
+        var savedFiles: SavedFiles { SavedFiles(preferences: preferences.data, evolution: evolution.data) }
         func isKnownMixture(old: Pair, target: Pair) -> Bool {
             (preferences == old.preferences || preferences == target.preferences)
                 && (evolution == old.evolution || evolution == target.evolution)
@@ -263,12 +300,18 @@ enum DesktopProfileBackup {
     private static func evolutionURL(_ preferenceURL: URL) -> URL {
         preferenceURL.deletingPathExtension().appendingPathExtension("evolution.json")
     }
-    private static func journalURL(_ preferenceURL: URL) -> URL {
+    private nonisolated static func journalURL(_ preferenceURL: URL) -> URL {
         preferenceURL.deletingLastPathComponent().appendingPathComponent(journalFilename)
     }
-    private static func requireNoJournal(_ preferenceURL: URL) throws {
+    nonisolated static func requireNoJournal(_ preferenceURL: URL) throws {
         guard preferenceURL.isFileURL else { throw Failure.invalidLocation }
         guard !hasPendingJournal(preferenceURL: preferenceURL) else { throw Failure.recoveryRequired }
+    }
+    private static func readUninterruptedPair(_ preferenceURL: URL) throws -> Pair {
+        try DesktopProfileLock.withLockIfDirectoryExists(at: preferenceURL) {
+            try requireNoJournal(preferenceURL)
+            return try readPair(preferenceURL)
+        } ?? Pair(preferences: Entry(nil), evolution: Entry(nil))
     }
     private static func readPair(_ preferenceURL: URL) throws -> Pair {
         Pair(preferences: Entry(try read(preferenceURL, limit: NativePreferenceDocument.maximumBytes)),
