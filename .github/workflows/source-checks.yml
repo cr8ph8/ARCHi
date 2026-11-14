@@ -7,7 +7,7 @@ permissions:
 jobs:
   profile:
     name: Native profile tests
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 20
     steps:
       - name: Check out test revision
