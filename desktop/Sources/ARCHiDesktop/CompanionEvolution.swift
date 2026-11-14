@@ -744,32 +744,32 @@ final class EvolutionStore: ObservableObject {
     }
 
     private func loadEvolution(at url: URL, ifAbsent: () -> Bool) -> Bool {
+        let snapshot: Result<Data?, Error>
         do {
-            return try DesktopProfileLock.withLockIfDirectoryExists(at: url) {
+            snapshot = try DesktopProfileLock.read(at: url) {
                 try DesktopProfileBackup.requireNoJournal(url)
-                return loadSavedEvolution(at: url, ifAbsent: ifAbsent)
-            } ?? ifAbsent()
+                return Result {
+                    guard try entryType(url) != nil else { return nil }
+                    return try readBounded(url)
+                }
+            }
         } catch {
             status = "The saved evolution could not be loaded. \(boundedError(error))"
             return false
         }
-    }
-
-    private func noSavedEvolution() -> Bool {
-        kinGrowthProposal = nil
-        status = "No saved evolution was found. This session is unchanged."
-        return false
-    }
-
-    private func loadSavedEvolution(at url: URL, ifAbsent: () -> Bool) -> Bool {
         kinGrowthProposal = nil
         do {
-            guard try entryType(url) != nil else { return ifAbsent() }
-            try admitSavedEvolution(readBounded(url))
+            guard let bytes = try snapshot.get() else { return ifAbsent() }
+            try admitSavedEvolution(bytes)
             return true
         } catch {
             return reportInvalidSave(error)
         }
+    }
+
+    private func noSavedEvolution() -> Bool {
+        status = "No saved evolution was found. This session is unchanged."
+        return false
     }
 
     private func admitSavedEvolution(_ bytes: Data) throws {

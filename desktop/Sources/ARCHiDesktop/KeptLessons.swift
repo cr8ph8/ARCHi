@@ -258,10 +258,10 @@ enum NativePreferenceError: LocalizedError {
 
 enum NativePreferencePersistence {
     static func read(_ url: URL) throws -> (document: NativePreferenceDocument, baseline: Data?) {
-        let data = try DesktopProfileLock.withLockIfDirectoryExists(at: url) {
+        let data = try DesktopProfileLock.read(at: url) {
             try DesktopProfileBackup.requireNoJournal(url)
             return try rawData(at: url)
-        } ?? nil
+        }
         guard let data else { return (NativePreferenceDocument(), nil) }
         return (try NativePreferenceDocument.decode(data), data)
     }

@@ -258,6 +258,25 @@ final class KeptLessonsTests: XCTestCase {
         XCTAssertEqual(try NativePreferencePersistence.read(url).document, initial)
     }
 
+    func testReadRepeatsIfFirstWriteCreatesTheLockDuringCapture() throws {
+        let fixture = try directory()
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let url = fixture.appendingPathComponent("preferences.json")
+        XCTAssertNil(try NativePreferencePersistence.read(url).baseline)
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: fixture.path).isEmpty)
+
+        let committed = NativePreferenceDocument(revision: 1, lessons: [lesson()])
+        var reads = 0
+        let saved = try DesktopProfileLock.read(at: url) {
+            let bytes = try? Data(contentsOf: url)
+            reads += 1
+            if reads == 1 { try NativePreferencePersistence.write(document: committed, to: url, expected: nil) }
+            return bytes
+        }
+        XCTAssertEqual(reads, 2)
+        XCTAssertEqual(saved, try committed.encoded())
+    }
+
     func testFailedWritesLeavePriorBytesUntouchedAndDoNotCreatePartialSave() throws {
         let fixture = try directory()
         defer { try? FileManager.default.removeItem(at: fixture) }
