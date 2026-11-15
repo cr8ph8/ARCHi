@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/Prefrontal-AI/CRAM",
+  "commit": "62bbe830c7d6f87f2ba18f30a28039258b986454",
+  "retrieval_method": "GitHub connector fetch_file at immutable commit",
+  "license": "Apache-2.0",
+  "snapshot_scope": "Verified retrieval metadata for eight inspected files; upstream source is not vendored in ARCHi",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "status": "RETRIEVED",
+      "blob_sha": "358af4c77230d8a6fb5c439830df8be82a8ad494",
+      "source_url": "https://github.com/Prefrontal-AI/CRAM/blob/62bbe830c7d6f87f2ba18f30a28039258b986454/AGENTS.md",
+      "local_git_blob_sha": "358af4c77230d8a6fb5c439830df8be82a8ad494",
+      "sha256": "c917325e1bde86cc35a2a77d91568386d18c5f870bfc63417ec16757838df6c9",
+      "bytes": 2587,
+      "byte_integrity": "PASS"
+    },
+    {
+      "path": "README.md",
+      "status": "RETRIEVED",
+      "blob_sha": "1d211cbfa38de54c30382f17ca4bf0e4c1db93c4",
+      "source_url": "https://github.com/Prefrontal-AI/CRAM/blob/62bbe830c7d6f87f2ba18f30a28039258b986454/README.md",
+      "local_git_blob_sha": "1d211cbfa38de54c30382f17ca4bf0e4c1db93c4",
+      "sha256": "108026b46f3e7bbb4314e1d26055d08cf0ac6233e4617214e511b0aa0d4fc355",
+      "bytes": 3887,
+      "byte_integrity": "PASS"
+    },
+    {
+      "path": "REPRODUCING.md",
+      "status": "RETRIEVED",
+      "blob_sha": "13d6e03e52b14f92e197886e22a00a6b66d3395f",
+      "source_url": "https://github.com/Prefrontal-AI/CRAM/blob/62bbe830c7d6f87f2ba18f30a28039258b986454/REPRODUCING.md",
+      "local_git_blob_sha": "13d6e03e52b14f92e197886e22a00a6b66d3395f",
+      "sha256": "eb565e5c9e26a5283c0e790110381df51d20e481ee3cc0eae859310dc0da87e2",
+      "bytes": 21237,
+      "byte_integrity": "PASS"
+    },
+    {
+      "path": "pyproject.toml",
+      "status": "RETRIEVED",
+      "blob_sha": "ae3d45a30fa790fa92839fb62a069baee42bfda9",
+      "source_url": "https://github.com/Prefrontal-AI/CRAM/blob/62bbe830c7d6f87f2ba18f30a28039258b986454/pyproject.toml",
+      "local_git_blob_sha": "ae3d45a30fa790fa92839fb62a069baee42bfda9",
+      "sha256": "828d4e23d87b7781eecdf07fb931cff869f997712df3057f02b72177846dd2ce",
+      "bytes": 1317,
+      "byte_integrity": "PASS"
+    },
+    {
+      "path": "LICENSE",
+      "status": "RETRIEVED",
+      "blob_sha": "d645695673349e3947e8e5ae42332d0ac3164cd7",
+      "source_url": "https://github.com/Prefrontal-AI/CRAM/blob/62bbe830c7d6f87f2ba18f30a28039258b986454/LICENSE",
+      "local_git_blob_sha": "d645695673349e3947e8e5ae42332d0ac3164cd7",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358,
+      "byte_integrity": "PASS"
+    },
+    {
+      "path": "cram/cram_sudoku_general.py",
+      "status": "RETRIEVED",
+      "blob_sha": "9603c83a76003c6acd965068fa1880b04e22b094",
+      "source_url": "https://github.com/Prefrontal-AI/CRAM/blob/62bbe830c7d6f87f2ba18f30a28039258b986454/cram/cram_sudoku_general.py",
+      "local_git_blob_sha": "9603c83a76003c6acd965068fa1880b04e22b094",
+      "sha256": "2e0c8f16b195757eab835351e36fe11395b3112abda68d200c25da9d60ae8085",
+      "bytes": 12167,
+      "byte_integrity": "PASS"
+    },
+    {
+      "path": "cram/maze_unique.py",
+      "status": "RETRIEVED",
+      "blob_sha": "cc781aca6349c4b312d320c15a9008d68613a730",
+      "source_url": "https://github.com/Prefrontal-AI/CRAM/blob/62bbe830c7d6f87f2ba18f30a28039258b986454/cram/maze_unique.py",
+      "local_git_blob_sha": "cc781aca6349c4b312d320c15a9008d68613a730",
+      "sha256": "3ceb56a61d92c3fa52a7d84876314abe31909780159fa53560692c19b306d213",
+      "bytes": 17670,
+      "byte_integrity": "PASS"
+    },
+    {
+      "path": "checkpoints/evaluate.py",
+      "status": "RETRIEVED",
+      "blob_sha": "90df4bf9a529639944c0d35d21f6f8d1e4b55698",
+      "source_url": "https://github.com/Prefrontal-AI/CRAM/blob/62bbe830c7d6f87f2ba18f30a28039258b986454/checkpoints/evaluate.py",
+      "local_git_blob_sha": "90df4bf9a529639944c0d35d21f6f8d1e4b55698",
+      "sha256": "a61cd6852164430a1d93459f456f91067c593edd7025320f9f85baf36673efa4",
+      "bytes": 8615,
+      "byte_integrity": "PASS"
+    }
+  ]
+}
