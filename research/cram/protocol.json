@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "experiment": "CRAM candidate solver pilot",
+  "status": "frozen_before_parent_run",
+  "source_base": "ffee7ea9e77632de7cb13d816bff85dc498d9c1a",
+  "official_cram_commit": "62bbe830c7d6f87f2ba18f30a28039258b986454",
+  "integration": "none",
+  "production_authority": false,
+  "native_owner_adapter": "not_implemented",
+  "hypotheses": [
+    "A learned pairwise energy can produce some valid held-out miniature Sudoku completions under a fixed search budget.",
+    "A low scheduling penalty can produce invalid candidates that independent requirements checks reject.",
+    "Only explicitly requested authorized COMMIT in the disposable test owner changes its protected state."
+  ],
+  "scheduling": {
+    "seed": 20261115,
+    "cases": 24,
+    "scenes_per_case": 6,
+    "slots": 6,
+    "unsatisfiable_case_rule": "index mod 4 equals 3",
+    "methods": ["exact_enumeration", "coordinate_energy_penalty_10", "coordinate_energy_penalty_0.01"],
+    "chains": 8,
+    "maximum_sweeps_per_chain": 32,
+    "success_metric": "independent validity and optimality on feasible cases",
+    "unsatisfiable_metric": "explicit reference UNSAT versus invalid candidates; do not count missing answers as valid schedules"
+  },
+  "claims_excluded": [
+    "official Sudoku-Extreme or Maze-Unique reproduction from portable probes",
+    "GPU speedup, FLOP comparison or joule measurement",
+    "real QiMovi scheduling integration",
+    "native ARCHi, Unity, installed application or local model validation",
+    "cross-process atomicity, durable replay protection or tamper-proof audit"
+  ],
+  "evidence_rules": [
+    "Preserve PASS, FAIL, SKIPPED, ERROR and ABSTAIN separately from COMMIT, REJECT, DAMP and ESCALATE.",
+    "Record raw inputs, proposals, independent results, seeds, stop reasons and hashes.",
+    "Threshold and settings selection must not inspect held-out test outcomes.",
+    "Report cold and warm GPU runs only when actually executed.",
+    "Save experimental outputs outside tracked source."
+  ]
+}
