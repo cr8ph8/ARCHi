@@ -6,6 +6,7 @@ import CryptoKit
 enum WorkspaceSection: String, CaseIterable, Identifiable {
     case assistant = "Assistant"
     case nodeLab = "Node Lab"
+    case seedDive = "Seed Dive"
     case play = "Habitat & Arena"
     case appearance = "Appearance"
     case marketplace = "Marketplace"
