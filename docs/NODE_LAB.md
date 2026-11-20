@@ -19,3 +19,11 @@ Right-click the floating companion and choose **Dive into Seed**, use the same b
 Core contains the companion. Sources contains source references. Memory contains kept lessons and temporary context, with retention shown on the individual record. Activity contains requests and model calls. Outcomes contains answers and omissions. Layer totals count projected records, and the map counts links with both endpoints visible. The shell’s decorative particles carry no record identity. The map’s layout encodes record type.
 
 The bundled WebKit view receives the current bounded snapshot as structured data. It uses a nonpersistent store and has no script bridge back to ARCHi. Opening the inspector or following a link has no Keep, Apply or evolution action. Native Node Lab remains available from the inspector footer. Quiet mode and reduced motion skip the entry animation. On a Mac, run the focused host test with `swift test --package-path desktop --filter SeedDiveTests`.
+
+### How to read the map
+
+The shell projects 1,150 golden-angle samples from a unit sphere. The five record layers use a 2D spiral around a fixed center for each type group. Color and position help locate records. The directed, labeled edges come from the current snapshot.
+
+Expand **Path from seed** to inspect one shortest route from the companion to the selected record. Each recorded arrow costs one hop. The origin is zero hops. Breadth-first search indexes the full snapshot on replacement, so zoom and layer filters preserve the answer. Equal-length routes use snapshot traversal order. An unreachable result applies only to the projected records, especially when the projection is truncated.
+
+Run the dependency-free graph checks with `node --test scripts/seed-paths.test.mjs`.

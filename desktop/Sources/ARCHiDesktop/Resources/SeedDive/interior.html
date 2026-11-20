@@ -357,6 +357,19 @@
         border: 0;
         padding: 0;
       }
+      .seed-trail {
+        margin: 8px 0;
+        padding-left: 22px;
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+      .seed-trail li {
+        padding-bottom: 4px;
+      }
+      .seed-trail small {
+        display: block;
+        color: var(--muted);
+      }
       .layers {
         padding: 16px 0 0;
       }
@@ -591,6 +604,39 @@
       </section>
       <footer class="foot"><span id="total"></span><span id="limit"></span></footer>
     </main>
+    <script id="seed-path-math">
+      'use strict'
+      // Index the full snapshot once. Each parent is the actual labeled edge used to reach the record.
+      function seedPathTree(nodes, edges) {
+        const roots = nodes.filter((node) => node.kind === 'companion')
+        if (roots.length !== 1) return new Map()
+        const outgoing = new Map(nodes.map((node) => [node.id, []]))
+        for (const edge of edges) {
+          if (outgoing.has(edge.target)) outgoing.get(edge.source)?.push(edge)
+        }
+        const seed = roots[0].id
+        const parents = new Map([[seed, null]])
+        const queue = [seed]
+        for (let index = 0; index < queue.length; index++) {
+          for (const edge of outgoing.get(queue[index])) {
+            if (parents.has(edge.target)) continue
+            parents.set(edge.target, edge)
+            queue.push(edge.target)
+          }
+        }
+        return parents
+      }
+      function pathFromSeed(parents, id) {
+        if (!parents.has(id)) return null
+        const trail = []
+        let edge = parents.get(id)
+        while (edge) {
+          trail.push(edge)
+          edge = parents.get(edge.source)
+        }
+        return trail.reverse()
+      }
+    </script>
     <script>
       'use strict'
       const $ = (id) => document.getElementById(id)
@@ -621,6 +667,7 @@
       }
       let data = { nodes: [], edges: [], truncatedCount: 0 },
         byId = new Map(),
+        seedParents = new Map(),
         selected = null
       let layerID = null,
         tab = 'map',
@@ -642,6 +689,7 @@
       function replace(snapshot, stopMotion) {
         data = snapshot
         byId = new Map(data.nodes.map((n) => [n.id, n]))
+        seedParents = seedPathTree(data.nodes, data.edges)
         still = !!stopMotion
         if (!visible().some((n) => n.id === selected)) selected = visible()[0]?.id ?? null
         if (!received && !still && !reduce.matches) flight = performance.now() + 500
@@ -690,6 +738,30 @@
         details.forEach((d) => list.append(el('dt', '', d.label), el('dd', '', d.value)))
         if (details.length) container.append(list)
       }
+      function seedDistance(node) {
+        const trail = pathFromSeed(seedParents, node.id)
+        if (trail === null) {
+          const message = seedParents.size
+            ? 'No directed path from the seed in this snapshot.'
+            : 'Seed unavailable in this snapshot.'
+          return el('p', 'status', message)
+        }
+        if (trail.length === 0) return el('p', 'status', 'Seed origin · 0 hops')
+        const fold = el('details')
+        fold.append(el('summary', '', 'Path from seed · ' + plural(trail.length, 'hop')))
+        const list = el('ol', 'seed-trail')
+        list.append(el('li', '', byId.get(trail[0].source).title))
+        for (const edge of trail) {
+          const step = el('li')
+          step.append(el('small', '', edge.label), document.createTextNode(byId.get(edge.target).title))
+          list.append(step)
+        }
+        fold.append(
+          list,
+          el('p', 'status', 'One shortest route following the recorded arrows in the full snapshot.'),
+        )
+        return fold
+      }
       function renderInspector() {
         const rail = $('rail'),
           node = byId.get(selected)
@@ -720,6 +792,7 @@
         const kind = el('div', 'nodekind')
         kind.append(el('i', 'dot'), document.createTextNode(kinds[node.kind] ?? node.kind))
         rail.append(kind, el('h2', 'detail-title', node.title), el('p', 'status', node.status))
+        rail.append(seedDistance(node))
         if (node.subtitle) rail.append(el('p', 'empty', node.subtitle))
         const primary = [],
           refs = []
