@@ -34,6 +34,8 @@ struct WorkspaceView: View {
                     AssistantWorkspace(store: store)
                 } else if store.section == .marketplace {
                     MarketplaceWorkspace(store: store)
+                } else if store.section == .seedDive {
+                    SeedDiveWorkspace(store: store)
                 } else if store.section == .nodeLab {
                     CompanionGraphWorkspace(store: store)
                 } else if store.section == .play && store.allowsPlay {
@@ -80,7 +82,7 @@ struct WorkspaceView: View {
 
             List(selection: $store.section) {
                 Section("YOUR WORKSPACE") {
-                    ForEach(store.allowsPlay ? [WorkspaceSection.context, .assistant, .nodeLab, .play] : [.context, .assistant, .nodeLab]) { section in sidebarRow(section) }
+                    ForEach(store.allowsPlay ? [WorkspaceSection.context, .assistant, .nodeLab, .seedDive, .play] : [.context, .assistant, .nodeLab, .seedDive]) { section in sidebarRow(section) }
                 }
                 Section("MAKE IT YOURS") {
                     ForEach([WorkspaceSection.appearance, .marketplace, .evolution, .rhythm, .memory]) { section in sidebarRow(section) }
@@ -148,6 +150,7 @@ struct WorkspaceView: View {
         switch store.section {
         case .assistant: EmptyView() // The assistant keeps its composer below its reply scroll.
         case .marketplace: EmptyView()
+        case .seedDive: EmptyView() // The inspector provides its own scrolling.
         case .nodeLab: EmptyView() // The native graph owns its canvas and inspector scrolling.
         case .play: EmptyView() // Hosted separately so the game owns its scrolling and focus.
         case .appearance: AppearanceWorkspace(store: store)
@@ -1010,6 +1013,7 @@ private extension WorkspaceSection {
     var icon: String {
         switch self {
         case .assistant: "bubble.left.and.bubble.right"
+        case .seedDive: "circle.hexagongrid"
         case .nodeLab: "point.3.connected.trianglepath.dotted"
         case .play: "gamecontroller"
         case .marketplace: "bag"
@@ -1026,6 +1030,7 @@ private extension WorkspaceSection {
     var eyebrow: String {
         switch self {
         case .assistant: "A little space to think"
+        case .seedDive: "Core Seed"
         case .nodeLab: "Connected knowledge"
         case .play: "Your world of play"
         case .marketplace, .appearance, .evolution, .rhythm: "Make it yours"
@@ -1036,6 +1041,7 @@ private extension WorkspaceSection {
     var heading: String {
         switch self {
         case .assistant: "Here, with you."
+        case .seedDive: "Seed interior"
         case .nodeLab: "Your connections, in view."
         case .play: "A little room to play."
         case .marketplace: "A little more you."
@@ -1052,6 +1058,7 @@ private extension WorkspaceSection {
     var subtitle: String {
         switch self {
         case .assistant: "Your thoughts, your context, and a companion close by."
+        case .seedDive: "Explore records and their connections."
         case .nodeLab: "Follow the sources, lessons and work behind each answer."
         case .play: "Return to your Habitat, continue your Journey, and meet in the Practice Arena."
         case .marketplace: "Discover, make and exchange local companion items."

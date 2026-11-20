@@ -1,0 +1,1249 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Seed Dive · ARCHi</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0a1213;
+        --panel: #101a1b;
+        --rail: #132020;
+        --border: #2b3b39;
+        --text: #e7efea;
+        --muted: #a5b8b3;
+        --quiet: #93a9a3;
+        --gold: #f8c57c;
+        --mono: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+        --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.45 var(--sans);
+        -webkit-font-smoothing: antialiased;
+      }
+      button,
+      input {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid var(--gold);
+        outline-offset: 3px;
+      }
+      button:disabled {
+        opacity: 0.46;
+        cursor: default;
+      }
+      button {
+        border: 1px solid var(--border);
+        background: var(--panel);
+        border-radius: 5px;
+      }
+      button:hover:enabled {
+        border-color: #6d8980;
+        background: #1b2a29;
+      }
+      button[aria-pressed='true'] {
+        background: #293832;
+        color: #fff2db;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .shell {
+        max-width: 1720px;
+        margin: auto;
+        padding: 0 clamp(12px, 2.6vw, 40px) 24px;
+      }
+      .top {
+        min-height: 54px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-weight: 650;
+        font-size: 20px;
+        letter-spacing: -1px;
+      }
+      .mark {
+        width: 20px;
+        height: 20px;
+        display: inline-block;
+        background: conic-gradient(from 45deg, #f7d59f, #90c5af, #385e59, #f7d59f);
+        border-radius: 50%;
+        position: relative;
+      }
+      .mark:before {
+        content: '';
+        position: absolute;
+        inset: 3px;
+        border-radius: 50%;
+        background: var(--bg);
+      }
+      .mark:after {
+        content: '';
+        position: absolute;
+        inset: 7px;
+        border-radius: 50%;
+        background: #f4cf8f;
+      }
+      .product {
+        padding-left: 14px;
+        border-left: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .mode {
+        margin-left: auto;
+        font: 11px var(--mono);
+        color: #b9d5c8;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .mode:before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border: 1px solid #a7cdb2;
+        border-radius: 50%;
+      }
+      .intro {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        justify-content: space-between;
+        padding: 24px 0 20px;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(34px, 4.1vw, 62px);
+        line-height: 1.03;
+        font-weight: 490;
+        letter-spacing: -0.056em;
+      }
+      .intro p {
+        color: var(--muted);
+        font-size: 14px;
+        margin-top: 8px;
+      }
+      .ghost,
+      .control {
+        padding: 7px 11px;
+        background: transparent;
+        font-size: 12px;
+        min-height: 34px;
+      }
+      .frame {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        background: var(--panel);
+      }
+      .headrow {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 15px;
+        border-bottom: 1px solid var(--border);
+      }
+      .kicker {
+        font: 600 10px/1.4 var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.13em;
+        color: var(--muted);
+      }
+      .line-title {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .scope {
+        width: 13px;
+        height: 13px;
+        border: 1px solid #a2b2a0;
+        border-radius: 50%;
+        box-shadow: inset 0 0 0 3px var(--panel);
+        background: #aec5b5;
+        display: inline-block;
+      }
+      .tabs {
+        display: flex;
+        gap: 2px;
+        background: #0b1415;
+        border: 1px solid var(--border);
+        padding: 2px;
+        border-radius: 5px;
+      }
+      .tabs button {
+        padding: 4px 10px;
+        border: none;
+        background: transparent;
+        border-radius: 3px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .stage {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) clamp(245px, 25vw, 325px);
+      }
+      .viewport {
+        position: relative;
+        min-width: 0;
+        isolation: isolate;
+        background: #071011;
+        height: clamp(360px, 45vh, 590px);
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        cursor: crosshair;
+        touch-action: pan-y;
+      }
+      .canvas-controls {
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        display: flex;
+        gap: 3px;
+      }
+      .canvas-controls button {
+        width: 34px;
+        height: 33px;
+        background: #101b1bea;
+        font: 15px var(--mono);
+        color: #dce6db;
+      }
+      .canvas-controls #fit {
+        width: auto;
+        padding: 0 9px;
+        font-size: 11px;
+      }
+      .map-status {
+        position: absolute;
+        left: 14px;
+        bottom: 19px;
+        font: 10px var(--mono);
+        color: #a6bab2;
+        pointer-events: none;
+      }
+      .rail {
+        border-left: 1px solid var(--border);
+        background: linear-gradient(125deg, #162222, #101a1a);
+        padding: 17px 17px 14px;
+        max-height: clamp(360px, 45vh, 590px);
+        overflow: auto;
+        scrollbar-color: #415651 transparent;
+      }
+      .detail-title {
+        font-size: clamp(21px, 2.2vw, 31px);
+        line-height: 1.12;
+        font-weight: 500;
+        letter-spacing: -0.04em;
+        overflow-wrap: anywhere;
+        margin: 8px 0;
+      }
+      .nodekind {
+        color: var(--tone, var(--gold));
+        font: 11px var(--mono);
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-top: 19px;
+      }
+      .dot {
+        background: var(--tone, var(--gold));
+        width: 7px;
+        height: 7px;
+        display: inline-block;
+        border-radius: 50%;
+        flex: none;
+      }
+      .status {
+        font: 11px var(--mono);
+        color: var(--muted);
+        margin: 8px 0 10px;
+        overflow-wrap: anywhere;
+      }
+      dl {
+        margin: 12px 0;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+      }
+      dt {
+        font: 600 10px var(--mono);
+        color: var(--quiet);
+        margin: 12px 0 3px;
+      }
+      dd {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+      }
+      .subheading {
+        border-top: 1px solid var(--border);
+        margin: 12px 0 6px;
+        padding-top: 13px;
+      }
+      .edge {
+        width: 100%;
+        padding: 7px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        text-align: left;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        color: var(--text);
+      }
+      .edge span:last-child {
+        min-width: 0;
+      }
+      .edge b,
+      .edge small {
+        display: block;
+        overflow-wrap: anywhere;
+      }
+      .edge b {
+        font-size: 12px;
+        font-weight: 550;
+      }
+      .edge small {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      details {
+        margin: 10px 0;
+      }
+      summary {
+        font-size: 12px;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      details dl {
+        border: 0;
+        padding: 0;
+      }
+      .seed-trail {
+        margin: 8px 0;
+        padding-left: 22px;
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+      .seed-trail li {
+        padding-bottom: 4px;
+      }
+      .seed-trail small {
+        display: block;
+        color: var(--muted);
+      }
+      .layers {
+        padding: 16px 0 0;
+      }
+      .layerhead {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0 0 9px;
+      }
+      .layers h2 {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .layerhead button {
+        font-size: 11px;
+        padding: 3px 8px;
+        margin-left: auto;
+      }
+      .bands {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 7px;
+      }
+      .band {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 5px;
+        text-align: left;
+        border-top: 2px solid var(--tone);
+        padding: 12px 11px;
+        background: linear-gradient(180deg, #172322, #101a1b);
+        font-size: 13px;
+        min-height: 48px;
+      }
+      .band b {
+        font: 15px var(--mono);
+        color: var(--tone);
+      }
+      .band[aria-pressed='true'] {
+        outline: 1px solid var(--tone);
+        outline-offset: -1px;
+      }
+      .foot {
+        margin: 10px 1px 0;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+        font: 11px/1.5 var(--mono);
+        color: var(--quiet);
+      }
+      .records {
+        height: 100%;
+        padding: 12px;
+        overflow: auto;
+      }
+      .records input {
+        background: #152221;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 8px 11px;
+        width: 100%;
+        margin-bottom: 6px;
+      }
+      .record {
+        display: grid;
+        grid-template-columns: 8px 1fr auto;
+        align-items: center;
+        gap: 9px;
+        width: 100%;
+        padding: 9px 5px;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+        font-size: 13px;
+      }
+      .record small {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .record span {
+        overflow-wrap: anywhere;
+      }
+      .empty {
+        padding: 12px 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .surface {
+        position: absolute;
+        inset: auto 0 21px;
+        text-align: center;
+      }
+      .primary {
+        padding: 10px 20px;
+        border-color: #ffe1a7;
+        background: var(--gold);
+        color: #211c16;
+        font-weight: 650;
+      }
+      .primary:hover:enabled {
+        background: #ffe4ad;
+        color: #211c16;
+        border-color: #fff1c7;
+      }
+      @media (min-width: 1450px) {
+        .intro {
+          padding: 32px 0;
+        }
+        .viewport {
+          height: clamp(440px, 50vh, 650px);
+        }
+        .rail {
+          max-height: clamp(440px, 50vh, 650px);
+        }
+      }
+      @media (max-width: 820px) {
+        .stage {
+          grid-template-columns: minmax(0, 1fr) 218px;
+        }
+        .rail {
+          padding: 13px;
+        }
+        .intro {
+          padding: 18px 0;
+        }
+        .band {
+          padding: 9px 7px;
+          font-size: 12px;
+        }
+      }
+      @media (max-width: 680px) {
+        .stage {
+          grid-template-columns: 1fr;
+        }
+        .rail {
+          border-left: 0;
+          border-top: 1px solid var(--border);
+          max-height: 300px;
+        }
+        .viewport {
+          height: 340px;
+        }
+        .bands {
+          grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+        }
+        .intro {
+          align-items: flex-end;
+        }
+        .intro p {
+          font-size: 12px;
+        }
+        .rail .nodekind {
+          margin-top: 9px;
+        }
+        .top {
+          min-height: 44px;
+        }
+        .headrow {
+          padding: 7px 10px;
+        }
+        .intro .ghost {
+          font-size: 11px;
+        }
+        .map-status {
+          max-width: 50%;
+          font-size: 9px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="top">
+        <span class="logo"><i class="mark" aria-hidden="true"></i>ARCHi</span
+        ><span class="product">Seed explorer</span><span class="mode" id="mode">Local snapshot</span>
+      </header>
+      <div class="intro">
+        <div>
+          <h1 id="heading">Seed interior</h1>
+          <p id="hint">Select a record to follow its links.</p>
+        </div>
+        <button id="surfaceToggle" class="ghost" type="button">↖ Seed surface</button>
+      </div>
+      <section class="frame" aria-label="Seed explorer">
+        <div class="headrow">
+          <span class="line-title"
+            ><i class="scope" aria-hidden="true"></i><span id="mapTitle">Connection map</span></span
+          >
+          <div class="tabs" id="tabs" aria-label="View">
+            <button id="mapTab" aria-pressed="true">Map</button
+            ><button id="listTab" aria-pressed="false">Records</button>
+          </div>
+        </div>
+        <div class="stage">
+          <div class="viewport">
+            <canvas
+              id="field"
+              aria-label="Visual map of the current records. Use the Records button for keyboard access."
+            ></canvas>
+            <div id="records" class="records" hidden>
+              <input id="search" aria-label="Find a record" placeholder="Find a record…" type="search" />
+              <div id="rows"></div>
+            </div>
+            <div class="canvas-controls" id="controls">
+              <button id="out" aria-label="Zoom out">−</button><button id="in" aria-label="Zoom in">+</button
+              ><button id="fit">Fit</button>
+            </div>
+            <span id="counts" class="map-status"></span>
+            <div class="surface" id="surface" hidden>
+              <button class="primary" id="enter">Dive into Seed ↓</button>
+            </div>
+          </div>
+          <aside class="rail" aria-label="Record inspector" id="rail"></aside>
+        </div>
+      </section>
+      <section class="layers" id="layers">
+        <div class="layerhead">
+          <h2>Record layers</h2>
+          <button id="all">Show all</button>
+        </div>
+        <div class="bands" id="bands"></div>
+      </section>
+      <footer class="foot"><span id="total"></span><span id="limit"></span></footer>
+    </main>
+    <script id="seed-path-math">
+      'use strict'
+      // Index the full snapshot once. Each parent is the actual labeled edge used to reach the record.
+      function seedPathTree(nodes, edges) {
+        const roots = nodes.filter((node) => node.kind === 'companion')
+        if (roots.length !== 1) return new Map()
+        const outgoing = new Map(nodes.map((node) => [node.id, []]))
+        for (const edge of edges) {
+          if (outgoing.has(edge.target)) outgoing.get(edge.source)?.push(edge)
+        }
+        const seed = roots[0].id
+        const parents = new Map([[seed, null]])
+        const queue = [seed]
+        for (let index = 0; index < queue.length; index++) {
+          for (const edge of outgoing.get(queue[index])) {
+            if (parents.has(edge.target)) continue
+            parents.set(edge.target, edge)
+            queue.push(edge.target)
+          }
+        }
+        return parents
+      }
+      function pathFromSeed(parents, id) {
+        if (!parents.has(id)) return null
+        const trail = []
+        let edge = parents.get(id)
+        while (edge) {
+          trail.push(edge)
+          edge = parents.get(edge.source)
+        }
+        return trail.reverse()
+      }
+    </script>
+    <script>
+      'use strict'
+      const $ = (id) => document.getElementById(id)
+      const layers = [
+        { id: 'core', name: 'Core', color: '#f5c985', kinds: ['companion'] },
+        { id: 'sources', name: 'Sources', color: '#75d9d0', kinds: ['source'] },
+        { id: 'memory', name: 'Memory', color: '#e8a7bc', kinds: ['lesson', 'context'] },
+        { id: 'activity', name: 'Activity', color: '#b5a9f4', kinds: ['request', 'invocation'] },
+        { id: 'outcomes', name: 'Outcomes', color: '#add599', kinds: ['answer', 'omission'] },
+      ]
+      const kinds = {
+        companion: 'Companion',
+        source: 'Source',
+        lesson: 'Kept lesson',
+        context: 'Temporary context',
+        request: 'Request',
+        invocation: 'Model call',
+        answer: 'Answer outcome',
+        omission: 'Omission',
+      }
+      const layerOf = (node) => layers.find((layer) => layer.kinds.includes(node.kind))
+      const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's')
+      function el(tag, cls, value) {
+        const item = document.createElement(tag)
+        if (cls) item.className = cls
+        if (value !== undefined) item.textContent = value
+        return item
+      }
+      let data = { nodes: [], edges: [], truncatedCount: 0 },
+        byId = new Map(),
+        seedParents = new Map(),
+        selected = null
+      let layerID = null,
+        tab = 'map',
+        outside = false,
+        still = false,
+        sample = false,
+        received = false
+      let zoom = 1,
+        pan = { x: 0, y: 0 },
+        lastPoints = [],
+        flight = 0,
+        raf = 0
+      const canvas = $('field'),
+        ctx = canvas.getContext('2d')
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)')
+      function visible() {
+        return data.nodes.filter((n) => !layerID || layerOf(n)?.id === layerID)
+      }
+      function replace(snapshot, stopMotion) {
+        data = snapshot
+        byId = new Map(data.nodes.map((n) => [n.id, n]))
+        seedParents = seedPathTree(data.nodes, data.edges)
+        still = !!stopMotion
+        if (!visible().some((n) => n.id === selected)) selected = visible()[0]?.id ?? null
+        if (!received && !still && !reduce.matches) flight = performance.now() + 500
+        received = true
+        lastPoints = []
+        render()
+        cancelAnimationFrame(raf)
+        raf = 0
+        if (canvas.hidden) ctx.clearRect(0, 0, canvas.width, canvas.height)
+        else draw()
+      }
+      window.seedDive = Object.freeze({ replace })
+      function choose(id, reveal = false) {
+        const node = byId.get(id)
+        if (!node) return
+        if (reveal && layerID && layerOf(node)?.id !== layerID) layerID = null
+        selected = id
+        render()
+      }
+      function filterLayer(id) {
+        layerID = id
+        if (!visible().some((n) => n.id === selected)) selected = visible()[0]?.id ?? null
+        $('search').value = ''
+        resetCamera()
+        render()
+      }
+      function resetCamera() {
+        zoom = 1
+        pan = { x: 0, y: 0 }
+      }
+      function surface(show) {
+        outside = show
+        if (!show) tab = 'map'
+        resetCamera()
+        if (!show) flight = still || reduce.matches ? 0 : performance.now() + 500
+        render()
+        ;(show ? $('enter') : $('surfaceToggle')).focus({ preventScroll: true })
+      }
+      function setTab(name) {
+        tab = name
+        render()
+        if (name === 'list') $('search').focus({ preventScroll: true })
+      }
+      function appendDetails(container, details) {
+        const list = el('dl')
+        details.forEach((d) => list.append(el('dt', '', d.label), el('dd', '', d.value)))
+        if (details.length) container.append(list)
+      }
+      function seedDistance(node) {
+        const trail = pathFromSeed(seedParents, node.id)
+        if (trail === null) {
+          const message = seedParents.size
+            ? 'No directed path from the seed in this snapshot.'
+            : 'Seed unavailable in this snapshot.'
+          return el('p', 'status', message)
+        }
+        if (trail.length === 0) return el('p', 'status', 'Seed origin · 0 hops')
+        const fold = el('details')
+        fold.append(el('summary', '', 'Path from seed · ' + plural(trail.length, 'hop')))
+        const list = el('ol', 'seed-trail')
+        list.append(el('li', '', byId.get(trail[0].source).title))
+        for (const edge of trail) {
+          const step = el('li')
+          step.append(el('small', '', edge.label), document.createTextNode(byId.get(edge.target).title))
+          list.append(step)
+        }
+        fold.append(
+          list,
+          el('p', 'status', 'One shortest route following the recorded arrows in the full snapshot.'),
+        )
+        return fold
+      }
+      function renderInspector() {
+        const rail = $('rail'),
+          node = byId.get(selected)
+        rail.replaceChildren(el('div', 'kicker', outside ? 'Seed surface' : 'Record inspector'))
+        if (outside) {
+          rail.append(
+            el('h2', 'detail-title', 'Core Seed'),
+            el('p', 'empty', 'Dive through the particle shell to explore this companion’s local records.'),
+          )
+          appendDetails(rail, [
+            {
+              label: 'Inside',
+              value: plural(data.nodes.length, 'record') + ' · ' + plural(data.edges.length, 'link'),
+            },
+            {
+              label: 'Session',
+              value: sample ? 'Illustrative screenplay session' : 'Current ARCHi workspace',
+            },
+          ])
+          return
+        }
+        if (!node) {
+          rail.append(el('p', 'empty', 'No record in this layer.'))
+          return
+        }
+        const layer = layerOf(node)
+        rail.style.setProperty('--tone', layer?.color ?? '#e7efea')
+        const kind = el('div', 'nodekind')
+        kind.append(el('i', 'dot'), document.createTextNode(kinds[node.kind] ?? node.kind))
+        rail.append(kind, el('h2', 'detail-title', node.title), el('p', 'status', node.status))
+        rail.append(seedDistance(node))
+        if (node.subtitle) rail.append(el('p', 'empty', node.subtitle))
+        const primary = [],
+          refs = []
+        node.details.forEach((d) =>
+          (/digest|revision|reference|\bid(s)?$|contract|utf-16|sha-256/i.test(d.label)
+            ? refs
+            : primary
+          ).push(d),
+        )
+        appendDetails(rail, primary)
+        if (refs.length) {
+          const fold = el('details')
+          fold.append(el('summary', '', 'Reference identifiers'))
+          appendDetails(fold, refs)
+          rail.append(fold)
+        }
+        const links = data.edges.filter((e) => e.source === node.id || e.target === node.id)
+        rail.append(el('h3', 'kicker subheading', plural(links.length, 'recorded link')))
+        links.forEach((edge) => {
+          const outgoing = edge.source === node.id,
+            other = byId.get(outgoing ? edge.target : edge.source)
+          if (!other) return
+          const button = el('button', 'edge'),
+            text = el('span')
+          text.append(
+            el('b', '', other.title),
+            el('small', '', (outgoing ? 'To · ' : 'From · ') + edge.label),
+          )
+          button.append(el('span', '', outgoing ? '↗' : '↙'), text)
+          button.onclick = () => {
+            choose(other.id, true)
+            rail.scrollTop = 0
+            focusInspector()
+          }
+          rail.append(button)
+        })
+      }
+      function focusInspector() {
+        const title = $('rail').querySelector('h2')
+        if (title) {
+          title.tabIndex = -1
+          title.focus({ preventScroll: true })
+        }
+      }
+      function renderRows() {
+        const needle = $('search').value.trim().toLocaleLowerCase(),
+          rows = $('rows')
+        rows.replaceChildren()
+        const matches = visible().filter((n) =>
+          [n.title, n.status, n.subtitle, kinds[n.kind]].join(' ').toLocaleLowerCase().includes(needle),
+        )
+        matches.forEach((n) => {
+          const b = el('button', 'record'),
+            dot = el('i', 'dot')
+          dot.style.setProperty('--tone', layerOf(n)?.color)
+          b.append(dot, el('span', '', n.title), el('small', '', n.status))
+          b.setAttribute('aria-pressed', String(n.id === selected))
+          b.onclick = () => {
+            choose(n.id)
+            focusInspector()
+          }
+          rows.append(b)
+        })
+        if (!matches.length) rows.append(el('p', 'empty', 'No matching records.'))
+      }
+      layers.forEach((layer) => {
+        const b = el('button', 'band')
+        b.style.setProperty('--tone', layer.color)
+        b.id = 'layer-' + layer.id
+        b.append(el('span', '', layer.name), el('b', '', '0'))
+        b.onclick = () => filterLayer(layerID === layer.id ? null : layer.id)
+        $('bands').append(b)
+      })
+      function render() {
+        const nodes = visible(),
+          ids = new Set(nodes.map((n) => n.id))
+        const links = data.edges.filter((e) => ids.has(e.source) && ids.has(e.target))
+        $('heading').textContent = outside ? 'Core Seed' : 'Seed interior'
+        $('hint').textContent = outside
+          ? 'Enter the core to inspect the records behind this session.'
+          : 'Select a record to follow its links.'
+        $('mode').textContent = sample ? 'Example session' : 'Local snapshot'
+        $('mapTitle').textContent = outside
+          ? 'Particle shell'
+          : tab === 'map'
+            ? 'Connection map'
+            : 'Record index'
+        $('surfaceToggle').hidden = $('tabs').hidden = $('layers').hidden = outside
+        $('surface').hidden = !outside
+        $('records').hidden = outside || tab !== 'list'
+        canvas.hidden = !outside && tab !== 'map'
+        $('controls').hidden = outside || tab !== 'map'
+        $('counts').hidden = outside || tab !== 'map'
+        $('counts').textContent = plural(nodes.length, 'record') + ' / ' + plural(links.length, 'link')
+        $('mapTab').setAttribute('aria-pressed', String(tab === 'map'))
+        $('listTab').setAttribute('aria-pressed', String(tab === 'list'))
+        $('total').textContent = sample
+          ? 'Synthetic records · illustrative session'
+          : 'Read-only · current workspace'
+        $('limit').textContent = data.truncatedCount
+          ? data.truncatedCount + ' items outside this snapshot'
+          : 'Snapshot complete'
+        $('all').disabled = !layerID
+        layers.forEach((layer) => {
+          const b = $('layer-' + layer.id)
+          b.querySelector('b').textContent = data.nodes.filter((n) => layerOf(n) === layer).length
+          b.setAttribute('aria-pressed', String(layerID === layer.id))
+        })
+        renderInspector()
+        if ($('records').hidden) $('rows').replaceChildren()
+        else renderRows()
+        schedule()
+      }
+      $('mapTab').onclick = () => setTab('map')
+      $('listTab').onclick = () => setTab('list')
+      $('search').oninput = renderRows
+      $('all').onclick = () => filterLayer(null)
+      $('surfaceToggle').onclick = () => surface(true)
+      $('enter').onclick = () => surface(false)
+      function zoomBy(factor) {
+        zoom = Math.min(4, Math.max(0.65, zoom * factor))
+        schedule()
+      }
+      $('in').onclick = () => zoomBy(1.25)
+      $('out').onclick = () => zoomBy(0.8)
+      $('fit').onclick = () => {
+        resetCamera()
+        schedule()
+      }
+      // Stable geometry keeps a static snapshot readable. The seed shell and grid
+      // are illustration. Only projected edges receive paths between record nodes.
+      const TAU = 2 * Math.PI
+      function noise(i) {
+        const n = Math.sin(i * 78.233 + 19.41) * 43758.5453
+        return n - Math.floor(n)
+      }
+      function circle(x, y, r) {
+        ctx.beginPath()
+        ctx.arc(x, y, r, 0, TAU)
+      }
+      function line(x, y, ex, ey) {
+        ctx.beginPath()
+        ctx.moveTo(x, y)
+        ctx.lineTo(ex, ey)
+        ctx.stroke()
+      }
+      function glow(x, y, r, color, alpha) {
+        const grad = ctx.createRadialGradient(x, y, 0, x, y, r)
+        grad.addColorStop(0, color)
+        grad.addColorStop(1, color + '00')
+        ctx.save()
+        ctx.globalAlpha = alpha
+        ctx.fillStyle = grad
+        ctx.fillRect(x - r, y - r, r * 2, r * 2)
+        ctx.restore()
+      }
+      function seed(x, y, r) {
+        glow(x, y, r * 1.8, '#d79550', 0.2)
+        glow(x - r * 0.3, y + r * 0.25, r * 0.85, '#99463e', 0.13)
+        glow(x - r * 0.21, y - r * 0.28, r * 0.78, '#f9b36f', 0.13)
+        ctx.save()
+        ctx.translate(x, y)
+        // Project a Fibonacci sphere, then wrap it with broken, inclined filaments.
+        const points = [],
+          goldAngle = Math.PI * (3 - Math.sqrt(5)),
+          tilt = -0.26
+        function project(a, b, c) {
+          return [a * Math.cos(tilt) - b * Math.sin(tilt), a * Math.sin(tilt) + b * Math.cos(tilt), c]
+        }
+        for (let i = 0; i < 1150; i++) {
+          const b = 1 - (2 * (i + 0.5)) / 1150,
+            h = Math.sqrt(1 - b * b),
+            phi = i * goldAngle
+          const [px, py, pz] = project(h * Math.cos(phi), b, h * Math.sin(phi))
+          points.push({ px, py, pz, i })
+        }
+        points.sort((a, b) => a.pz - b.pz)
+        const palette = ['#ffe2a0', '#e7a14b', '#d55d50', '#ffc98d', '#d8ede2', '#b783ab']
+        for (const p of points) {
+          const shine = noise(p.i),
+            depth = (p.pz + 1) / 2
+          if (shine > 0.95 && p.pz > -0.35)
+            glow(p.px * r, p.py * r, Math.max(2, r * 0.065), '#ffbe76', 0.34 + depth * 0.28)
+          ctx.globalAlpha = (0.18 + 0.75 * depth) * (0.38 + 0.62 * shine)
+          ctx.fillStyle = palette[p.i % 9 < 5 ? p.i % 2 : p.i % 6]
+          circle(
+            p.px * r,
+            p.py * r,
+            Math.max(0.35, r * (shine > 0.956 ? 0.018 : 0.007)) * (0.72 + 0.52 * depth),
+          )
+          ctx.fill()
+        }
+        for (let k = 0; k < 7; k++) {
+          ctx.save()
+          ctx.rotate(-0.86 + k * 0.33)
+          ctx.lineWidth = Math.max(0.55, r * 0.006)
+          ctx.strokeStyle = palette[k % palette.length]
+          ctx.globalAlpha = 0.5
+          ctx.setLineDash([r * (0.09 + k * 0.017), r * 0.042, r * 0.032, r * 0.026])
+          ctx.beginPath()
+          ctx.ellipse(
+            0,
+            0,
+            r * (1.02 + k * 0.012),
+            r * (0.2 + k * 0.09),
+            0,
+            0.13 + k * 0.49,
+            TAU - 0.35 + k * 0.49,
+          )
+          ctx.stroke()
+          ctx.restore()
+        }
+        ctx.globalAlpha = 1
+        glow(0, 0, r * 0.42, '#f6ac5e', 0.66)
+        glow(0, 0, r * 0.12, '#ffe8b3', 1)
+        circle(0, 0, Math.max(1, r * 0.029))
+        ctx.fillStyle = '#fff5ce'
+        ctx.fill()
+        ctx.restore()
+      }
+      function backdrop(w, h) {
+        ctx.fillStyle = '#091213'
+        ctx.fillRect(0, 0, w, h)
+        const step = w < 420 ? 33 : 46
+        ctx.strokeStyle = '#142221'
+        ctx.lineWidth = 0.65
+        for (let i = step / 2; i < w; i += step) line(i, 0, i, h)
+        for (let i = step / 2; i < h; i += step) line(0, i, w, i)
+        for (let i = 0; i < Math.min(450, (w * h) / 720); i++) {
+          const k = noise(i + 10)
+          ctx.fillStyle = k > 0.79 ? '#49554c' : '#24342f'
+          const s = k > 0.92 ? 1.4 : 0.8
+          ctx.fillRect(noise(i + 90) * w, noise(i + 210) * h, s, s)
+        }
+        ctx.strokeStyle = '#749386'
+        ctx.lineWidth = 1
+        ;[
+          [11, 11, 1, 1],
+          [w - 11, 11, -1, 1],
+          [11, h - 11, 1, -1],
+          [w - 11, h - 11, -1, -1],
+        ].forEach(([x, y, a, b]) => {
+          line(x, y, x + a * 10, y)
+          line(x, y, x, y + b * 10)
+        })
+      }
+      const regions = {
+        sources: [0.21, 0.29],
+        memory: [0.25, 0.71],
+        activity: [0.76, 0.26],
+        outcomes: [0.77, 0.69],
+        core: [0.5, 0.48],
+      }
+      function positions(nodes, w, h) {
+        const grouped = new Map()
+        nodes.forEach((n) => {
+          const key = layerOf(n)?.id ?? 'core'
+          if (!grouped.has(key)) grouped.set(key, [])
+          grouped.get(key).push(n)
+        })
+        const points = []
+        for (const [key, group] of grouped) {
+          const [fx, fy] = layerID ? [0.5, 0.48] : regions[key]
+          const radius = layerID ? Math.min(w * 0.34, h * 0.3) : Math.min(w * 0.11, h * 0.15)
+          group.forEach((n, i) => {
+            const scale = group.length === 1 ? 0 : Math.sqrt(i / (group.length - 1))
+            const angle = i * 2.39996 + (key === 'memory' ? 0.65 : -0.47)
+            const x = w * fx + Math.cos(angle) * radius * scale,
+              y = h * fy + Math.sin(angle) * radius * scale
+            points.push({ n, first: i === 0, x, y, color: layerOf(n)?.color ?? '#ddd' })
+          })
+        }
+        return points
+      }
+      function drawEdge(a, b, lit) {
+        ctx.lineWidth = lit ? 1.25 : 0.8
+        ctx.strokeStyle = lit ? b.color + '9a' : '#788a834f'
+        const dx = b.x - a.x,
+          dy = b.y - a.y,
+          dist = Math.hypot(dx, dy)
+        if (!dist) return
+        const bend = Math.min(15, dist * 0.15),
+          cx = (a.x + b.x) / 2 - (dy / dist) * bend,
+          cy = (a.y + b.y) / 2 + (dx / dist) * bend
+        ctx.beginPath()
+        ctx.moveTo(a.x, a.y)
+        ctx.quadraticCurveTo(cx, cy, b.x, b.y)
+        ctx.stroke()
+        if (lit) {
+          const t = 0.72,
+            u = 1 - t,
+            x = u * u * a.x + 2 * t * u * cx + t * t * b.x,
+            y = u * u * a.y + 2 * t * u * cy + t * t * b.y
+          const angle = Math.atan2(u * (cy - a.y) + t * (b.y - cy), u * (cx - a.x) + t * (b.x - cx))
+          line(x, y, x - 4 * Math.cos(angle - 0.46), y - 4 * Math.sin(angle - 0.46))
+          line(x, y, x - 4 * Math.cos(angle + 0.46), y - 4 * Math.sin(angle + 0.46))
+        }
+      }
+      function nodeLabel(p, w, fontSize, maxWidth) {
+        let txt = p.n.title,
+          y = p.y + (p.n.kind === 'companion' ? p.r + 9 : 12)
+        ctx.font = '500 ' + fontSize + 'px -apple-system, BlinkMacSystemFont, Arial, sans-serif'
+        const displayWidth = Math.min(maxWidth, w - 12)
+        if (ctx.measureText(txt).width > displayWidth - 10) {
+          while (txt.length && ctx.measureText(txt + '…').width > displayWidth - 10) txt = txt.slice(0, -1)
+          txt += '…'
+        }
+        const width = ctx.measureText(txt).width + 10,
+          x = Math.min(w - width - 3, Math.max(3, p.x - width / 2))
+        ctx.fillStyle = '#0a1313ed'
+        ctx.fillRect(x, y, width, 17)
+        ctx.fillStyle = p.color
+        ctx.textAlign = 'center'
+        ctx.fillText(txt, x + width / 2, y + 12)
+        ctx.textAlign = 'left'
+      }
+      function draw() {
+        raf = 0
+        if (canvas.hidden) return
+        const box = canvas.getBoundingClientRect(),
+          w = box.width,
+          h = box.height
+        if (w < 1 || h < 1) return
+        const dpr = Math.min(2, window.devicePixelRatio || 1)
+        if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+          canvas.width = Math.round(w * dpr)
+          canvas.height = Math.round(h * dpr)
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        backdrop(w, h)
+        if (outside) {
+          const r = Math.min(w * 0.27, h * 0.3)
+          seed(w * 0.5, h * 0.44, r)
+          lastPoints = []
+          return
+        }
+        const nodes = visible(),
+          points = positions(nodes, w, h),
+          center = { x: w * 0.5, y: h * 0.48 }
+        const remaining = reduce.matches || still ? 0 : Math.max(0, (flight - performance.now()) / 500)
+        const scale = zoom * (1 - 0.84 * remaining * remaining)
+        const rs = Math.min(w * (w < 460 ? 0.096 : 0.105), h * 0.184)
+        for (const p of points) {
+          p.x = (p.x - center.x) * scale + center.x + pan.x
+          p.y = (p.y - center.y) * scale + center.y + pan.y
+          p.r = p.n.kind === 'companion' ? Math.max(15, rs * scale) : p.first ? 5 : 3.5
+        }
+        for (const p of points) {
+          if (p.first && p.n.kind !== 'companion') {
+            const radius = Math.min(110, w * 0.145) * Math.min(scale, 1.5)
+            glow(p.x, p.y, radius, p.color, 0.095)
+          }
+        }
+        const pairs = new Map(points.map((p) => [p.n.id, p]))
+        data.edges.forEach((e) => {
+          const a = pairs.get(e.source),
+            b = pairs.get(e.target)
+          if (a && b) drawEdge(a, b, selected === e.source || selected === e.target)
+        })
+        for (const p of points) {
+          if (p.n.kind === 'companion') {
+            seed(p.x, p.y, p.r)
+          } else {
+            glow(p.x, p.y, p.first ? 22 : 11, p.color, p.first ? 0.27 : 0.19)
+            ctx.fillStyle = p.color
+            circle(p.x, p.y, p.r)
+            ctx.fill()
+            if (p.first) {
+              ctx.strokeStyle = p.color + '99'
+              ctx.lineWidth = 0.7
+              circle(p.x, p.y, p.r + 3.5)
+              ctx.stroke()
+            }
+          }
+          if (p.n.id === selected) {
+            ctx.strokeStyle = p.color
+            ctx.lineWidth = 1
+            ctx.setLineDash([4, 5])
+            circle(p.x, p.y, p.r + (p.n.kind === 'companion' ? 5 : 6))
+            ctx.stroke()
+            ctx.setLineDash([])
+          }
+        }
+        for (const p of points.filter((p) => p.first || p.n.id === selected))
+          nodeLabel(p, w, w < 460 ? 10 : 12, w < 460 ? 90 : 150)
+        if (!points.length) {
+          ctx.fillStyle = '#b8c9be'
+          ctx.font = '14px sans-serif'
+          ctx.textAlign = 'center'
+          ctx.fillText('No records in this layer', w / 2, h / 2)
+          ctx.textAlign = 'left'
+        }
+        lastPoints = points
+        $('in').disabled = zoom >= 4
+        $('out').disabled = zoom <= 0.65
+        if (remaining > 0) {
+          // Cross the expanding rim as the inner records resolve into their positions.
+          const shellRadius = Math.min(w * 0.27, h * 0.3) + Math.hypot(w, h) * (1 - remaining)
+          ctx.save()
+          ctx.globalAlpha = 0.48 * remaining
+          ctx.strokeStyle = '#ebbd7e'
+          ctx.lineWidth = 1
+          ctx.setLineDash([5, 9])
+          circle(center.x, center.y, shellRadius)
+          ctx.stroke()
+          ctx.restore()
+          schedule()
+        }
+      }
+      function schedule() {
+        if (!raf) raf = requestAnimationFrame(draw)
+      }
+      new ResizeObserver(schedule).observe(canvas.parentElement)
+      reduce.addEventListener('change', schedule)
+      let drag = null
+      canvas.addEventListener('pointerdown', (e) => {
+        if (outside || e.button !== 0) return
+        drag = { id: e.pointerId, x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y, moved: false }
+        canvas.setPointerCapture(e.pointerId)
+      })
+      canvas.addEventListener('pointermove', (e) => {
+        if (!drag || drag.id !== e.pointerId) return
+        const dx = e.clientX - drag.x,
+          dy = e.clientY - drag.y
+        if (Math.hypot(dx, dy) > 4) drag.moved = true
+        if (drag.moved) {
+          pan = { x: drag.panX + dx, y: drag.panY + dy }
+          schedule()
+        }
+      })
+      canvas.addEventListener('pointerup', (e) => {
+        if (!drag || drag.id !== e.pointerId) return
+        if (!drag.moved) {
+          const box = canvas.getBoundingClientRect(),
+            x = e.clientX - box.left,
+            y = e.clientY - box.top
+          const hits = lastPoints
+            .map((p) => ({ p, d: Math.hypot(x - p.x, y - p.y) }))
+            .filter((hit) => hit.d <= Math.max(13, hit.p.r))
+            .sort((a, b) => a.d - b.d)
+          if (hits.length) {
+            choose(hits[0].p.n.id)
+            $('rail').scrollTop = 0
+          }
+        }
+        drag = null
+      })
+      canvas.addEventListener('lostpointercapture', () => {
+        drag = null
+      })
+      render()
+    </script>
+  </body>
+</html>

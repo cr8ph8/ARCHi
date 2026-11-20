@@ -39,6 +39,8 @@ struct QiMonCard: View {
                             .font(.system(size: 11)).foregroundStyle(.white.opacity(0.55))
                     }
                     HStack(spacing: 14) {
+                        Button("Dive into Seed") { store.open(.seedDive) }
+                            .accessibilityIdentifier("kin.seed-dive")
                         if store.allowsPlay { Button("Visit Habitat") { store.open(.play) } }
                         if store.section != .evolution {
                             Button("Life with KIN") { store.open(.evolution) }

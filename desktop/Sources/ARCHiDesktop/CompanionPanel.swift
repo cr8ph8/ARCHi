@@ -555,6 +555,7 @@ private final class CompanionInteractionView: NSView {
             return item
         }
         _ = add("Ask ARCHi…", #selector(ask))
+        _ = add("Dive into Seed", #selector(diveIntoSeed))
         _ = add("Point at a window…", #selector(pointAtWindow))
         _ = add("Work together…", #selector(context))
         menu.addItem(.separator())
@@ -569,6 +570,7 @@ private final class CompanionInteractionView: NSView {
     }
 
     @objc private func openMenu() { quickMenu().popUp(positioning: nil, at: NSPoint(x: bounds.maxX - 18, y: 36), in: self) }
+    @objc private func diveIntoSeed() { store.open(.seedDive) }
     @objc private func ask() { openChat?() }
     @objc private func context() { store.open(.context) }
     @objc private func pointAtWindow() { store.beginDesktopInterest() }
