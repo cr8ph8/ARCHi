@@ -1,0 +1,55 @@
+name: Animated Seed on macOS
+
+on:
+  pull_request:
+    branches: [main, codex/peer-convergence-validation, codex/seed-dive-inspector]
+    paths:
+      - '.github/workflows/seed-live-macos.yml'
+      - 'desktop/**'
+      - 'script/test_seed_live_macos.py'
+      - 'script/test_peer_convergence_macos.py'
+      - 'scripts/seed-*.test.mjs'
+      - 'SOURCE_SHA256SUMS'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seed-live-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  seed-native:
+    name: Native Seed, WebKit and peer regression fixtures
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Check out the exact test revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check runner result accounting
+        run: python3 -m unittest discover -s scripts/tests -p test_peer_convergence_macos.py
+      - name: Check portable graph and live boundary behavior
+        run: node --test scripts/seed-*.test.mjs
+      - name: Run bounded native and WebKit validation
+        env:
+          EXPECTED_TEST_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: >-
+          python3 script/test_seed_live_macos.py
+          --output "$RUNNER_TEMP/archi-seed-live"
+          --expected-head "$EXPECTED_TEST_HEAD"
+      - name: Retain validation and visual evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: seed-live-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/archi-seed-live/*.json
+            ${{ runner.temp }}/archi-seed-live/*.log
+            ${{ runner.temp }}/archi-seed-live/rendered/**
+          if-no-files-found: warn
+          retention-days: 14

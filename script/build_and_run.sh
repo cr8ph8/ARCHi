@@ -92,6 +92,7 @@ cp -R "$REPO_ROOT/desktop/Sources/ARCHiDesktop/Resources/CompanionArt" "$BUNDLE_
 test -f "$BUNDLE_DIR/Contents/Resources/CompanionArt/archi-pearl-study-v1.png"
 cp -R "$REPO_ROOT/desktop/Sources/ARCHiDesktop/Resources/Branding" "$BUNDLE_DIR/Contents/Resources/Branding"
 cp "$BUNDLE_DIR/Contents/Resources/Branding/AppIcon.icns" "$BUNDLE_DIR/Contents/Resources/AppIcon.icns"
+cp -R "$REPO_ROOT/desktop/Sources/ARCHiDesktop/Resources/SeedDive" "$BUNDLE_DIR/Contents/Resources/SeedDive"
 mkdir -p "$BUNDLE_DIR/Contents/Resources/ReactorBridge"
 cp "$REPO_ROOT/desktop/Sources/ARCHiDesktop/Resources/ReactorBridge/worker.py" "$BUNDLE_DIR/Contents/Resources/ReactorBridge/worker.py"
 # A native button has the app's filesystem access, not Codex's Documents access.
