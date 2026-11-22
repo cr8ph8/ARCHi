@@ -102,13 +102,25 @@ def ui_test(out, app, session, profile, topic, text):
         project = Path(directory)
         shutil.copy(HERE / "project.yml", project)
         shutil.copy(HERE / "MemoryUITests.swift", project)
-        config = dict(out=str(out), app=str(app), session=session, profile=str(profile), topic=topic, text=text)
+        config = dict(app=str(app), session=session, topic=topic, text=text)
         (project / "run.json").write_text(json.dumps(config))
         subprocess.run(["xcodegen", "generate"], cwd=project, check=True)
-        subprocess.run(["xcodebuild", "-project", "MemoryUITests.xcodeproj", "-scheme", "MemoryUITests",
-                        "-destination", "platform=macOS", "-parallel-testing-enabled", "NO",
-                        "-derivedDataPath", str(project / "DerivedData"), "-resultBundlePath", str(out / "UI.xcresult"),
-                        "test"], cwd=project, check=True)
+        common = ["xcodebuild", "-project", "MemoryUITests.xcodeproj", "-scheme", "MemoryUITests",
+                  "-destination", "platform=macOS", "-parallel-testing-enabled", "NO",
+                  "-derivedDataPath", str(project / "DerivedData"), "-enableCodeCoverage", "NO"]
+        subprocess.run(common + ["build-for-testing"], cwd=project, check=True)
+        checkpoint(out, "baseline", snapshot(profile))
+        for phase in PHASES[1:]:
+            method = "test" + phase.title()
+            subprocess.run(common + ["test-without-building", "-only-testing:MemoryUITests/MemoryUITests/" + method,
+                                     "-resultBundlePath", str(out / (phase + ".xcresult"))], cwd=project, check=True)
+            # Xcode can succeed with zero matching tests. Require the individual test to have passed.
+            result = subprocess.check_output(["xcrun", "xcresulttool", "get", "test-results", "summary",
+                                              "--path", str(out / (phase + ".xcresult"))], text=True)
+            summary = json.loads(result)
+            if (summary.get("passedTests"), summary.get("failedTests"), summary.get("skippedTests")) != (1, 0, 0):
+                raise ValueError("Required UI test did not run and pass: " + method)
+            checkpoint(out, phase, snapshot(profile))
 
 
 def main():
