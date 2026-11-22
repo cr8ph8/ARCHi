@@ -22,7 +22,7 @@ import time
 
 ANCHOR = "3f5e8d6dad1b80a02ccb19de14b6f1f541cdc281"
 CORE_SUITES = {"RepresentationPeerTests": 12, "BoundedConvergenceTests": 4}
-NATIVE_SUITES = {"CompanionPeerIntegrationTests": 7}
+NATIVE_SUITES = {"CompanionPeerIntegrationTests": 7, "CompanionGraphTests": 11}
 CORE_FILES = ("RepresentationPeerDomain.swift", "PeerObservationDirectory.swift",
               "PeerWorkSession.swift", "PeerGossipSimulation.swift")
 SUITE_SUMMARY = re.compile(
@@ -258,7 +258,7 @@ def execute(root, output, expected_head=None, timeout_seconds=600):
         for name, package_path, expected, extra in (
             ("core", package, CORE_SUITES, []),
             ("native-integration", root / "desktop", NATIVE_SUITES,
-             ["--filter", "CompanionPeerIntegrationTests"]),
+             ["--filter", "CompanionPeerIntegrationTests|CompanionGraphTests"]),
         ):
             command = [swift, "test", "--package-path", str(package_path),
                        "--scratch-path", str(output / (name + "-build")),

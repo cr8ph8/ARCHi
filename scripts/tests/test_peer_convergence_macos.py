@@ -28,11 +28,12 @@ class PeerMacRunnerTests(unittest.TestCase):
     def test_selected_core_and_native_counts_do_not_sum_aggregate_or_swift_testing(self):
         core = summary("RepresentationPeerTests", 12) + summary("BoundedConvergenceTests", 4)
         core += summary("All tests", 16) + "Test run with 0 tests passed after 0.001 seconds.\n"
-        native = summary("CompanionPeerIntegrationTests", 7) + summary("Selected tests", 7)
+        native = (summary("CompanionPeerIntegrationTests", 7) + summary("CompanionGraphTests", 11)
+                  + summary("Selected tests", 18))
         a = runner.classify_xctest(core, 0, runner.CORE_SUITES)
         b = runner.classify_xctest(native, 0, runner.NATIVE_SUITES)
         self.assertEqual((a["status"], b["status"]), ("PASS", "PASS"))
-        self.assertEqual(a["executed_cases"] + b["executed_cases"], 23)
+        self.assertEqual(a["executed_cases"] + b["executed_cases"], 34)
 
     def test_zero_exit_missing_suite_or_zero_cases_is_error(self):
         for log in ("", summary("All tests", 16), summary("RepresentationPeerTests", 12),
@@ -45,15 +46,15 @@ class PeerMacRunnerTests(unittest.TestCase):
         self.assertEqual(runner.classify_xctest(log, 0, runner.CORE_SUITES)["status"], "FAIL")
 
     def test_nonzero_command_after_passing_summaries_is_error(self):
-        log = summary("CompanionPeerIntegrationTests", 7)
+        log = summary("CompanionPeerIntegrationTests", 7) + summary("CompanionGraphTests", 11)
         self.assertEqual(runner.classify_xctest(log, 1, runner.NATIVE_SUITES)["status"], "ERROR")
 
     def test_skipped_cases_remain_skipped(self):
-        log = summary("CompanionPeerIntegrationTests", 7, skipped=1)
+        log = summary("CompanionPeerIntegrationTests", 7, skipped=1) + summary("CompanionGraphTests", 11)
         self.assertEqual(runner.classify_xctest(log, 0, runner.NATIVE_SUITES)["status"], "SKIPPED")
 
     def test_duplicate_required_suite_is_error_instead_of_last_result_wins(self):
-        log = summary("CompanionPeerIntegrationTests", 7) * 2
+        log = summary("CompanionPeerIntegrationTests", 7) * 2 + summary("CompanionGraphTests", 11)
         result = runner.classify_xctest(log, 0, runner.NATIVE_SUITES)
         self.assertEqual(result["status"], "ERROR")
         self.assertIsNone(result["executed_cases"])

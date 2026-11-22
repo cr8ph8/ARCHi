@@ -52,7 +52,13 @@ The Mac runner executes separate populations:
 | Stage | Expected XCTest cases | Scope |
 | --- | ---: | --- |
 | Foundation core | 16 | 12 existing RepresentationPeerTests plus 4 BoundedConvergenceTests, using the production source files |
-| Native integration | 7 | CompanionPeerIntegrationTests in the full desktop package, using disposable profiles and in-process model stubs |
+| Native integration and graph regressions | 18 | Seven CompanionPeerIntegrationTests plus 11 existing CompanionGraphTests in the full desktop package, using disposable profiles and in-process model stubs |
+
+The graph regression population is included because the first actual Mac run
+exposed a Swift type-checking limit in construction of the graph memory-reference
+set. The expression is split into equivalent set unions; the existing tests
+check graph reference scope, provenance, expiry, privacy and deterministic bounds.
+The planned total is 34 Swift cases across the two stages.
 
 The core stage does not validate SwiftUI or native owners. The native stage
 checks source changes, request completion, permit expiry, cancellation, reset,
