@@ -35,8 +35,10 @@ mkdir -p "$test_workspace/Sources/ARCHiDesktop" "$test_workspace/Tests/Represent
 for source_file in RepresentationPeerDomain.swift PeerObservationDirectory.swift PeerWorkSession.swift PeerGossipSimulation.swift; do
   cp -- "$repo_root/desktop/Sources/ARCHiDesktop/$source_file" "$test_workspace/Sources/ARCHiDesktop/$source_file"
 done
-cp -- "$repo_root/desktop/Tests/ARCHiDesktopTests/RepresentationPeerTests.swift" \
-  "$test_workspace/Tests/RepresentationPeerTests/RepresentationPeerTests.swift"
+for test_file in RepresentationPeerTests.swift BoundedConvergenceTests.swift; do
+  cp -- "$repo_root/desktop/Tests/ARCHiDesktopTests/$test_file" \
+    "$test_workspace/Tests/RepresentationPeerTests/$test_file"
+done
 
 cat > "$test_workspace/Package.swift" <<'SWIFT_PACKAGE'
 // swift-tools-version: 6.0

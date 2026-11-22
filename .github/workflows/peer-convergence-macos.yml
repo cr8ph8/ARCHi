@@ -1,0 +1,52 @@
+name: Peer convergence on macOS
+
+on:
+  pull_request:
+    branches: [main, codex/peer-representation-admission]
+    paths:
+      - '.github/workflows/peer-convergence-macos.yml'
+      - 'desktop/**'
+      - 'script/test_peer_convergence_macos.py'
+      - 'script/test_representation_peers.sh'
+      - 'scripts/tests/test_peer_convergence_macos.py'
+      - 'SOURCE_SHA256SUMS'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: peer-convergence-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-peer-validation:
+    name: Core and native peer fixtures
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - name: Check out the exact test revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check runner result accounting
+        run: python3 -m unittest discover -s scripts/tests -p test_peer_convergence_macos.py
+      - name: Run bounded peer validation on macOS
+        env:
+          EXPECTED_TEST_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: >-
+          python3 script/test_peer_convergence_macos.py
+          --output "$RUNNER_TEMP/archi-peer-convergence"
+          --expected-head "$EXPECTED_TEST_HEAD"
+      - name: Retain test evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: peer-convergence-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/archi-peer-convergence/*.json
+            ${{ runner.temp }}/archi-peer-convergence/*.log
+          if-no-files-found: warn
+          retention-days: 14
