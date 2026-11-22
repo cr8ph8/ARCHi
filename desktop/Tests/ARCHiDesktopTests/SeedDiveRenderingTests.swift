@@ -27,27 +27,33 @@ final class SeedDiveRenderingTests: XCTestCase {
         }
         let web = try XCTUnwrap(webView(in: host))
         XCTAssertFalse(web.configuration.websiteDataStore.isPersistent)
+        _ = await recordDiagnostics(web, label: "native-baseline")
+        try await capture(web, name: "native-baseline-wide")
         let baseline = try await inspect(web)
+        XCTAssertFalse(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+            "Motion qualification requires a genuinely motion-enabled OS; see captured diagnostics")
+        XCTAssertEqual(baseline["reducedMotion"] as? Bool, false,
+            "WebKit must independently report motion enabled before this test can qualify pulses")
         XCTAssertEqual(baseline["eventCount"] as? Int, 0)
         XCTAssertEqual(baseline["pulseCount"] as? Int, 0)
 
         host.rootView = SeedDivePage(snapshot: changed, telemetry: metadata(graph: changed, working: true),
             still: false, failed: { XCTFail("Changed Seed delivery failed") })
-        try await wait("An actual snapshot change produces an observed pulse") {
+        try await wait("An actual snapshot change produces an observed pulse", web: web) {
             try await self.boolean(web, "window.seedDive.inspect().pulseCount > 0")
         }
-        try await capture(web, name: "native-memory-1320")
+        try await capture(web, name: "native-memory-wide")
         let fewerLinks = CompanionGraphSnapshot(nodes: changed.nodes,
             edges: changed.edges.filter { $0.id != "e4" && $0.id != "e5" }, truncatedCount: 0)
         host.rootView = SeedDivePage(snapshot: fewerLinks, telemetry: metadata(graph: fewerLinks, working: true),
             still: false, failed: { XCTFail("Edge replacement delivery failed") })
-        try await wait("Edge withdrawal reaches the current snapshot") {
+        try await wait("Edge withdrawal reaches the current snapshot", web: web) {
             try await self.boolean(web, "document.querySelector('#counts').textContent === '5 records / 3 links'")
         }
         let afterEdgeRemoval = try await inspect(web)
         XCTAssertEqual(afterEdgeRemoval["pulseCount"] as? Int, 0, "Removed connections must clear pulses immediately")
         XCTAssertEqual(afterEdgeRemoval["eventCount"] as? Int, 0, "Removed connections must clear earlier observed events")
-        try await wait("Transient animation settles") {
+        try await wait("Transient animation settles", web: web) {
             try await self.boolean(web, "window.seedDive.inspect().pulseCount === 0 && !window.seedDive.inspect().scheduled")
         }
 
@@ -55,18 +61,18 @@ final class SeedDiveRenderingTests: XCTestCase {
         let harnessVisible = try await boolean(web,
             "!document.querySelector('#harness').hidden && document.querySelector('#harness').textContent.includes('Qwen')")
         XCTAssertTrue(harnessVisible)
-        try await capture(web, name: "native-harness-1320")
+        try await capture(web, name: "native-harness-wide")
         try await click("neuralView", in: web)
         let neuralUnavailable = try await boolean(web,
             "!document.querySelector('#neural').hidden && document.querySelector('#neural').textContent.toLowerCase().includes('not connected')")
         let graphHidden = try await boolean(web, "document.querySelector('#field').hidden")
         XCTAssertTrue(neuralUnavailable)
         XCTAssertTrue(graphHidden)
-        try await capture(web, name: "native-neural-unavailable-1320")
+        try await capture(web, name: "native-neural-unavailable-wide")
 
         host.rootView = SeedDivePage(snapshot: changed, telemetry: metadata(graph: changed, working: true),
             still: true, failed: { XCTFail("Reduced-motion delivery failed") })
-        try await wait("Reduced motion") {
+        try await wait("Reduced motion", web: web) {
             try await self.boolean(web, "window.seedDive.inspect().reducedMotion && window.seedDive.inspect().pulseCount === 0")
         }
         try await click("memoryView", in: web)
@@ -76,11 +82,11 @@ final class SeedDiveRenderingTests: XCTestCase {
         let widthFits = try await boolean(web,
             "document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1")
         XCTAssertTrue(widthFits)
-        try await capture(web, name: "native-memory-680")
+        try await capture(web, name: "native-memory-compact")
 
         host.rootView = SeedDivePage(snapshot: .empty, telemetry: metadata(graph: .empty, generation: 2),
             still: true, failed: { XCTFail("Cleared Seed delivery failed") })
-        try await wait("Context replacement removes old content and animation") {
+        try await wait("Context replacement removes old content and animation", web: web) {
             try await self.boolean(web, """
                 document.querySelector('#counts').textContent === '0 records / 0 links'
                 && !document.body.innerText.includes('Synthetic scene frame')
@@ -105,16 +111,26 @@ final class SeedDiveRenderingTests: XCTestCase {
         show(window)
         let url = try XCTUnwrap(SeedDivePage.pageURL)
         web.loadHTMLString(try String(contentsOf: url, encoding: .utf8), baseURL: nil)
-        try await wait("Standalone page loaded and visible") {
+        try await wait("Standalone page loaded and visible", web: web) {
             try await self.boolean(web, "!!window.seedDive && !document.hidden")
         }
+        _ = await recordDiagnostics(web, label: "standalone-baseline")
         try await click("demoStart", in: web)
-        try await wait("Explicit synthetic replay") {
+        try await wait("Explicit synthetic replay", web: web) {
             try await self.boolean(web, "window.seedDive.inspect().origin === 'synthetic' && window.seedDive.inspect().playing")
+        }
+        if let expected = ProcessInfo.processInfo.environment["SEED_EXPECT_REDUCED_MOTION"] {
+            let requestedReduction = expected == "1"
+            XCTAssertEqual(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, requestedReduction,
+                "The real operating-system preference must match this qualification variant")
+            let webReduction = try await boolean(web, "matchMedia('(prefers-reduced-motion: reduce)').matches")
+            XCTAssertEqual(webReduction, requestedReduction,
+                "WebKit must independently observe the actual OS preference")
         }
         let syntheticLabel = try await boolean(web, "document.querySelector('#mode').textContent.includes('Synthetic')")
         XCTAssertTrue(syntheticLabel)
         try await click("motionToggle", in: web)
+        _ = await recordDiagnostics(web, label: "standalone-after-pause-click")
         let paused = try await inspect(web)
         XCTAssertEqual(paused["paused"] as? Bool, true)
         let pausedStep = paused["demoStep"] as? Int
@@ -124,11 +140,11 @@ final class SeedDiveRenderingTests: XCTestCase {
         XCTAssertEqual(stillPaused["demoStep"] as? Int, pausedStep)
         XCTAssertEqual(stillPaused["pulseCount"] as? Int, 0)
         try await click("motionToggle", in: web)
-        try await wait("Replay resumes") {
+        try await wait("Replay resumes", web: web) {
             let state = try await self.inspect(web)
             return (state["demoStep"] as? Int ?? -1) > (pausedStep ?? -1)
         }
-        try await capture(web, name: "synthetic-replay-1320")
+        try await capture(web, name: "synthetic-replay-wide")
 
         // Preserve an actual WebKit frame sequence for design review. It remains
         // visibly labelled synthetic and is never claimed as recorded inference.
@@ -151,7 +167,7 @@ final class SeedDiveRenderingTests: XCTestCase {
         payload["truncatedCount"] = 0
         _ = try await web.callAsyncJavaScript("window.seedDive.replace(snapshot, false); return true;",
             arguments: ["snapshot": payload], in: nil, contentWorld: .page)
-        try await wait("Native arrival locks out synthetic replacement") {
+        try await wait("Native arrival locks out synthetic replacement", web: web) {
             try await self.boolean(web, "window.seedDive.inspect().nativeLocked && window.seedDive.inspect().origin === 'native' && !window.seedDive.inspect().playing")
         }
         try await click("replay", in: web)
@@ -253,14 +269,16 @@ final class SeedDiveRenderingTests: XCTestCase {
     }
 
     @MainActor
-    private func wait(_ label: String, condition: @escaping @MainActor () async throws -> Bool) async throws {
+    private func wait(_ label: String, web: WKWebView? = nil,
+                      condition: @escaping @MainActor () async throws -> Bool) async throws {
         let deadline = Date().addingTimeInterval(15)
         while true {
             dispatchEvents()
             if (try? await condition()) == true { return }
             guard Date() < deadline else {
+                let diagnostics = await recordDiagnostics(web, label: "timeout-" + label)
                 throw NSError(domain: "SeedDiveRenderingTests", code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: label + " timed out"])
+                    userInfo: [NSLocalizedDescriptionKey: label + " timed out. " + diagnostics])
             }
             try await Task.sleep(for: .milliseconds(40))
         }
@@ -280,6 +298,69 @@ final class SeedDiveRenderingTests: XCTestCase {
         let url = URL(fileURLWithPath: path).appendingPathComponent(name + ".png")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try png.write(to: url)
+        let metadata: [String: Any] = [
+            "schema": "archi-seed-webkit-capture/v1", "name": name,
+            "pixelWidth": bitmap.pixelsWide, "pixelHeight": bitmap.pixelsHigh,
+            "capturedAtUptimeSeconds": ProcessInfo.processInfo.systemUptime,
+            "capturedAtUnixSeconds": Date().timeIntervalSince1970,
+            "observation": await diagnostics(web)
+        ]
+        try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys])
+            .write(to: url.deletingPathExtension().appendingPathExtension("json"))
+    }
+
+    /// Read actual operating-system and WebKit state. Never replace matchMedia,
+    /// document.hidden, or native accessibility preferences to satisfy a test.
+    @MainActor
+    private func diagnostics(_ web: WKWebView?) async -> [String: Any] {
+        var result: [String: Any] = [
+            "systemReduceMotion": NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+            "applicationActive": NSApplication.shared.isActive
+        ]
+        guard let web else { return result }
+        result["nativeHidden"] = web.isHidden
+        result["nativeHiddenAncestor"] = web.isHiddenOrHasHiddenAncestor
+        result["windowVisible"] = web.window?.isVisible ?? false
+        result["windowOcclusionVisible"] = web.window?.occlusionState.contains(.visible) ?? false
+        result["webWidth"] = Double(web.bounds.width)
+        result["webHeight"] = Double(web.bounds.height)
+        do {
+            result["page"] = try await web.callAsyncJavaScript("""
+                return {
+                  state: window.seedDive ? window.seedDive.inspect() : null,
+                  mediaReduceMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+                  mediaNoPreference: matchMedia('(prefers-reduced-motion: no-preference)').matches,
+                  documentHidden: document.hidden,
+                  visibilityState: document.visibilityState,
+                  motionControlDisabled: document.getElementById('motionToggle')?.disabled ?? null,
+                  motionControlText: document.getElementById('motionToggle')?.textContent ?? null,
+                  counts: document.getElementById('counts')?.textContent ?? null,
+                  innerWidth, innerHeight, devicePixelRatio,
+                  clientWidth: document.documentElement.clientWidth,
+                  scrollWidth: document.documentElement.scrollWidth
+                };
+                """, arguments: [:], in: nil, contentWorld: .page)
+        } catch {
+            result["pageError"] = error.localizedDescription
+        }
+        return result
+    }
+
+    @MainActor
+    private func recordDiagnostics(_ web: WKWebView?, label: String) async -> String {
+        let state = await diagnostics(web)
+        guard let bytes = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]),
+              let json = String(data: bytes, encoding: .utf8) else { return "Diagnostics could not be encoded" }
+        print("SEED_DIAGNOSTICS \(label): \(json)")
+        if let path = ProcessInfo.processInfo.environment["SEED_CAPTURE_OUTPUT"] {
+            let safeName = label.map { $0.isLetter || $0.isNumber || $0 == "-" ? $0 : "-" }
+            let url = URL(fileURLWithPath: path).appendingPathComponent("diagnostics-" + String(safeName) + ".json")
+            do {
+                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try bytes.write(to: url)
+            } catch { print("SEED_DIAGNOSTICS_WRITE_FAILED \(label): \(error.localizedDescription)") }
+        }
+        return json
     }
 
     @MainActor

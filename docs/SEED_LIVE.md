@@ -91,7 +91,7 @@ Portable checks:
 
 ```sh
 node --test scripts/seed-*.test.mjs
-python3 -m unittest discover -s scripts/tests -p test_peer_convergence_macos.py
+python3 -m unittest discover -s scripts/tests -p 'test_*_macos.py'
 ```
 
 Focused native execution on a clean macOS 14+ checkout with Swift 6+:
@@ -114,3 +114,17 @@ The `Animated Seed on macOS` workflow runs the same commands at the exact PR
 head. Native logs, result accounting and WebKit captures are retained as CI
 artifacts. A portable JavaScript result alone is not evidence of browser layout,
 native compilation or visible animation.
+
+Motion qualification requires an actual motion-enabled OS/browser environment.
+The disposable GitHub-hosted workflow uses `--configure-ci-motion` to temporarily
+set the two OS motion booleans before launching tests, records their prior values,
+and restores them afterward. The flag refuses other environments and never uses
+elevation to retry a denied preference write. Native/WebKit readback and the
+observed pulse assertion still decide the result. Local test runs and production
+never alter system accessibility settings. Reduced motion remains respected,
+including a usable Pause/Resume replay control for the timed synthetic sequence.
+After the 45-case motion-enabled population passes, CI repeats only the replay
+regression with the actual OS reduced-motion preference enabled. This is 46
+native test executions across 45 distinct cases; both variants require matching
+AppKit and WebKit preference readback. The focused repeat reuses the built binary
+and does not capture another frame sequence.

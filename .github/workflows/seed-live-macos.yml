@@ -9,6 +9,7 @@ on:
       - 'script/test_seed_live_macos.py'
       - 'script/test_peer_convergence_macos.py'
       - 'scripts/seed-*.test.mjs'
+      - 'scripts/tests/test_*_macos.py'
       - 'SOURCE_SHA256SUMS'
   workflow_dispatch:
 
@@ -32,7 +33,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Check runner result accounting
-        run: python3 -m unittest discover -s scripts/tests -p test_peer_convergence_macos.py
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*_macos.py'
       - name: Check portable graph and live boundary behavior
         run: node --test scripts/seed-*.test.mjs
       - name: Run bounded native and WebKit validation
@@ -42,6 +43,7 @@ jobs:
           python3 script/test_seed_live_macos.py
           --output "$RUNNER_TEMP/archi-seed-live"
           --expected-head "$EXPECTED_TEST_HEAD"
+          --configure-ci-motion
       - name: Retain validation and visual evidence
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

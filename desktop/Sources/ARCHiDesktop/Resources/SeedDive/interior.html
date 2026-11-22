@@ -597,6 +597,33 @@
       @media (min-width:1000px) { .viewport { height:clamp(320px,40vh,540px); } .rail { max-height:clamp(320px,40vh,540px); } }
       @media (max-width:680px) { .view-tabs { width:100%; } .view-tabs button { flex:1; padding:9px 8px; } .workspace-nav { gap:9px; } .run-controls { margin-left:auto; } .scene-pane { padding:17px 13px; } .receipt-grid { grid-template-columns:1fr; } .observed { grid-template-columns:1fr; gap:8px; } .stream-strip { font-size:10px; gap:9px; } .view-tabs button { font-size:12px; } .viewport { height:390px; } }
       @media (max-width:440px) { .product { display:none; } .mode { font-size:9px; } .intro { flex-wrap:wrap; gap:10px; } .stream-strip { flex-wrap:wrap; } .run-controls { flex-wrap:wrap; } }
+      @media (min-width:821px) and (max-height:720px) {
+        .shell { padding-bottom:8px; }
+        .top { min-height:40px; }
+        .intro { padding:10px 0; }
+        .intro h1 { font-size:34px; }
+        .intro p { display:none; }
+        .workspace-nav { gap:8px; margin-bottom:8px; }
+        .view-tabs button { padding:7px 13px; }
+        .demo-caption { padding:6px 11px; margin-bottom:8px; font-size:11px; }
+        .stream-strip { padding:8px 12px; }
+        .headrow { min-height:36px; padding:5px 12px; }
+        .viewport { height:clamp(210px,34vh,244px); }
+        .rail { max-height:clamp(210px,34vh,244px); padding:13px; }
+        .rail .nodekind { margin-top:10px; }
+        .rail .detail-title { font-size:24px; }
+        .observed { margin-top:8px; padding:8px 12px; grid-template-columns:140px 1fr; gap:10px; }
+        .event-list { max-height:52px; overflow:auto; scrollbar-color:#415651 transparent; }
+        .layers { display:flex; align-items:center; gap:10px; padding-top:8px; }
+        .layerhead { flex-direction:column; align-items:flex-start; gap:3px; margin:0; min-width:86px; }
+        .layers h2 { font-size:12px; }
+        .layerhead button { margin:0; padding:2px 6px; }
+        .bands { flex:1; gap:5px; }
+        .band { padding:7px; min-height:36px; font-size:12px; }
+        .band b { font-size:13px; }
+        .legend { margin-top:8px; }
+        .foot { margin-top:6px; }
+      }
     </style>
   </head>
   <body>
@@ -1188,10 +1215,16 @@
           : telemetry.origin==='native' ? 'Observing native workspace · '+(telemetry.harness.state==='working'?'harness working':'harness idle')
           : received ? 'Graph snapshot · harness telemetry unavailable' : 'Waiting for the current workspace'
         const noMotion=still || reduce.matches
-        $('motionState').textContent=noMotion?'Reduced motion · data still updates':paused?'Motion paused · data still updates':sample?(demoPlaying?'Replay playing':'Replay complete · review remains explicit'):'Pulses mark observed changes'
-        $('motionToggle').textContent=noMotion?'Reduced motion':paused?'Resume motion':'Pause motion'
-        $('motionToggle').disabled=noMotion
-        $('motionToggle').setAttribute('aria-pressed',String(paused || noMotion))
+        $('motionState').textContent=sample
+          ? paused ? 'Replay paused'+(noMotion?' · reduced motion':'')
+            : demoPlaying ? 'Replay playing'+(noMotion?' · reduced motion':'') : 'Replay complete · review remains explicit'
+          : noMotion?'Reduced motion · data still updates':paused?'Motion paused · data still updates':'Pulses mark observed changes'
+        $('motionToggle').textContent=sample ? !demoPlaying?'Replay complete':paused?'Resume replay':'Pause replay'
+          : noMotion?'Reduced motion':paused?'Resume motion':'Pause motion'
+        // Reduced motion removes decorative animation. It must never remove the
+        // user's ability to pause the changing content of a synthetic replay.
+        $('motionToggle').disabled=sample ? !demoPlaying : noMotion
+        $('motionToggle').setAttribute('aria-pressed',String(sample ? paused : paused || noMotion))
         $('total').textContent = sample
           ? 'Synthetic records · illustrative memory workflow'
           : 'Read-only · current workspace'
