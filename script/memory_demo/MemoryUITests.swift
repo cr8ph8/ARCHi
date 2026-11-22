@@ -86,8 +86,14 @@ final class MemoryUITests: XCTestCase {
         XCTAssertTrue(disclosure.label.contains(topic))
         // On macOS the accessible row spans the whole label, but the clickable
         // disclosure arrow is at its leading edge. The row centre is inert.
+        // The card's leading content edge is aligned with the New button.
+        let leading = control("lesson-new").frame.minX
         let arrow = disclosure.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
-        arrow.withOffset(CGVector(dx: 6, dy: 0)).click()
+        arrow.withOffset(CGVector(dx: leading - disclosure.frame.minX + 5, dy: 0)).click()
+        if (disclosure.value as? String) == "0" || (disclosure.value as? NSNumber)?.intValue == 0 {
+            disclosure.click()
+            app.typeKey(.rightArrow, modifierFlags: [])
+        }
         let reviewed = control("kept-lesson-text")
         let exact = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@ OR value == %@", words, words)).firstMatch
         let found = exact.waitForExistence(timeout: 8)
