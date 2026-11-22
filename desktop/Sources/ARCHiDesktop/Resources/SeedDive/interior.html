@@ -912,8 +912,14 @@
         render()
         cancelAnimationFrame(raf)
         raf = 0
-        if (canvas.hidden) ctx.clearRect(0, 0, canvas.width, canvas.height)
-        else draw()
+        // Clear physical pixels synchronously even while the native privacy
+        // fence hides this page. A visibility callback must never be required
+        // to remove a withdrawn record's previous canvas image.
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.restore()
+        if (!canvas.hidden) draw()
       }
       window.seedDive = Object.freeze({ replace, inspect: () => ({
         view: viewName, origin:telemetry.origin, contextID:telemetry.contextID,

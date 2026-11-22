@@ -29,8 +29,12 @@ function harness() {
     getBoundingClientRect(){return {x:0,y:0,left:0,top:0,width:900,height:450}}
   }
   const ids=new Map([...page.matchAll(/\bid="([^"]+)"/g)].map(m=>[m[1],new Element(m[1]==='field'?'canvas':'div')]))
-  const context=new Proxy({measureText:text=>({width:String(text).length*6}),createRadialGradient:()=>({addColorStop(){}})}, {get:(o,k)=>k in o?o[k]:()=>{}})
+  const canvasCalls=[]
+  const context=new Proxy({measureText:text=>({width:String(text).length*6}),createRadialGradient:()=>({addColorStop(){}}),
+    setTransform:(...args)=>canvasCalls.push({method:'setTransform',args}),clearRect:(...args)=>canvasCalls.push({method:'clearRect',args}),
+    fillRect:(...args)=>canvasCalls.push({method:'fillRect',args})}, {get:(o,k)=>k in o?o[k]:()=>{}})
   ids.get('field').getContext=()=>context
+  ids.get('field').width=300;ids.get('field').height=150
   ids.get('field').parentElement=new Element()
   const document={hidden:false,events:{},getElementById:id=>ids.get(id),createElement:tag=>new Element(tag),createTextNode:text=>{const e=new Element('text');e.textContent=text;return e},addEventListener(k,f){(this.events[k]??=[]).push(f)}}
   const reduced={matches:false,events:[],addEventListener(_,f){this.events.push(f)}}
@@ -42,7 +46,7 @@ function harness() {
   runInNewContext(scripts,environment)
   function frame(){const batch=[...frames.values()];frames.clear();batch.forEach(f=>f(now))}
   function advance(ms){now+=ms;for(const [id,timer] of [...timers])if(timer.at<=now){timers.delete(id);timer.f()}frame()}
-  return {window,document,reduced,ids,timers,frame,advance,inspect:()=>window.seedDive.inspect(),replace:(s,still=false)=>window.seedDive.replace(s,still),
+  return {window,document,reduced,ids,timers,canvasCalls,frame,advance,inspect:()=>window.seedDive.inspect(),replace:(s,still=false)=>window.seedDive.replace(s,still),
     click:id=>ids.get(id).onclick(),hidden:value=>{document.hidden=value;document.events.visibilitychange.forEach(f=>f())},
     reduce:value=>{reduced.matches=value;reduced.events.forEach(f=>f())}}
 }
@@ -83,6 +87,19 @@ test('withdrawn nodes and relationships clear old transient history and hidden r
   assert.equal(h.inspect().eventCount,0);assert.equal(h.inspect().pulseCount,0)
   h.click('memoryView');h.click('mapTab');h.replace(changed);assert.ok(h.inspect().eventCount>0)
   h.replace({...changed,edges:[]});h.frame();assert.equal(h.inspect().eventCount,0);assert.equal(h.inspect().pulseCount,0)
+})
+test('a hidden authoritative replacement immediately clears all backing pixels before visibility returns',()=>{
+  const h=harness();h.window.devicePixelRatio=2
+  h.replace(snapshot([node('withdrawn')]));h.advance(600)
+  assert.equal(h.ids.get('field').width,1800);assert.equal(h.ids.get('field').height,900)
+  h.hidden(true);h.canvasCalls.length=0
+  h.replace(snapshot([], 'replacement-context'))
+  const clearIndex=h.canvasCalls.findIndex(call=>call.method==='clearRect')
+  assert.ok(clearIndex>=0,'replacement must clear pixels before any visibility callback')
+  assert.deepEqual(h.canvasCalls[clearIndex-1],{method:'setTransform',args:[1,0,0,1,0,0]})
+  assert.deepEqual(h.canvasCalls[clearIndex],{method:'clearRect',args:[0,0,1800,900]})
+  assert.equal(h.canvasCalls.some(call=>call.method==='fillRect'),false,'a hidden replacement must not repaint the preceding snapshot')
+  assert.equal(h.inspect().pulseCount,0);assert.equal(h.inspect().eventCount,0);assert.equal(h.inspect().scheduled,false)
 })
 test('neural view reports missing recorder and context replacement clears observations',()=>{
   const h=harness();h.replace(snapshot());h.replace(snapshot([node('new')]));h.click('neuralView')
