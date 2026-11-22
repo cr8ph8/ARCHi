@@ -82,9 +82,17 @@ final class MemoryUITests: XCTestCase {
     func testReopen() throws {
         try launch()
         let disclosure = app.disclosureTriangles.firstMatch
-        if disclosure.exists { disclosure.click() }
-        else { app.staticTexts[topic].firstMatch.click() }
-        XCTAssertTrue(app.staticTexts[words].waitForExistence(timeout: 8), "Exact lesson must be visible after reopening")
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 5))
+        XCTAssertTrue(disclosure.label.contains(topic))
+        // On macOS the accessible row spans the whole label, but the clickable
+        // disclosure arrow is at its leading edge. The row centre is inert.
+        let arrow = disclosure.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
+        arrow.withOffset(CGVector(dx: 6, dy: 0)).click()
+        let reviewed = control("kept-lesson-text")
+        let exact = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@ OR value == %@", words, words)).firstMatch
+        let found = exact.waitForExistence(timeout: 8)
+        XCTAssertTrue(found, "Expected the exact reviewed text in the expanded row. " + app.debugDescription)
+        XCTAssertTrue(exact.isHittable || reviewed.isHittable, "Reviewed text must be on screen")
         quit()
     }
 }

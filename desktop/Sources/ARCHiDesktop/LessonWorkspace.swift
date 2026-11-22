@@ -31,6 +31,7 @@ struct KeptLessonsCard: View {
                 DisclosureGroup {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(lesson.text).font(.system(size: 13)).textSelection(.enabled)
+                            .accessibilityIdentifier("kept-lesson-text")
                         if !lesson.reason.isEmpty {
                             Text("Why you kept it · \(lesson.reason)").font(.system(size: 11)).foregroundStyle(.secondary)
                         }

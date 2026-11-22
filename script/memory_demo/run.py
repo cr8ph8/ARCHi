@@ -150,9 +150,17 @@ def main():
               "session": session, "macOS": platform.mac_ver()[0], "architecture": platform.machine()}
     print("Evidence:", out, flush=True)
     try:
-        report["source_commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-        subprocess.run(["bash", str(ROOT / "script/build_and_run.sh"), "--memory-demo"], cwd=ROOT, check=True)
-        app = Path(f"/private/tmp/archi-desktop-candidate-{os.getuid()}/ARCHi Memory Demo.app")
+        app = HERE / "ARCHi Memory Demo.app"
+        if app.is_dir():
+            build = json.loads((HERE / "build.json").read_text())
+            report["source_commit"] = build["source_commit"]
+            if digest((app / "Contents/MacOS/ARCHiDesktop").read_bytes()) != build["app_binary_sha256"]:
+                raise ValueError("Demo executable does not match the packaged build record")
+            subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True)
+        else:
+            report["source_commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+            subprocess.run(["bash", str(ROOT / "script/build_and_run.sh"), "--memory-demo"], cwd=ROOT, check=True)
+            app = Path(f"/private/tmp/archi-desktop-candidate-{os.getuid()}/ARCHi Memory Demo.app")
         report["app_binary_sha256"] = digest((app / "Contents/MacOS/ARCHiDesktop").read_bytes())
         if args.ui_test:
             ui_test(out, app, session, profile, topic, text)
