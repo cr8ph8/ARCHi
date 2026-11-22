@@ -1,0 +1,39 @@
+{
+  "schema": "archi-memory-admission-contract/v1",
+  "contract_id": "ARCHI-MEMORY-ADMISSION-001",
+  "scope": "Synthetic identity-link reference owner; no native or live-model authority",
+  "operation": "merge_records",
+  "effect": "Add right-to-left alias; preserve all original records and sources",
+  "minimum_origins_per_record": 2,
+  "validators": {
+    "shape": "1",
+    "binding": "1",
+    "identity": "1",
+    "provenance": "1",
+    "relation_scope": "1"
+  },
+  "required_status": "PASS",
+  "noncommit_decisions": ["REJECT", "DAMP", "ESCALATE"],
+  "assumptions": [
+    "The controller, evaluator, policy, and disposable-store owner are trusted code.",
+    "Source origins and their actual independence/authenticity are assumptions supplied by the trusted synthetic catalog; code counts distinct designated roots, not document count.",
+    "The contract cohort includes accurate eligible identities and detectable source disagreements for false identity proposals; false-consistent source assertions are tested separately as assumption challenges.",
+    "An owner review binds the exact candidate hash outside the proposer payload.",
+    "An operating-system attacker able to rewrite the store or evaluator is outside this experiment."
+  ],
+  "acceptance": {
+    "contract_false_commits": 0,
+    "eligible_true_acceptance_fraction": 1.0,
+    "noncommit_state_mutations": 0,
+    "stale_altered_replayed_or_unreviewed_commits": 0,
+    "competing_proposals_maximum_commits": 1,
+    "assumption_challenges_reported_separately_and_in_overall_totals": true,
+    "all_deliberately_faulty_controls_detected": true
+  },
+  "qualification": {
+    "live_model": "NOT_RUN",
+    "native_swift": "NOT_RUN",
+    "installed_mac_application": "NOT_RUN",
+    "semantic_truth_beyond_fixture_assumptions": "NOT_ESTABLISHED"
+  }
+}
