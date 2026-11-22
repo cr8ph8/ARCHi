@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 struct KeptLessonsCard: View {
     @ObservedObject var store: CompanionStore
+    var changeDemoSource: (() -> Void)? = nil
 
     var body: some View {
         WorkspaceCard {
@@ -17,6 +18,7 @@ struct KeptLessonsCard: View {
             HStack {
                 Button("Keep a lesson…", systemImage: "plus") { store.beginLessonCorrection() }
                     .buttonStyle(.borderedProminent).disabled(store.keptLessons.count >= 16)
+                    .accessibilityIdentifier("lesson-new")
                 Button("Export kept lessons…") { store.exportLessons() }
                     .disabled(store.keptLessons.isEmpty)
             }
@@ -70,7 +72,7 @@ struct KeptLessonsCard: View {
         }
         .disabled(store.isShuttingDown)
         .sheet(item: $store.lessonDraft) { draft in
-            LessonCorrectionEditor(store: store, draft: draft)
+            LessonCorrectionEditor(store: store, draft: draft, changeDemoSource: changeDemoSource)
         }
     }
 }
@@ -79,6 +81,7 @@ struct KeptLessonsCard: View {
 struct LessonCorrectionEditor: View {
     @ObservedObject var store: CompanionStore
     @State var draft: LessonCorrectionDraft
+    var changeDemoSource: (() -> Void)? = nil
     @FocusState private var focusedField: Field?
     private enum Field: Hashable { case topic, lesson, reason }
 
@@ -120,6 +123,12 @@ struct LessonCorrectionEditor: View {
                         get: { draft.source != nil },
                         set: { draft.source = $0 ? store.currentLessonSource : nil }))
                         .disabled(store.currentLessonSource == nil && draft.source == nil)
+                        .accessibilityIdentifier("lesson-scope")
+                    if let changeDemoSource, draft.source != nil {
+                        Button("Switch shared copy to screenplay B", action: changeDemoSource)
+                            .disabled(store.sourceName == "Screenplay B")
+                            .accessibilityIdentifier("lesson-demo-switch")
+                    }
                     if let source = draft.source {
                         Text(source.name + " · changed content makes this lesson unavailable")
                             .font(.system(size: 10)).foregroundStyle(.secondary)
@@ -137,6 +146,7 @@ struct LessonCorrectionEditor: View {
             Divider()
             HStack {
                 Button("Do not save") { store.discardLessonDraft() }.keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("lesson-discard")
                 Spacer()
                 Button(draft.prior == nil ? "Keep lesson" : "Keep revision") { store.keepLesson(draft) }
                     .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)

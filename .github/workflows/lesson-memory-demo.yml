@@ -1,0 +1,29 @@
+name: ARCHi memory review on Mac
+on:
+  pull_request:
+    paths: ['.github/workflows/lesson-memory-demo.yml', 'script/memory_demo/**', 'script/build_and_run.sh', 'desktop/**']
+permissions:
+  contents: read
+jobs:
+  memory:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Check independent reader and native lesson store
+        run: |
+          python3 -m unittest discover -s script/memory_demo -p 'test_*.py'
+          swift test --package-path desktop --filter LessonStoreTests
+      - name: Prepare UI driver
+        run: command -v xcodegen || brew install xcodegen
+      - name: Exercise the staged app and verify its saved bytes
+        run: python3 script/memory_demo/run.py --ui-test --output "$RUNNER_TEMP/memory-review"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: memory-review-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/memory-review/
+          retention-days: 14

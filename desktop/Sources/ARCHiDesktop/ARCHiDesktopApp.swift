@@ -5,6 +5,16 @@ import SwiftUI
 struct ARCHiDesktopMain {
     @MainActor
     static func main() async {
+        if Bundle.main.bundleIdentifier == "com.quotient.archi.desktop.memory-demo" {
+            guard let index = CommandLine.arguments.firstIndex(of: "--session"),
+                  CommandLine.arguments.indices.contains(index + 1),
+                  let session = UUID(uuidString: CommandLine.arguments[index + 1]) else {
+                print("Launch the disposable session with script/memory_demo/run.py.")
+                exit(2)
+            }
+            LessonMemoryDemo.run(session: session)
+            return
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--starter-art-render"),
            CommandLine.arguments.indices.contains(index + 1) {
             exit(EvolutionVisualDiagnostics.renderStarterStudy(directory: URL(fileURLWithPath: CommandLine.arguments[index + 1])) ? 0 : 1)
