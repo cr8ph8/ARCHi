@@ -1,0 +1,42 @@
+{
+  "schema": "archi-agent-harness-contract/v1",
+  "id": "ARCHI-HARNESS-001",
+  "objective": "Evaluate the existing native proposal, context, working-copy and request-binding boundaries against a fixed candidate source tree.",
+  "scope": "native-source-tests",
+  "required_suites": [
+    "HamptonProposalValidationTests",
+    "HamptonSessionContextTests",
+    "WorkingCopyRevisionTests",
+    "WorkingCopyStoreTests",
+    "EvolutionRequestBindingTests"
+  ],
+  "installed_app_qualification": false,
+  "authorizes_commit": false,
+  "requirements": [
+    {
+      "id": "H01",
+      "description": "Proposal shape, exact role/request identities and permitted references are checked; model output cannot invent authority.",
+      "suites": ["HamptonProposalValidationTests"]
+    },
+    {
+      "id": "H02",
+      "description": "Captured context remains bound to the current request and source scope.",
+      "suites": ["HamptonSessionContextTests"]
+    },
+    {
+      "id": "H03",
+      "description": "Revision targets bind exact occurrences and bytes; stale, malformed and mismatched candidates cannot satisfy the edit contract.",
+      "suites": ["WorkingCopyRevisionTests"]
+    },
+    {
+      "id": "H04",
+      "description": "Receiving a candidate does not apply it; explicit Apply, cancellation, revocation, Undo and export preserve their existing owner boundaries.",
+      "suites": ["WorkingCopyStoreTests"]
+    },
+    {
+      "id": "H05",
+      "description": "An existing request cannot be relabeled with different input/context, and rejected evidence preserves the existing session state.",
+      "suites": ["EvolutionRequestBindingTests"]
+    }
+  ]
+}

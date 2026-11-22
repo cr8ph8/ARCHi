@@ -4,6 +4,11 @@
 their evidence. It keeps native source tests, an optional live local-model
 receipt, and installed-application qualification separate.
 
+For a planner/generator/evaluator handoff with a frozen contract, before/after
+candidate identity and independent log verification, see
+[the bounded agent harness](AGENT_HARNESS.md). Its scoped result cannot authorize
+native COMMIT or qualify an installed application.
+
 This runner does not create a second app-launch workflow. Continue to use
 `script/build_and_run.sh` for app staging/build/launch. The acceptance runner does
 not install, launch, stop or replace an application, download a model, select a
@@ -20,6 +25,11 @@ From the ARCHi repository root:
 ```bash
 python3 script/accept_relationship_admission.py
 ```
+
+The optional `--archi-repo /absolute/path/to/candidate` selects a separate source
+checkout for the same native recipe. The runner records its own path and digest
+separately from candidate source, so the evaluator can remain outside the
+generator's workspace. Omitting this option preserves the original behavior.
 
 The default evidence directory is a new unique directory under
 `output/relationship-admission/`. To choose one, pass `--output` with a path that

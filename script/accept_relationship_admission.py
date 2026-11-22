@@ -168,6 +168,8 @@ def validate_live_receipt(receipt_path: Path) -> dict:
 
 def run_command(name: str, command: list[str], cwd: Path, output: Path,
                 timeout: int, overrides: dict[str, str] | None = None) -> dict:
+    from harness_process import run_bounded
+
     log = output / f"{name}.log"
     started = time.monotonic()
     record = {"name": name, "command": command, "cwd": str(cwd),
@@ -184,8 +186,8 @@ def run_command(name: str, command: list[str], cwd: Path, output: Path,
     try:
         with log.open("w", encoding="utf-8") as handle:
             record["command_started"] = True
-            process = subprocess.run(command, cwd=cwd, env=env, stdout=handle,
-                                     stderr=subprocess.STDOUT, timeout=timeout, check=False)
+            process = run_bounded(command, cwd=cwd, env=env, stdout=handle,
+                                  stderr=subprocess.STDOUT, timeout=timeout)
         record["exit_code"] = process.returncode
     except subprocess.TimeoutExpired:
         record.update(status="ERROR", reason="COMMAND_TIMEOUT", exit_code=None)
@@ -214,6 +216,8 @@ def existing_test(root: Path, relative: str) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, help="New evidence directory; existing paths are refused")
+    parser.add_argument("--archi-repo", type=Path, default=ROOT,
+                        help="Candidate source checkout; defaults to this runner's repository")
     parser.add_argument("--qimovi-repo", type=Path)
     parser.add_argument("--qimovi-test", default="tests/movie-selection-binding.test.mjs")
     parser.add_argument("--live-receipt", action="store_true",
@@ -222,20 +226,28 @@ def main() -> int:
     args = parser.parse_args()
     if args.command_timeout < 1 or args.command_timeout > 3600:
         parser.error("--command-timeout must be between 1 and 3600 seconds")
+    archi_root = args.archi_repo.resolve()
+    if not (archi_root / "desktop/Package.swift").is_file():
+        parser.error("--archi-repo must contain desktop/Package.swift")
     output = (args.output or ROOT / "output" / "relationship-admission" /
               (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8])).resolve()
     try:
         output.mkdir(parents=True, exist_ok=False)
     except OSError as error:
         parser.error(f"Use a new writable evidence directory: {error}")
-    source_paths = [ROOT / "desktop/Package.swift", Path(__file__).resolve()]
-    source_paths += list((ROOT / "desktop/Sources").rglob("*.swift"))
-    source_paths += list((ROOT / "desktop/Tests").rglob("*.swift"))
+    source_paths = [archi_root / "desktop/Package.swift"]
+    runner_path = Path(__file__).resolve()
+    if runner_path.is_relative_to(archi_root):
+        source_paths.append(runner_path)
+    source_paths += list((archi_root / "desktop/Sources").rglob("*.swift"))
+    source_paths += list((archi_root / "desktop/Tests").rglob("*.swift"))
     report = {"schema": "archi-relationship-admission-acceptance/v1", "started_at_utc": utc_now(),
               "scope": "Source-test execution evidence. No installed application launch or restart is performed.",
               "host": {"system": platform.system(), "release": platform.release(),
                        "macos": platform.mac_ver()[0], "python": platform.python_version()},
-              "archi_source": source_record(ROOT, source_paths), "checks": []}
+              "archi_source": source_record(archi_root, source_paths),
+              "runner": {"path": str(runner_path), "sha256": sha256(runner_path)},
+              "checks": []}
     checks = report["checks"]
 
     if args.qimovi_repo is None:
@@ -259,7 +271,7 @@ def main() -> int:
 
     swift = shutil.which("swift")
     native_commands = {
-        suite: [swift or "swift", "test", "--package-path", str(ROOT / "desktop"),
+        suite: [swift or "swift", "test", "--package-path", str(archi_root / "desktop"),
                 "--scratch-path", str(output / "swift-build"), "--filter", suite]
         for suite in SUITES
     }
@@ -269,7 +281,7 @@ def main() -> int:
     elif not swift:
         prerequisite = "SWIFT_TOOLCHAIN_UNAVAILABLE"
     else:
-        version = run_command("swift_version", [swift, "--version"], ROOT, output, 30)
+        version = run_command("swift_version", [swift, "--version"], archi_root, output, 30)
         if "status" in version or version.get("exit_code") != 0:
             version.update(status="ERROR", reason="SWIFT_TOOLCHAIN_UNAVAILABLE")
             prerequisite = "SWIFT_TOOLCHAIN_UNAVAILABLE"
@@ -294,7 +306,7 @@ def main() -> int:
     else:
         suite_results = []
         for suite, command in native_commands.items():
-            result = run_command("native_" + suite, command, ROOT, output, args.command_timeout)
+            result = run_command("native_" + suite, command, archi_root, output, args.command_timeout)
             if "status" not in result:
                 result.update(classify_swift(Path(result["log"]).read_text(errors="replace"),
                                              result["exit_code"], expected_suite=suite))
@@ -307,7 +319,7 @@ def main() -> int:
                        "selected_suites": list(SUITES), "suite_results": suite_results,
                        "profile_scope": "Existing tests use in-memory state or explicit disposable/invalid profile paths. No installed profile selected."})
 
-    live_command = [swift or "swift", "test", "--package-path", str(ROOT / "desktop"),
+    live_command = [swift or "swift", "test", "--package-path", str(archi_root / "desktop"),
                     "--scratch-path", str(output / "swift-build"), "--filter", "AssistantReceiptLiveTests"]
     if not args.live_receipt:
         checks.append(skipped("native_live_receipt", "EXPLICIT_LIVE_RECEIPT_OPT_IN_NOT_REQUESTED", command=live_command))
@@ -317,7 +329,7 @@ def main() -> int:
         checks.append(skipped("native_live_receipt", "NATIVE_SOURCE_TESTS_NOT_PASS", command=live_command))
     else:
         live_output = output / "live-receipt"
-        result = run_command("native_live_receipt", live_command, ROOT, output, args.command_timeout,
+        result = run_command("native_live_receipt", live_command, archi_root, output, args.command_timeout,
                              {"ARCHI_RECEIPT_LIVE": "1", "ARCHI_RECEIPT_LIVE_OUTPUT": str(live_output)})
         if "status" not in result:
             result.update(classify_swift(Path(result["log"]).read_text(errors="replace"), result["exit_code"],
