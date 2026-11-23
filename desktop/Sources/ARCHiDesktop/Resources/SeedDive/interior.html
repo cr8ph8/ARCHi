@@ -1,0 +1,2070 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Seed Dive · ARCHi</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0a1213;
+        --panel: #101a1b;
+        --rail: #132020;
+        --border: #2b3b39;
+        --text: #e7efea;
+        --muted: #a5b8b3;
+        --quiet: #93a9a3;
+        --gold: #f8c57c;
+        --mono: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+        --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.45 var(--sans);
+        -webkit-font-smoothing: antialiased;
+      }
+      button,
+      input {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid var(--gold);
+        outline-offset: 3px;
+      }
+      button:disabled {
+        opacity: 0.46;
+        cursor: default;
+      }
+      button {
+        border: 1px solid var(--border);
+        background: var(--panel);
+        border-radius: 5px;
+      }
+      button:hover:enabled {
+        border-color: #6d8980;
+        background: #1b2a29;
+      }
+      button[aria-pressed='true'] {
+        background: #293832;
+        color: #fff2db;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .shell {
+        max-width: 1720px;
+        margin: auto;
+        padding: 0 clamp(12px, 2.6vw, 40px) 24px;
+      }
+      .top {
+        min-height: 54px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-weight: 650;
+        font-size: 20px;
+        letter-spacing: -1px;
+      }
+      .mark {
+        width: 20px;
+        height: 20px;
+        display: inline-block;
+        background: conic-gradient(from 45deg, #f7d59f, #90c5af, #385e59, #f7d59f);
+        border-radius: 50%;
+        position: relative;
+      }
+      .mark:before {
+        content: '';
+        position: absolute;
+        inset: 3px;
+        border-radius: 50%;
+        background: var(--bg);
+      }
+      .mark:after {
+        content: '';
+        position: absolute;
+        inset: 7px;
+        border-radius: 50%;
+        background: #f4cf8f;
+      }
+      .product {
+        padding-left: 14px;
+        border-left: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .mode {
+        margin-left: auto;
+        font: 11px var(--mono);
+        color: #b9d5c8;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .mode:before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border: 1px solid #a7cdb2;
+        border-radius: 50%;
+      }
+      .intro {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        justify-content: space-between;
+        padding: 24px 0 20px;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(34px, 4.1vw, 62px);
+        line-height: 1.03;
+        font-weight: 490;
+        letter-spacing: -0.056em;
+      }
+      .intro p {
+        color: var(--muted);
+        font-size: 14px;
+        margin-top: 8px;
+      }
+      .ghost,
+      .control {
+        padding: 7px 11px;
+        background: transparent;
+        font-size: 12px;
+        min-height: 34px;
+      }
+      .frame {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        background: var(--panel);
+      }
+      .headrow {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 15px;
+        border-bottom: 1px solid var(--border);
+      }
+      .kicker {
+        font: 600 10px/1.4 var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.13em;
+        color: var(--muted);
+      }
+      .line-title {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .scope {
+        width: 13px;
+        height: 13px;
+        border: 1px solid #a2b2a0;
+        border-radius: 50%;
+        box-shadow: inset 0 0 0 3px var(--panel);
+        background: #aec5b5;
+        display: inline-block;
+      }
+      .tabs {
+        display: flex;
+        gap: 2px;
+        background: #0b1415;
+        border: 1px solid var(--border);
+        padding: 2px;
+        border-radius: 5px;
+      }
+      .tabs button {
+        padding: 4px 10px;
+        border: none;
+        background: transparent;
+        border-radius: 3px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .stage {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) clamp(245px, 25vw, 325px);
+      }
+      .viewport {
+        position: relative;
+        min-width: 0;
+        isolation: isolate;
+        background: #071011;
+        height: clamp(360px, 45vh, 590px);
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        cursor: crosshair;
+        touch-action: pan-y;
+      }
+      .canvas-controls {
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        display: flex;
+        gap: 3px;
+      }
+      .canvas-controls button {
+        width: 34px;
+        height: 33px;
+        background: #101b1bea;
+        font: 15px var(--mono);
+        color: #dce6db;
+      }
+      .canvas-controls #fit {
+        width: auto;
+        padding: 0 9px;
+        font-size: 11px;
+      }
+      .map-status {
+        position: absolute;
+        left: 14px;
+        bottom: 19px;
+        font: 10px var(--mono);
+        color: #a6bab2;
+        pointer-events: none;
+      }
+      .rail {
+        border-left: 1px solid var(--border);
+        background: linear-gradient(125deg, #162222, #101a1a);
+        padding: 17px 17px 14px;
+        max-height: clamp(360px, 45vh, 590px);
+        overflow: auto;
+        scrollbar-color: #415651 transparent;
+      }
+      .detail-title {
+        font-size: clamp(21px, 2.2vw, 31px);
+        line-height: 1.12;
+        font-weight: 500;
+        letter-spacing: -0.04em;
+        overflow-wrap: anywhere;
+        margin: 8px 0;
+      }
+      .nodekind {
+        color: var(--tone, var(--gold));
+        font: 11px var(--mono);
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-top: 19px;
+      }
+      .dot {
+        background: var(--tone, var(--gold));
+        width: 7px;
+        height: 7px;
+        display: inline-block;
+        border-radius: 50%;
+        flex: none;
+      }
+      .status {
+        font: 11px var(--mono);
+        color: var(--muted);
+        margin: 8px 0 10px;
+        overflow-wrap: anywhere;
+      }
+      dl {
+        margin: 12px 0;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+      }
+      dt {
+        font: 600 10px var(--mono);
+        color: var(--quiet);
+        margin: 12px 0 3px;
+      }
+      dd {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+      }
+      .subheading {
+        border-top: 1px solid var(--border);
+        margin: 12px 0 6px;
+        padding-top: 13px;
+      }
+      .edge {
+        width: 100%;
+        padding: 7px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        text-align: left;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        color: var(--text);
+      }
+      .edge span:last-child {
+        min-width: 0;
+      }
+      .edge b,
+      .edge small {
+        display: block;
+        overflow-wrap: anywhere;
+      }
+      .edge b {
+        font-size: 12px;
+        font-weight: 550;
+      }
+      .edge small {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      details {
+        margin: 10px 0;
+      }
+      summary {
+        font-size: 12px;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      details dl {
+        border: 0;
+        padding: 0;
+      }
+      .seed-trail {
+        margin: 8px 0;
+        padding-left: 22px;
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+      .seed-trail li {
+        padding-bottom: 4px;
+      }
+      .seed-trail small {
+        display: block;
+        color: var(--muted);
+      }
+      .layers {
+        padding: 16px 0 0;
+      }
+      .layerhead {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0 0 9px;
+      }
+      .layers h2 {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .layerhead button {
+        font-size: 11px;
+        padding: 3px 8px;
+        margin-left: auto;
+      }
+      .bands {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 7px;
+      }
+      .band {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 5px;
+        text-align: left;
+        border-top: 2px solid var(--tone);
+        padding: 12px 11px;
+        background: linear-gradient(180deg, #172322, #101a1b);
+        font-size: 13px;
+        min-height: 48px;
+      }
+      .band b {
+        font: 15px var(--mono);
+        color: var(--tone);
+      }
+      .band[aria-pressed='true'] {
+        outline: 1px solid var(--tone);
+        outline-offset: -1px;
+      }
+      .foot {
+        margin: 10px 1px 0;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+        font: 11px/1.5 var(--mono);
+        color: var(--quiet);
+      }
+      .records {
+        height: 100%;
+        padding: 12px;
+        overflow: auto;
+      }
+      .records input {
+        background: #152221;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 8px 11px;
+        width: 100%;
+        margin-bottom: 6px;
+      }
+      .record {
+        display: grid;
+        grid-template-columns: 8px 1fr auto;
+        align-items: center;
+        gap: 9px;
+        width: 100%;
+        padding: 9px 5px;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+        font-size: 13px;
+      }
+      .record small {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .record span {
+        overflow-wrap: anywhere;
+      }
+      .empty {
+        padding: 12px 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .surface {
+        position: absolute;
+        inset: auto 0 21px;
+        text-align: center;
+      }
+      .primary {
+        padding: 10px 20px;
+        border-color: #ffe1a7;
+        background: var(--gold);
+        color: #211c16;
+        font-weight: 650;
+      }
+      .primary:hover:enabled {
+        background: #ffe4ad;
+        color: #211c16;
+        border-color: #fff1c7;
+      }
+      @media (min-width: 1450px) {
+        .intro {
+          padding: 32px 0;
+        }
+        .viewport {
+          height: clamp(440px, 50vh, 650px);
+        }
+        .rail {
+          max-height: clamp(440px, 50vh, 650px);
+        }
+      }
+      @media (max-width: 820px) {
+        .stage {
+          grid-template-columns: minmax(0, 1fr) 218px;
+        }
+        .rail {
+          padding: 13px;
+        }
+        .intro {
+          padding: 18px 0;
+        }
+        .band {
+          padding: 9px 7px;
+          font-size: 12px;
+        }
+      }
+      @media (max-width: 680px) {
+        .stage {
+          grid-template-columns: 1fr;
+        }
+        .rail {
+          border-left: 0;
+          border-top: 1px solid var(--border);
+          max-height: 300px;
+        }
+        .viewport {
+          height: 340px;
+        }
+        .bands {
+          grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+        }
+        .intro {
+          align-items: flex-end;
+        }
+        .intro p {
+          font-size: 12px;
+        }
+        .rail .nodekind {
+          margin-top: 9px;
+        }
+        .top {
+          min-height: 44px;
+        }
+        .headrow {
+          padding: 7px 10px;
+        }
+        .intro .ghost {
+          font-size: 11px;
+        }
+        .map-status {
+          max-width: 50%;
+          font-size: 9px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto;
+        }
+      }
+      .intro { padding:18px 0 16px; }
+      .intro h1 { font-size:clamp(32px,3.6vw,50px); }
+      .workspace-nav { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 14px; flex-wrap:wrap; }
+      .view-tabs { display:flex; gap:4px; padding:4px; border:1px solid var(--border); border-radius:9px; background:#0b1416; }
+      .view-tabs button { border:0; background:transparent; border-radius:6px; padding:10px 17px; color:var(--muted); font-size:13px; }
+      .view-tabs button[aria-pressed='true'] { background:#243332; color:#fff0d8; box-shadow:inset 0 0 0 1px #48564d; }
+      .run-controls { display:flex; gap:6px; align-items:center; }
+      .stream-strip { display:flex; gap:18px; justify-content:space-between; align-items:center; padding:12px 15px; background:#101a1c; border-bottom:1px solid var(--border); font:11px/1.4 var(--mono); color:var(--muted); }
+      .stream-strip strong { color:#c9e6dc; font-weight:500; }
+      .stream-strip .quiet { color:#829c96; }
+      .mode.synthetic { color:#f8c57c; }
+      .mode.synthetic:before { border-color:#f8c57c; background:#f8c57c; }
+      .scene-pane { height:100%; overflow:auto; padding:23px 22px 28px; background:radial-gradient(ellipse at 45% 30%,#142a2b 0,transparent 65%),#091213; }
+      .pane-intro { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; margin-bottom:19px; }
+      .pane-intro h2 { font-size:23px; font-weight:500; letter-spacing:-.035em; }
+      .pane-intro p { color:var(--muted); font-size:12px; margin-top:5px; max-width:520px; }
+      .receipt-card { border:1px solid #354844; border-radius:8px; background:#142020; margin:0 0 12px; padding:15px; }
+      .receipt-head { display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:10px; }
+      .receipt-head h3 { font-size:16px; font-weight:550; }
+      .badge { display:inline-flex; padding:3px 7px; font:10px var(--mono); border:1px solid #44584b; border-radius:4px; color:#c7dcae; background:#1b2d26; }
+      .badge.pending, .badge.prepared, .badge.candidateReady { border-color:#745d3e; color:#f5ca86; background:#30291f; }
+      .badge.failed, .badge.cancelled, .badge.rejected, .badge.escalated, .badge.damped { border-color:#79514e; color:#f6b5a7; background:#2d2020; }
+      .receipt-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+      .receipt-step { padding:11px; border:1px solid #2b403b; border-radius:5px; background:#0b1718; min-width:0; }
+      .receipt-step .step-name { font:10px var(--mono); text-transform:uppercase; letter-spacing:.06em; color:#89aca3; display:block; margin-bottom:7px; }
+      .receipt-step b { font-size:12px; font-weight:500; display:block; overflow-wrap:anywhere; }
+      .receipt-step small { font:10px/1.5 var(--mono); color:var(--muted); display:block; margin-top:5px; overflow-wrap:anywhere; }
+      .receipt-reference { font:10px/1.5 var(--mono); color:#91aba3; margin-top:10px; overflow-wrap:anywhere; }
+      .invocations { display:flex; gap:5px; flex-wrap:wrap; margin-top:7px; }
+      .invocation { font:10px/1.5 var(--mono); padding:4px 6px; border-radius:3px; background:#1a2b2b; color:#9ad5ce; }
+      .empty-state { min-height:180px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; border:1px dashed #344940; border-radius:8px; gap:10px; }
+      .empty-state h3 { font-size:20px; font-weight:450; letter-spacing:-.03em; }
+      .empty-state p { max-width:430px; color:var(--muted); font-size:13px; }
+      .neural-symbol { width:70px; height:70px; border:1px solid #506a61; border-radius:18px; display:grid; place-items:center; font:30px var(--mono); color:#8cad9d; box-shadow:0 0 55px #305b431c,inset 0 0 25px #25453622; margin-bottom:7px; }
+      .observed { margin-top:13px; display:grid; grid-template-columns:160px 1fr; gap:15px; align-items:start; padding:14px 16px; border:1px solid var(--border); border-radius:7px; background:#101a1b; }
+      .observed h2 { font-size:13px; font-weight:550; }
+      .observed p { color:var(--muted); font-size:11px; margin-top:4px; }
+      .event-list { display:flex; flex-wrap:wrap; gap:6px; min-height:30px; align-items:flex-start; }
+      .event { font:10px/1.5 var(--mono); padding:6px 8px; border:1px solid #34524b; background:#152825; border-radius:4px; color:#b7dfcf; overflow-wrap:anywhere; max-width:100%; }
+      .event.admission,.event.peer { border-color:#62533a; background:#29261e; color:#e4c591; }
+      .event-empty { color:#829d94; font:11px/1.6 var(--mono); padding:5px 0; }
+      .demo-caption { font-size:12px; color:#e3bb7e; margin-bottom:13px; padding:10px 13px; border:1px solid #645139; border-radius:6px; background:#2c261d; }
+      .legend { display:flex; gap:15px; flex-wrap:wrap; margin-top:13px; color:var(--muted); font:10px/1.5 var(--mono); }
+      .legend span { display:flex; gap:6px; align-items:center; }
+      .legend .dot { width:5px; height:5px; }
+      .boundary { color:#cbb489; }
+      @media (min-width:1000px) { .viewport { height:clamp(320px,40vh,540px); } .rail { max-height:clamp(320px,40vh,540px); } }
+      @media (max-width:680px) { .view-tabs { width:100%; } .view-tabs button { flex:1; padding:9px 8px; } .workspace-nav { gap:9px; } .run-controls { margin-left:auto; } .scene-pane { padding:17px 13px; } .receipt-grid { grid-template-columns:1fr; } .observed { grid-template-columns:1fr; gap:8px; } .stream-strip { font-size:10px; gap:9px; } .view-tabs button { font-size:12px; } .viewport { height:390px; } }
+      @media (max-width:440px) { .product { display:none; } .mode { font-size:9px; } .intro { flex-wrap:wrap; gap:10px; } .stream-strip { flex-wrap:wrap; } .run-controls { flex-wrap:wrap; } }
+      @media (min-width:821px) and (max-height:720px) {
+        .shell { padding-bottom:8px; }
+        .top { min-height:40px; }
+        .intro { padding:10px 0; }
+        .intro h1 { font-size:34px; }
+        .intro p { display:none; }
+        .workspace-nav { gap:8px; margin-bottom:8px; }
+        .view-tabs button { padding:7px 13px; }
+        .demo-caption { padding:6px 11px; margin-bottom:8px; font-size:11px; }
+        .stream-strip { padding:8px 12px; }
+        .headrow { min-height:36px; padding:5px 12px; }
+        .viewport { height:clamp(210px,34vh,244px); }
+        .rail { max-height:clamp(210px,34vh,244px); padding:13px; }
+        .rail .nodekind { margin-top:10px; }
+        .rail .detail-title { font-size:24px; }
+        .observed { margin-top:8px; padding:8px 12px; grid-template-columns:140px 1fr; gap:10px; }
+        .event-list { max-height:52px; overflow:auto; scrollbar-color:#415651 transparent; }
+        .layers { display:flex; align-items:center; gap:10px; padding-top:8px; }
+        .layerhead { flex-direction:column; align-items:flex-start; gap:3px; margin:0; min-width:86px; }
+        .layers h2 { font-size:12px; }
+        .layerhead button { margin:0; padding:2px 6px; }
+        .bands { flex:1; gap:5px; }
+        .band { padding:7px; min-height:36px; font-size:12px; }
+        .band b { font-size:13px; }
+        .legend { margin-top:8px; }
+        .foot { margin-top:6px; }
+      }
+      .form-workspace { display:grid; grid-template-columns:minmax(0,1fr) 278px; min-height:395px; }
+      .form-theatre { position:relative; min-width:0; min-height:395px; background:#081516; overflow:hidden; }
+      #formCanvas { cursor:default; height:100%; min-height:395px; touch-action:auto; }
+      .form-stage-label { position:absolute; left:22px; top:19px; pointer-events:none; }
+      .form-stage-label .kicker { color:#8db8ad; }
+      .form-stage-label h2 { margin-top:5px; font-size:25px; font-weight:450; letter-spacing:-.04em; }
+      .form-stage-caption { position:absolute; left:22px; bottom:17px; right:22px; color:#9eb8af; font:10px/1.55 var(--mono); pointer-events:none; }
+      .form-stage-caption span { color:#efc88b; }
+      .form-rail { border-left:1px solid var(--border); padding:21px 20px 19px; background:linear-gradient(145deg,#172624,#101a1b); display:flex; flex-direction:column; gap:15px; min-width:0; }
+      .form-rail h2 { font-size:30px; font-weight:450; line-height:1.1; letter-spacing:-.05em; margin:5px 0 7px; }
+      .form-rail p { font-size:12px; line-height:1.6; color:var(--muted); }
+      .form-provenance { color:#e1c391 !important; font:10px/1.5 var(--mono) !important; padding:8px 10px; border:1px solid #66543b; background:#2b271e; border-radius:5px; }
+      .form-steps { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin:0; padding:0; list-style:none; }
+      .form-steps li { border-top:2px solid #30443e; padding-top:7px; color:#869f95; font:9px/1.5 var(--mono); }
+      .form-steps li.current { border-color:#f0c682; color:#f7d59f; }
+      .form-steps li.done { border-color:#78b8aa; color:#a9c6b6; }
+      .form-steps b { display:block; font-weight:400; margin-bottom:2px; }
+      .form-status { min-height:39px; color:#d5e4d9 !important; margin-top:11px; }
+      .form-actions { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+      .form-actions button { padding:9px 8px; min-height:36px; font-size:11px; }
+      #formStart { color:#0b1718; background:#e8c58a; border-color:#e8c58a; grid-column:1/-1; font-weight:600; }
+      #formStart:hover:enabled { background:#f3d9a9; }
+      .form-option { width:100%; display:flex; align-items:center; gap:12px; padding:13px 12px; border:1px solid #4e7263; text-align:left; background:#152b27; border-radius:7px; }
+      .form-option:hover:enabled { background:#1d3930; border-color:#8cad85; }
+      .form-option[aria-pressed='true'] { background:#213a2b; border-color:#c6b87c; }
+      .form-option-icon { width:24px; height:30px; flex:none; border-radius:65% 35% 60% 45%; transform:rotate(-36deg); border:1px solid #9bd7c1; background:radial-gradient(ellipse at 50% 64%,#ffd58e 0,#d49a4b 12%,#7bbfa244 28%,#84cfbe33 57%,#b7e7d854 80%,#639b8c22); box-shadow:0 0 14px #7ba98125; }
+      .form-option strong { display:block; font-size:12px; font-weight:550; }
+      .form-option small { display:block; font:9px/1.5 var(--mono); color:#9fbdb0; margin-top:3px; }
+      .form-boundary { border-top:1px solid var(--border); padding-top:11px; font-size:10px !important; margin-top:auto; }
+      .form-stage-caption, .form-rail p, .form-option strong, .form-option small { overflow-wrap:anywhere; }
+      @media (min-width:821px) and (max-height:720px) {
+        .form-workspace,.form-theatre,#formCanvas { min-height:365px; }
+        .form-rail { gap:4px; padding:10px 14px; }
+        .form-rail h2 { font-size:24px; line-height:1.1; margin:2px 0 0; }
+        .form-rail p { font-size:11px; line-height:1.4; }
+        .form-rail>div:first-child p,.form-boundary { display:none; }
+        .form-provenance { padding:5px 8px; font-size:11px !important; line-height:1.2 !important; }
+        .form-steps li { padding-top:4px; font-size:11px; line-height:1.15; }
+        .form-steps b { margin-bottom:0; }
+        .form-status { min-height:31px; margin-top:5px; }
+        .form-actions { gap:4px; }
+        .form-actions button { min-height:31px; padding:6px; font-size:11px; line-height:1.3; }
+        .form-option { padding:7px 8px; }
+        .form-option small { font-size:11px; line-height:1.2; }
+        .form-stage-label { top:15px; }
+      }
+      @media (max-width:820px) {
+        .form-workspace { grid-template-columns:1fr; }
+        .form-theatre,#formCanvas { min-height:375px; height:375px; }
+        .form-rail { border-left:0; border-top:1px solid var(--border); display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px 22px; }
+        .form-provenance,.form-boundary { grid-column:1/-1; }
+        .form-rail p { font-size:12px; }
+      }
+      @media (max-width:470px) {
+        .form-rail { display:flex; padding:18px; }
+        .form-theatre,#formCanvas { min-height:345px; height:345px; }
+        .form-stage-label,.form-stage-caption { left:17px; }
+        .view-tabs { flex-wrap:wrap; }
+        .view-tabs button { flex:1 1 40%; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="top">
+        <span class="logo"><i class="mark" aria-hidden="true"></i>ARCHi</span
+        ><span class="product">Seed observatory</span><span class="mode" id="mode">Waiting for local projection</span>
+      </header>
+      <div class="intro">
+        <div>
+          <h1 id="heading">Seed interior</h1>
+          <p id="hint">Select a record to follow its links.</p>
+        </div>
+        <button id="surfaceToggle" class="ghost" type="button">↖ Seed surface</button>
+      </div>
+      <nav class="workspace-nav" aria-label="Seed views" id="workspaceNav">
+        <div class="view-tabs">
+          <button id="memoryView" aria-pressed="true">Memory network</button>
+          <button id="harnessView" aria-pressed="false">Harness</button>
+          <button id="neuralView" aria-pressed="false">Neural signals</button>
+          <button id="viewForm" aria-pressed="false">First form</button>
+        </div>
+        <div class="run-controls" id="runControls">
+          <button id="demoStart" class="control">Play synthetic example</button>
+          <button id="replay" class="control" hidden>↻ Replay</button>
+          <button id="motionToggle" class="control" aria-pressed="false">Pause motion</button>
+        </div>
+      </nav>
+      <p class="demo-caption" id="demoCaption" hidden>Synthetic replay · An illustrative memory workflow. No model, neural activation, or saved memory is being measured.</p>
+      <section class="frame" aria-label="Seed explorer">
+        <div class="stream-strip"><strong id="streamState">Waiting for the current workspace</strong><span id="motionState" class="quiet">Observation only</span></div>
+        <div class="headrow">
+          <span class="line-title"
+            ><i class="scope" aria-hidden="true"></i><span id="mapTitle">Connection map</span></span
+          >
+          <div class="tabs" id="tabs" aria-label="View">
+            <button id="mapTab" aria-pressed="true">Map</button
+            ><button id="listTab" aria-pressed="false">Records</button>
+          </div>
+        </div>
+        <section class="form-workspace" id="formWorkspace" aria-label="Sol first form preview" hidden>
+          <div class="form-theatre">
+            <canvas id="formCanvas" role="img" aria-label="An amber Core Seed. Grow the Seed or preview Sol's raindrop form with the adjacent buttons."></canvas>
+            <div class="form-stage-label"><div class="kicker">A continuing Core · a possible form</div><h2 id="formSceneTitle">Before the first drop</h2></div>
+            <p class="form-stage-caption"><span>Sol / first form study</span><br>Water gathers around the same amber Core.</p>
+          </div>
+          <div class="form-rail">
+            <div><div class="kicker">First form / 01</div><h2>Sol · Raindrop</h2><p>A small water form with rounded bear ears, a gentle muzzle, and an amber heart.</p></div>
+            <p class="form-provenance" id="formProvenance">Form preview · not saved</p>
+            <div>
+              <ol class="form-steps" aria-label="Growth stages">
+                <li id="formStep0" class="current"><b>01</b>Seed</li><li id="formStep1"><b>02</b>Gather</li><li id="formStep2"><b>03</b>Shape</li><li id="formStep3"><b>04</b>Choose</li>
+              </ol>
+              <p class="form-status" id="formStatus" role="status" aria-live="polite" aria-atomic="true">The Seed is ready. Explore a possible first form.</p>
+            </div>
+            <div class="form-actions">
+              <button id="formStart">Grow the Seed</button>
+              <button id="formPause" aria-pressed="false" disabled>Pause growth</button>
+              <button id="formReset">Return to Seed</button>
+            </div>
+            <button class="form-option" id="formChooseSol" aria-pressed="false">
+              <span class="form-option-icon" aria-hidden="true"></span><span><strong>Preview Sol · Raindrop</strong><small id="formChoiceNote">Explore this form now</small></span>
+            </button>
+            <p class="form-boundary">Your Core continues. Choosing a preview changes this view only; a saved form remains a separate decision.</p>
+          </div>
+        </section>
+        <div class="stage" id="recordStage">
+          <div class="viewport">
+            <canvas
+              id="field"
+              aria-label="Visual map of the current records. Use the Records button for keyboard access."
+            ></canvas>
+            <div id="records" class="records" hidden>
+              <input id="search" aria-label="Find a record" placeholder="Find a record…" type="search" />
+              <div id="rows"></div>
+            </div>
+            <div id="harness" class="scene-pane" hidden></div>
+            <div id="neural" class="scene-pane" hidden></div>
+            <div class="canvas-controls" id="controls">
+              <button id="out" aria-label="Zoom out">−</button><button id="in" aria-label="Zoom in">+</button
+              ><button id="fit">Fit</button>
+            </div>
+            <span id="counts" class="map-status"></span>
+            <div class="surface" id="surface" hidden>
+              <button class="primary" id="enter">Dive into Seed ↓</button>
+            </div>
+          </div>
+          <aside class="rail" aria-label="Record inspector" id="rail"></aside>
+        </div>
+      </section>
+      <section class="observed" aria-label="Observed changes" id="observed">
+        <div><h2>Observed changes</h2><p id="eventNote">Changes seen by this view.</p></div>
+        <div class="event-list" id="events" aria-live="polite" aria-atomic="true"></div>
+      </section>
+      <section class="layers" id="layers">
+        <div class="layerhead">
+          <h2>Record layers</h2>
+          <button id="all">Show all</button>
+        </div>
+        <div class="bands" id="bands"></div>
+      </section>
+      <div class="legend" id="mainLegend"><span><i class="dot" style="--tone:#75d9d0"></i>Recorded connections</span><span><i class="dot" style="--tone:#f5c985"></i>Observed updates</span><span class="boundary">Proposal ≠ State · Review stays explicit</span></div>
+      <footer class="foot"><span id="total"></span><span id="limit"></span></footer>
+    </main>
+    <script id="seed-path-math">
+      'use strict'
+      // Index the full snapshot once. Each parent is the actual labeled edge used to reach the record.
+      function seedPathTree(nodes, edges) {
+        const roots = nodes.filter((node) => node.kind === 'companion')
+        if (roots.length !== 1) return new Map()
+        const outgoing = new Map(nodes.map((node) => [node.id, []]))
+        for (const edge of edges) {
+          if (outgoing.has(edge.target)) outgoing.get(edge.source)?.push(edge)
+        }
+        const seed = roots[0].id
+        const parents = new Map([[seed, null]])
+        const queue = [seed]
+        for (let index = 0; index < queue.length; index++) {
+          for (const edge of outgoing.get(queue[index])) {
+            if (parents.has(edge.target)) continue
+            parents.set(edge.target, edge)
+            queue.push(edge.target)
+          }
+        }
+        return parents
+      }
+      function pathFromSeed(parents, id) {
+        if (!parents.has(id)) return null
+        const trail = []
+        let edge = parents.get(id)
+        while (edge) {
+          trail.push(edge)
+          edge = parents.get(edge.source)
+        }
+        return trail.reverse()
+      }
+    </script>
+    <script id="seed-live-math">
+      'use strict'
+      // This projection deliberately drops source text, prompts, answers and token data.
+      // Animation describes changes observed by this view; it is not a neural recorder.
+      function normalizeSeedTelemetry(snapshot) {
+        const source = snapshot && typeof snapshot === 'object' ? snapshot : {}
+        const t = source.telemetry && typeof source.telemetry === 'object' ? source.telemetry : {}
+        const text = (value, limit = 160) => typeof value === 'string' ? value.slice(0, limit) : ''
+        const count = (value) => Number.isSafeInteger(value) && value >= 0 ? Math.min(value, 1000000) : 0
+        const list = (value, limit) => Array.isArray(value) ? value.slice(0, limit) : []
+        const known = (value, allowed, fallback) => allowed.includes(value) ? value : fallback
+        const memory = t.memory || {}, harness = t.harness || {}, peer = t.peer || {}
+        const nodes = list(source.nodes, 512).map(n => ({
+          id: text(n?.id), kind: text(n?.kind, 32), status: text(n?.status, 80),
+        })).filter(n => n.id)
+        const ids = new Set(nodes.map(n => n.id))
+        const edges = list(source.edges, 2048).filter(e => ids.has(e?.source) && ids.has(e?.target))
+          .map(e => ({source: text(e.source), target: text(e.target), label: text(e.label, 80)}))
+        const laneStates = ['pending', 'complete', 'failed', 'cancelled']
+        const roles = ['MEMORY_SELECTION', 'MEMORY_REMINDER', 'REASONING']
+        return {
+          origin: known(source.origin, ['native', 'synthetic'], 'unavailable'),
+          contextID: text(source.contextID), nodes, edges,
+          memory: {
+            keptLessonCount: count(memory.keptLessonCount), temporaryRecordCount: count(memory.temporaryRecordCount),
+            graphNodeCount: count(memory.graphNodeCount), graphEdgeCount: count(memory.graphEdgeCount),
+            truncatedCount: count(memory.truncatedCount),
+          },
+          harness: {
+            state: known(harness.state, ['working', 'idle'], 'unavailable'),
+            lanes: list(harness.lanes, 4).filter(l => l && typeof l.id === 'string').map(l => ({
+              id: text(l.id, 40), provider: text(l.provider, 40), state: known(l.state, laneStates, 'unavailable'),
+              phase: text(l.phase, 100), requestID: text(l.requestID), requestStarted: l.requestStarted === true,
+              contextCurrent: typeof l.contextCurrent === 'boolean' ? l.contextCurrent : null,
+              modelIdentity: text(l.modelIdentity, 200),
+              elapsedMilliseconds: Number.isSafeInteger(l.elapsedMilliseconds) && l.elapsedMilliseconds >= 0 ? l.elapsedMilliseconds : null,
+              invocations: list(l.invocations, 32).filter(i => i && typeof i.id === 'string').map(i => ({
+                id: text(i.id), role: known(i.role, roles, 'MODEL'),
+                status: known(i.status, ['dispatched', 'completed', 'failed', 'cancelled'], 'unavailable'),
+              })),
+              omittedInvocationCount: count(l.omittedInvocationCount),
+              admission: l.admission ? { status: text(l.admission.status, 40), stage: text(l.admission.stage, 60) } : null,
+            })),
+          },
+          peer: {
+            progress: known(peer.progress, ['idle', 'prepared', 'candidateReady', 'committed', 'damped', 'rejected', 'escalated', 'cancelled'], 'unavailable'),
+            attemptID: text(peer.attemptID), candidateReady: peer.candidateReady === true,
+            acceptedReportCount: count(peer.acceptedReportCount),
+            checks: list(peer.checks, 64).map(c => ({id: text(c?.id), status: known(c?.status, ['PASS', 'FAIL', 'SKIPPED', 'ERROR'], 'unavailable')})),
+            omittedCheckCount: count(peer.omittedCheckCount),
+            simulation: peer.simulation?.origin === 'synthetic' ? {
+              origin: 'synthetic', round: count(peer.simulation.round), workerCount: count(peer.simulation.workerCount),
+            } : null,
+          },
+          neural: { available: false, reason: 'No activation recorder is connected.' },
+        }
+      }
+      function seedObservedChanges(previous, next) {
+        if (!previous) return []
+        const a = normalizeSeedTelemetry(previous), b = normalizeSeedTelemetry(next)
+        if (a.contextID !== b.contextID || a.origin !== b.origin || b.origin === 'unavailable') return []
+        const events = [], add = (key, kind, label, nodeIDs = []) => events.push({key, kind, label, nodeIDs})
+        const oldNodes = new Map(a.nodes.map(n => [n.id, n]))
+        for (const n of b.nodes) {
+          const old = oldNodes.get(n.id)
+          if (!old) add('record:' + n.id, 'record', 'Record added · ' + n.kind, [n.id])
+          else if (old.status !== n.status) add('record:' + n.id + ':' + n.status, 'record', 'Record updated · ' + n.kind, [n.id])
+        }
+        const oldEdges = new Set(a.edges.map(e => JSON.stringify([e.source, e.target, e.label])))
+        for (const e of b.edges) if (!oldEdges.has(JSON.stringify([e.source, e.target, e.label])))
+          add('link:' + e.source + ':' + e.target, 'link', 'Recorded connection added', [e.source, e.target])
+        const oldLanes = new Map(a.harness.lanes.map(l => [l.id, l]))
+        for (const lane of b.harness.lanes) {
+          const old = oldLanes.get(lane.id), sameRequest = old?.requestID === lane.requestID
+          const prefix = lane.provider || 'Assistant'
+          if (!sameRequest || !old || old.state !== lane.state || old.requestStarted !== lane.requestStarted || old.phase !== lane.phase)
+            add('lane:' + lane.id + ':' + lane.requestID + ':' + lane.state + ':' + lane.phase, 'harness', prefix + ' · ' + (lane.phase || lane.state))
+          const invocations = new Map((sameRequest ? old?.invocations || [] : []).map(i => [i.id, i]))
+          for (const invocation of lane.invocations) if (invocations.get(invocation.id)?.status !== invocation.status)
+            add('invocation:' + lane.requestID + ':' + invocation.id + ':' + invocation.status, 'harness', prefix + ' · ' + invocation.role.toLowerCase().replaceAll('_', ' ') + ' ' + invocation.status)
+          if (lane.admission && (!sameRequest || JSON.stringify(old?.admission) !== JSON.stringify(lane.admission)))
+            add('admission:' + lane.requestID + ':' + lane.admission.status + ':' + lane.admission.stage, 'admission', prefix + ' · admission ' + lane.admission.status)
+        }
+        const review = p => ({progress:p.progress,attemptID:p.attemptID,candidateReady:p.candidateReady,acceptedReportCount:p.acceptedReportCount,checks:p.checks,omittedCheckCount:p.omittedCheckCount})
+        if (JSON.stringify(review(a.peer)) !== JSON.stringify(review(b.peer)) && b.peer.progress !== 'unavailable')
+          add('peer:' + b.peer.attemptID + ':' + b.peer.progress + ':' + b.peer.acceptedReportCount, 'peer', 'Peer review · ' + b.peer.progress)
+        // Event overflow is represented by the snapshot itself, never an unbounded queue.
+        return events.slice(-48)
+      }
+    </script>
+    <script>
+      'use strict'
+      const $ = (id) => document.getElementById(id)
+      const layers = [
+        { id: 'core', name: 'Core', color: '#f5c985', kinds: ['companion'] },
+        { id: 'sources', name: 'Sources', color: '#75d9d0', kinds: ['source'] },
+        { id: 'memory', name: 'Memory', color: '#f1bf79', kinds: ['lesson', 'context'] },
+        { id: 'activity', name: 'Activity', color: '#b5a9f4', kinds: ['request', 'invocation'] },
+        { id: 'outcomes', name: 'Outcomes', color: '#add599', kinds: ['answer', 'omission'] },
+      ]
+      const kinds = {
+        companion: 'Companion',
+        source: 'Source',
+        lesson: 'Kept lesson',
+        context: 'Temporary context',
+        request: 'Request',
+        invocation: 'Model call',
+        answer: 'Answer outcome',
+        omission: 'Omission',
+      }
+      const layerOf = (node) => layers.find((layer) => layer.kinds.includes(node.kind))
+      const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's')
+      function el(tag, cls, value) {
+        const item = document.createElement(tag)
+        if (cls) item.className = cls
+        if (value !== undefined) item.textContent = value
+        return item
+      }
+      let data = { nodes: [], edges: [], truncatedCount: 0 },
+        byId = new Map(),
+        seedParents = new Map(),
+        selected = null
+      let layerID = null,
+        tab = 'map',
+        outside = false,
+        still = false,
+        sample = false,
+        received = false
+      let viewName = 'memory', paused = false, nativeLocked = false,
+        telemetry = normalizeSeedTelemetry(null), events = [], pulses = [],
+        demoToken = 0, demoTimer = 0, demoStep = -1, demoPlaying = false
+      let zoom = 1,
+        pan = { x: 0, y: 0 },
+        lastPoints = [],
+        flight = 0,
+        raf = 0
+      const canvas = $('field'),
+        ctx = canvas.getContext('2d')
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)')
+      // First-form study belongs to this presentation only. It never enters the
+      // native graph, a saved identity, or the memory/receipt event stream.
+      const formState = {stage:'seed',progress:0,selected:'seed',playing:false,paused:false}
+      let formRaf=0, formGeneration=0, formLastTime=0, formContext=null
+      const formDuration=11000
+      function formVisible() { return viewName==='form' && !outside && !document.hidden }
+      function formReducedMotion() { return still || reduce.matches }
+      function formInspect() {
+        return {...formState,visible:formVisible(),reducedMotion:formReducedMotion(),scheduled:!!formRaf,contextID:telemetry.contextID}
+      }
+      function cancelFormFrame() {
+        cancelAnimationFrame(formRaf);formRaf=0;formGeneration++
+      }
+      function clearFormPixels() {
+        if(!formContext)return
+        const field=$('formCanvas')
+        formContext.save();formContext.setTransform(1,0,0,1,0,0)
+        formContext.clearRect(0,0,field.width,field.height);formContext.restore()
+      }
+      function resetForm() {
+        cancelFormFrame()
+        Object.assign(formState,{stage:'seed',progress:0,selected:'seed',playing:false,paused:false})
+        formLastTime=0;clearFormPixels()
+      }
+      function pauseForm() {
+        if(formState.playing)formState.paused=true
+        cancelFormFrame();formLastTime=0
+      }
+      function settleForm() {
+        cancelFormFrame()
+        Object.assign(formState,{stage:'ready',progress:1,playing:false,paused:false})
+        formLastTime=0
+      }
+      function scheduleForm() {
+        if(formRaf || !formVisible() || !formState.playing || formState.paused || formReducedMotion())return
+        const generation=formGeneration
+        formRaf=requestAnimationFrame(()=>{
+          if(generation!==formGeneration)return
+          formRaf=0
+          if(!formVisible() || !formState.playing || formState.paused || formReducedMotion())return
+          const now=performance.now()
+          formState.progress=Math.min(1,formState.progress+Math.max(0,now-formLastTime)/formDuration)
+          formLastTime=now
+          formState.stage=formState.progress>=1?'ready':formState.progress<.18?'seed':formState.progress<.58?'gathering':'shaping'
+          if(formState.progress>=1)settleForm()
+          renderForm()
+        })
+      }
+      function renderForm() {
+        if(formReducedMotion() && formState.playing)settleForm()
+        const index=['seed','gathering','shaping','ready'].indexOf(formState.stage)
+        for(let i=0;i<4;i++) {
+          $('formStep'+i).className=i===index?'current':i<index?'done':''
+          $('formStep'+i).setAttribute('aria-current',i===index?'step':'false')
+        }
+        const chosen=formState.selected==='sol-raindrop'
+        $('formSceneTitle').textContent=chosen?'Hello, Sol.':formState.stage==='ready'?'A first form is ready.':formState.stage==='shaping'?'Sol takes shape.':formState.stage==='gathering'?'Every drop gathers.':'Before the first drop'
+        const message=chosen?'Sol · Raindrop is selected for this preview.':formState.paused?'Growth paused. Resume whenever you are ready.':formState.stage==='ready'?'A possible first form is ready. Choose the preview below.':formState.stage==='shaping'?'Bear ears and a gentle face emerge around the Core.':formState.stage==='gathering'?'Water gathers; the amber Core continues.':formState.playing?'The Seed begins to open.':'The Seed is ready. Explore a possible first form.'
+        if($('formStatus').textContent!==message)$('formStatus').textContent=message
+        $('formStart').disabled=formState.playing
+        $('formStart').textContent=formState.stage==='seed'?'Grow the Seed':'Grow again'
+        $('formPause').disabled=!formState.playing
+        $('formPause').textContent=formState.paused?'Resume growth':'Pause growth'
+        $('formPause').setAttribute('aria-pressed',String(formState.paused))
+        $('formChooseSol').setAttribute('aria-pressed',String(chosen))
+        $('formChoiceNote').textContent=chosen?'Selected for this preview':formState.stage==='ready'?'First form option · ready':'Explore this form now'
+        $('formCanvas').setAttribute('aria-label',chosen?'Sol as a translucent raindrop with rounded bear ears, a gentle muzzle, small paws, and the same glowing amber Core. This form preview is not saved.':formState.stage==='ready'?'A translucent raindrop bear form surrounds the amber Core. The first form is ready to preview, and the Seed remains selected.':formState.stage==='seed'?'An amber Core Seed surrounded by faint water rings.':'Water gathers around an amber Core as Sol’s first form takes shape.')
+        if(formVisible()) { drawForm();scheduleForm() }
+        else cancelFormFrame()
+      }
+      function visible() {
+        return data.nodes.filter((n) => !layerID || layerOf(n)?.id === layerID)
+      }
+      function replace(snapshot, stopMotion) {
+        if (!snapshot || !Array.isArray(snapshot.nodes) || !Array.isArray(snapshot.edges)) return
+        if (snapshot.origin === 'synthetic' && nativeLocked) return
+        const next = normalizeSeedTelemetry(snapshot)
+        const reset = !received || telemetry.contextID !== next.contextID || telemetry.origin !== next.origin
+        const currentEdges = new Set(snapshot.edges.map(e => JSON.stringify([e.source,e.target,e.label])))
+        const removed = data.nodes.some(n => !snapshot.nodes.some(current => current.id === n.id))
+          || data.edges.some(e => !currentEdges.has(JSON.stringify([e.source,e.target,e.label])))
+        const changed = seedObservedChanges(received ? data : null, snapshot)
+        if (snapshot.origin !== 'synthetic') {
+          nativeLocked = true
+          stopDemo()
+        }
+        if (reset || removed) { events = []; pulses = [] }
+        if (changed.length) {
+          const valid = new Set(snapshot.nodes.map(n => n.id))
+          events = [...events, ...changed].filter(e => e.nodeIDs.every(id => valid.has(id))).slice(-6)
+          if (!stopMotion && !reduce.matches && !paused && !document.hidden && viewName === 'memory' && tab === 'map') {
+            const now = performance.now()
+            pulses = [...pulses, ...changed.filter(e => e.nodeIDs.length).map(e => ({...e, started:now}))].slice(-48)
+          }
+        }
+        data = snapshot
+        telemetry = next
+        sample = snapshot.origin === 'synthetic'
+        byId = new Map(data.nodes.map((n) => [n.id, n]))
+        seedParents = seedPathTree(data.nodes, data.edges)
+        still = !!stopMotion
+        if(reset)resetForm()
+        if (!visible().some((n) => n.id === selected)) selected = visible()[0]?.id ?? null
+        if (!received && !still && !reduce.matches && !paused) flight = performance.now() + 500
+        if (still || reduce.matches || paused || document.hidden) { pulses = []; flight = 0 }
+        received = true
+        lastPoints = []
+        render()
+        cancelAnimationFrame(raf)
+        raf = 0
+        // Clear physical pixels synchronously even while the native privacy
+        // fence hides this page. A visibility callback must never be required
+        // to remove a withdrawn record's previous canvas image.
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.restore()
+        if (!canvas.hidden) draw()
+      }
+      window.seedDive = Object.freeze({ replace, inspect: () => ({
+        view: viewName, origin:telemetry.origin, contextID:telemetry.contextID,
+        pulseCount:pulses.length, eventCount:events.length, paused,
+        reducedMotion:still || reduce.matches, playing:demoPlaying,
+        demoStep, demoSteps:7, nativeLocked, scheduled:!!raf, form:formInspect(),
+      }) })
+      function choose(id, reveal = false) {
+        const node = byId.get(id)
+        if (!node) return
+        if (reveal && layerID && layerOf(node)?.id !== layerID) layerID = null
+        selected = id
+        render()
+      }
+      function filterLayer(id) {
+        layerID = id
+        if (!visible().some((n) => n.id === selected)) selected = visible()[0]?.id ?? null
+        $('search').value = ''
+        resetCamera()
+        render()
+      }
+      function resetCamera() {
+        zoom = 1
+        pan = { x: 0, y: 0 }
+      }
+      function surface(show) {
+        if(show)pauseForm()
+        outside = show
+        pulses=[]
+        if (!show) { tab = 'map';viewName='memory' }
+        resetCamera()
+        if (!show) flight = still || reduce.matches || paused ? 0 : performance.now() + 500
+        render()
+        ;(show ? $('enter') : $('surfaceToggle')).focus({ preventScroll: true })
+      }
+      function setTab(name) {
+        tab = name
+        if (name !== 'map') pulses = []
+        render()
+        if (name === 'list') $('search').focus({ preventScroll: true })
+      }
+      function appendDetails(container, details) {
+        const list = el('dl')
+        details.forEach((d) => list.append(el('dt', '', d.label), el('dd', '', d.value)))
+        if (details.length) container.append(list)
+      }
+      function seedDistance(node) {
+        const trail = pathFromSeed(seedParents, node.id)
+        if (trail === null) {
+          const message = seedParents.size
+            ? 'No directed path from the seed in this snapshot.'
+            : 'Seed unavailable in this snapshot.'
+          return el('p', 'status', message)
+        }
+        if (trail.length === 0) return el('p', 'status', 'Seed origin · 0 hops')
+        const fold = el('details')
+        fold.append(el('summary', '', 'Path from seed · ' + plural(trail.length, 'hop')))
+        const list = el('ol', 'seed-trail')
+        list.append(el('li', '', byId.get(trail[0].source).title))
+        for (const edge of trail) {
+          const step = el('li')
+          step.append(el('small', '', edge.label), document.createTextNode(byId.get(edge.target).title))
+          list.append(step)
+        }
+        fold.append(
+          list,
+          el('p', 'status', 'One shortest route following the recorded arrows in the full snapshot.'),
+        )
+        return fold
+      }
+      function renderInspector() {
+        const rail = $('rail'),
+          node = byId.get(selected)
+        rail.replaceChildren(el('div', 'kicker', outside ? 'Seed surface' : 'Record inspector'))
+        if (!outside && viewName === 'harness') {
+          rail.replaceChildren(el('div','kicker','Harness inspector'),el('h2','detail-title','Receipts, in view'),
+            el('p','empty','These cards project the current request and review records. Completed work, stopped requests, and pending review remain distinct.'))
+          appendDetails(rail,[
+            {label:'Source',value:sample?'Synthetic replay':telemetry.origin==='native'?'Current native projection':'No harness telemetry supplied'},
+            {label:'Activity',value:telemetry.harness.state},
+            {label:'Peer review',value:telemetry.peer.progress},
+            {label:'Accepted session reports',value:String(telemetry.peer.acceptedReportCount)},
+          ])
+          rail.append(el('h3','kicker subheading','Proposal ≠ State'),el('p','empty','This view cannot approve a candidate, run a model, or save a lesson. Use the native review controls to make those decisions.'))
+          return
+        }
+        if (!outside && viewName === 'neural') {
+          rail.replaceChildren(el('div','kicker','Instrumentation'),el('h2','detail-title','A clear boundary'),
+            el('p','empty','Request receipts report work around a model. They do not expose activations inside it.'))
+          appendDetails(rail,[
+            {label:'Activation frames',value:'Unavailable'},
+            {label:'Weights and gradients',value:'Unavailable'},
+            {label:'Recorded model identities',value:telemetry.harness.lanes.filter(l=>l.modelIdentity).map(l=>l.provider+': '+l.modelIdentity).join('\n')||'No identity receipt in this snapshot'},
+          ])
+          rail.append(el('p','status','A future recorder must supply model, layer, tensor shape, sampling scope, and capture time before this view can display measured signals.'))
+          return
+        }
+        if (outside) {
+          rail.append(
+            el('h2', 'detail-title', 'Core Seed'),
+            el('p', 'empty', 'Dive through the particle shell to explore this companion’s local records.'),
+          )
+          appendDetails(rail, [
+            {
+              label: 'Inside',
+              value: plural(data.nodes.length, 'record') + ' · ' + plural(data.edges.length, 'link'),
+            },
+            {
+              label: 'Session',
+              value: sample ? 'Illustrative screenplay session' : 'Current ARCHi workspace',
+            },
+          ])
+          return
+        }
+        if (!node) {
+          rail.append(el('p', 'empty', 'No record in this layer.'))
+          return
+        }
+        const layer = layerOf(node)
+        rail.style.setProperty('--tone', layer?.color ?? '#e7efea')
+        const kind = el('div', 'nodekind')
+        kind.append(el('i', 'dot'), document.createTextNode(kinds[node.kind] ?? node.kind))
+        rail.append(kind, el('h2', 'detail-title', node.title), el('p', 'status', node.status))
+        rail.append(seedDistance(node))
+        if (node.subtitle) rail.append(el('p', 'empty', node.subtitle))
+        const primary = [],
+          refs = []
+        node.details.forEach((d) =>
+          (/digest|revision|reference|\bid(s)?$|contract|utf-16|sha-256/i.test(d.label)
+            ? refs
+            : primary
+          ).push(d),
+        )
+        appendDetails(rail, primary)
+        if (refs.length) {
+          const fold = el('details')
+          fold.append(el('summary', '', 'Reference identifiers'))
+          appendDetails(fold, refs)
+          rail.append(fold)
+        }
+        const links = data.edges.filter((e) => e.source === node.id || e.target === node.id)
+        rail.append(el('h3', 'kicker subheading', plural(links.length, 'recorded link')))
+        links.forEach((edge) => {
+          const outgoing = edge.source === node.id,
+            other = byId.get(outgoing ? edge.target : edge.source)
+          if (!other) return
+          const button = el('button', 'edge'),
+            text = el('span')
+          text.append(
+            el('b', '', other.title),
+            el('small', '', (outgoing ? 'To · ' : 'From · ') + edge.label),
+          )
+          button.append(el('span', '', outgoing ? '↗' : '↙'), text)
+          button.onclick = () => {
+            choose(other.id, true)
+            rail.scrollTop = 0
+            focusInspector()
+          }
+          rail.append(button)
+        })
+      }
+      function focusInspector() {
+        const title = $('rail').querySelector('h2')
+        if (title) {
+          title.tabIndex = -1
+          title.focus({ preventScroll: true })
+        }
+      }
+      function renderRows() {
+        const needle = $('search').value.trim().toLocaleLowerCase(),
+          rows = $('rows')
+        rows.replaceChildren()
+        const matches = visible().filter((n) =>
+          [n.title, n.status, n.subtitle, kinds[n.kind]].join(' ').toLocaleLowerCase().includes(needle),
+        )
+        matches.forEach((n) => {
+          const b = el('button', 'record'),
+            dot = el('i', 'dot')
+          dot.style.setProperty('--tone', layerOf(n)?.color)
+          b.append(dot, el('span', '', n.title), el('small', '', n.status))
+          b.setAttribute('aria-pressed', String(n.id === selected))
+          b.onclick = () => {
+            choose(n.id)
+            focusInspector()
+          }
+          rows.append(b)
+        })
+        if (!matches.length) rows.append(el('p', 'empty', 'No matching records.'))
+      }
+      function stateBadge(value) {
+        return el('span', 'badge ' + value.replace(/[^a-zA-Z]/g,''), value === 'candidateReady' ? 'Review required' : value)
+      }
+      function receiptStep(name, value, detail) {
+        const box = el('div','receipt-step')
+        box.append(el('span','step-name',name),el('b','',value))
+        if (detail) box.append(el('small','',detail))
+        return box
+      }
+      function renderHarness() {
+        const pane = $('harness'), intro = el('div','pane-intro'), copy=el('div')
+        copy.append(el('h2','','Request & review flow'),el('p','','Recorded lifecycle states from ARCHi’s harness. Changes appear when their native receipts change.'))
+        intro.append(copy,stateBadge(telemetry.harness.state))
+        pane.replaceChildren(intro)
+        if (!telemetry.harness.lanes.length) {
+          const empty=el('div','empty-state')
+          empty.append(el('h3','','No request receipt yet'),el('p','','When a request is made through ARCHi, its provider, invocation receipts, and admission outcome will appear here.'))
+          pane.append(empty)
+        }
+        telemetry.harness.lanes.forEach(lane=>{
+          const card=el('article','receipt-card'), head=el('div','receipt-head'), grid=el('div','receipt-grid')
+          head.append(el('h3','',lane.provider || 'Assistant'),stateBadge(lane.state))
+          const invocationStep=receiptStep('02 · Invocations',plural(lane.invocations.length,'recorded call'),lane.omittedInvocationCount?lane.omittedInvocationCount+' additional receipts omitted':null)
+          const calls=el('div','invocations')
+          lane.invocations.forEach(i=>calls.append(el('span','invocation',i.role.toLowerCase().replaceAll('_',' ')+' · '+i.status)))
+          invocationStep.append(calls)
+          grid.append(receiptStep('01 · Request',lane.phase || 'Receipt available',lane.requestStarted?'Dispatch recorded':'Dispatch not recorded'),invocationStep,
+            receiptStep('03 · Admission',lane.admission?.status || 'No outcome recorded',lane.admission?.stage))
+          card.append(head,grid)
+          if(lane.contextCurrent===false)card.append(el('p','receipt-reference','Earlier context · retained receipt, not current work'))
+          if(lane.requestID)card.append(el('p','receipt-reference','Request '+lane.requestID))
+          if(lane.modelIdentity)card.append(el('p','receipt-reference','Model '+lane.modelIdentity))
+          if(lane.elapsedMilliseconds!==null)card.append(el('p','receipt-reference','Recorded elapsed '+lane.elapsedMilliseconds.toLocaleString()+' ms'))
+          pane.append(card)
+        })
+        const peer=telemetry.peer, card=el('article','receipt-card'), head=el('div','receipt-head')
+        head.append(el('h3','','Peer admission'),stateBadge(peer.progress))
+        card.append(head,el('p','status',peer.candidateReady?'Candidate report available · explicit native review required':peer.progress==='unavailable'?'No peer telemetry supplied':'Current bounded peer work session'))
+        const checks=el('div','invocations')
+        peer.checks.forEach(c=>checks.append(el('span','invocation',c.id+' · '+c.status)))
+        if(peer.checks.length)card.append(checks)
+        if(peer.omittedCheckCount)card.append(el('p','receipt-reference',peer.omittedCheckCount+' additional checks omitted'))
+        card.append(el('p','receipt-reference',plural(peer.acceptedReportCount,'accepted session report')+' · no saved memory is implied'))
+        if(peer.simulation)card.append(el('p','receipt-reference','Synthetic gossip fixture · round '+peer.simulation.round+' · '+peer.simulation.workerCount+' workers'))
+        pane.append(card)
+      }
+      function renderNeural() {
+        const pane=$('neural'), intro=el('div','pane-intro'), copy=el('div'), empty=el('div','empty-state')
+        copy.append(el('h2','','Neural signals'),el('p','','A reserved view for measured internal model activity.'))
+        intro.append(copy,stateBadge('unavailable'))
+        const symbol=el('div','neural-symbol','∅');symbol.setAttribute('aria-hidden','true')
+        empty.append(symbol,el('h3','','Activation recorder not connected'),el('p','','The memory graph shows records and relationships. No neuron firing, attention weights, or activation values are available in this build.'))
+        pane.replaceChildren(intro,empty)
+      }
+      function renderEvents() {
+        const list=$('events')
+        list.replaceChildren()
+        if(!events.length)list.append(el('span','event-empty',received?'Baseline shown · waiting for an observed change.':'Waiting for a workspace projection or synthetic example.'))
+        else events.slice().reverse().forEach(event=>list.append(el('span','event '+event.kind,event.label)))
+        $('eventNote').textContent=sample?'Synthetic changes only.':'Changes seen by this view.'
+      }
+      function setView(name) {
+        if(viewName==='form' && name!=='form')pauseForm()
+        if(name==='form' && demoPlaying) {paused=true;clearTimeout(demoTimer);demoTimer=0}
+        viewName=name
+        pulses=[]
+        flight=0
+        render()
+      }
+      layers.forEach((layer) => {
+        const b = el('button', 'band')
+        b.style.setProperty('--tone', layer.color)
+        b.id = 'layer-' + layer.id
+        b.append(el('span', '', layer.name), el('b', '', '0'))
+        b.onclick = () => filterLayer(layerID === layer.id ? null : layer.id)
+        $('bands').append(b)
+      })
+      function render() {
+        const showingForm=!outside && viewName==='form'
+        const nodes = visible(),
+          ids = new Set(nodes.map((n) => n.id))
+        const links = data.edges.filter((e) => ids.has(e.source) && ids.has(e.target))
+        $('heading').textContent = outside ? 'Core Seed' : showingForm ? 'A first form for Sol' : 'Inside the Seed'
+        $('hint').textContent = outside
+          ? 'Enter the core to inspect the records behind this session.'
+          : viewName === 'memory' ? 'Follow the records, connections, and decisions behind each moment.'
+          : viewName === 'harness' ? 'See what was requested, what ran, and what still needs review.'
+          : showingForm ? 'Let the Seed gather into a small water form. The amber Core continues.'
+          : 'Measured signals belong here when an activation recorder is connected.'
+        $('mode').textContent = sample ? 'Synthetic replay' : showingForm ? 'Form preview' : received ? 'Local snapshot' : 'Waiting for local projection'
+        $('mode').classList.toggle('synthetic',sample || showingForm)
+        $('mapTitle').textContent = outside
+          ? 'Particle shell'
+          : showingForm ? 'Sol · Raindrop / first form study' : viewName === 'harness' ? 'Harness receipts' : viewName === 'neural' ? 'Neural instrumentation' : tab === 'map'
+            ? 'Connection map'
+            : 'Record index'
+        $('surfaceToggle').hidden = outside
+        $('workspaceNav').hidden=outside
+        $('tabs').hidden = $('layers').hidden = outside || viewName !== 'memory'
+        $('surface').hidden = !outside
+        $('records').hidden = outside || viewName !== 'memory' || tab !== 'list'
+        canvas.hidden = !outside && (viewName !== 'memory' || tab !== 'map')
+        $('harness').hidden=outside || viewName!=='harness'
+        $('neural').hidden=outside || viewName!=='neural'
+        $('formWorkspace').hidden=!showingForm
+        $('recordStage').hidden=showingForm
+        $('observed').hidden=showingForm
+        $('runControls').hidden=showingForm
+        $('mainLegend').hidden=showingForm
+        $('viewForm').setAttribute('aria-pressed',String(showingForm))
+        $('controls').hidden = outside || viewName !== 'memory' || tab !== 'map'
+        $('counts').hidden = outside || viewName !== 'memory' || tab !== 'map'
+        $('counts').textContent = plural(nodes.length, 'record') + ' / ' + plural(links.length, 'link')
+        $('mapTab').setAttribute('aria-pressed', String(tab === 'map'))
+        $('listTab').setAttribute('aria-pressed', String(tab === 'list'))
+        for(const name of ['memory','harness','neural'])$(name+'View').setAttribute('aria-pressed',String(viewName===name))
+        $('demoStart').hidden=nativeLocked || sample
+        $('replay').hidden=!sample
+        $('demoCaption').hidden=!sample || showingForm
+        $('streamState').textContent=showingForm ? 'Form preview · not saved' : sample ? 'Synthetic scene · '+(demoStep+1)+' / 7 · '+demoTitles[Math.max(0,demoStep)]
+          : telemetry.origin==='native' ? 'Observing native workspace · '+(telemetry.harness.state==='working'?'harness working':'harness idle')
+          : received ? 'Graph snapshot · harness telemetry unavailable' : 'Waiting for the current workspace'
+        const noMotion=still || reduce.matches
+        $('motionState').textContent=showingForm ? noMotion?'Reduced motion · static form choices':'Illustrative growth · choose your own pace' : sample
+          ? paused ? 'Replay paused'+(noMotion?' · reduced motion':'')
+            : demoPlaying ? 'Replay playing'+(noMotion?' · reduced motion':'') : 'Replay complete · review remains explicit'
+          : noMotion?'Reduced motion · data still updates':paused?'Motion paused · data still updates':'Pulses mark observed changes'
+        $('motionToggle').textContent=sample ? !demoPlaying?'Replay complete':paused?'Resume replay':'Pause replay'
+          : noMotion?'Reduced motion':paused?'Resume motion':'Pause motion'
+        // Reduced motion removes decorative animation. It must never remove the
+        // user's ability to pause the changing content of a synthetic replay.
+        $('motionToggle').disabled=sample ? !demoPlaying : noMotion
+        $('motionToggle').setAttribute('aria-pressed',String(sample ? paused : paused || noMotion))
+        $('total').textContent = showingForm ? 'Visual study · the same continuing Core' : sample
+          ? 'Synthetic records · illustrative memory workflow'
+          : 'Read-only · current workspace'
+        $('limit').textContent = showingForm ? 'Saved identity unchanged' : data.truncatedCount
+          ? data.truncatedCount + ' items outside this snapshot'
+          : 'Snapshot complete'
+        $('all').disabled = !layerID
+        layers.forEach((layer) => {
+          const b = $('layer-' + layer.id)
+          b.querySelector('b').textContent = data.nodes.filter((n) => layerOf(n) === layer).length
+          b.setAttribute('aria-pressed', String(layerID === layer.id))
+        })
+        renderInspector()
+        if(!$('harness').hidden)renderHarness(); else $('harness').replaceChildren()
+        if(!$('neural').hidden)renderNeural(); else $('neural').replaceChildren()
+        renderEvents()
+        if ($('records').hidden) $('rows').replaceChildren()
+        else renderRows()
+        renderForm()
+        schedule()
+      }
+      $('mapTab').onclick = () => setTab('map')
+      $('listTab').onclick = () => setTab('list')
+      $('search').oninput = renderRows
+      $('all').onclick = () => filterLayer(null)
+      $('surfaceToggle').onclick = () => surface(true)
+      $('enter').onclick = () => surface(false)
+      for(const name of ['memory','harness','neural'])$(name+'View').onclick=()=>setView(name)
+      $('viewForm').onclick=()=>setView('form')
+      $('formStart').onclick=()=>{
+        if(!formVisible())return
+        resetForm()
+        if(formReducedMotion())settleForm()
+        else {formState.playing=true;formLastTime=performance.now()}
+        renderForm()
+      }
+      $('formPause').onclick=()=>{
+        if(!formVisible() || !formState.playing)return
+        if(formState.paused) {formState.paused=false;formLastTime=performance.now()}
+        else pauseForm()
+        renderForm()
+      }
+      $('formReset').onclick=()=>{resetForm();renderForm()}
+      $('formChooseSol').onclick=()=>{
+        if(!formVisible())return
+        settleForm();formState.selected='sol-raindrop';renderForm()
+      }
+      $('motionToggle').onclick=()=>{
+        paused=!paused
+        pulses=[];flight=0
+        if(paused) { clearTimeout(demoTimer);demoTimer=0 }
+        else if(sample && demoPlaying) queueDemo()
+        cancelAnimationFrame(raf);raf=0
+        render()
+      }
+      function zoomBy(factor) {
+        zoom = Math.min(4, Math.max(0.65, zoom * factor))
+        schedule()
+      }
+      $('in').onclick = () => zoomBy(1.25)
+      $('out').onclick = () => zoomBy(0.8)
+      $('fit').onclick = () => {
+        resetCamera()
+        schedule()
+      }
+      // Stable geometry keeps a static snapshot readable. The seed shell and grid
+      // are illustration. Only projected edges receive paths between record nodes.
+      const TAU = 2 * Math.PI
+      function noise(i) {
+        const n = Math.sin(i * 78.233 + 19.41) * 43758.5453
+        return n - Math.floor(n)
+      }
+      function circle(x, y, r) {
+        ctx.beginPath()
+        ctx.arc(x, y, r, 0, TAU)
+      }
+      function line(x, y, ex, ey) {
+        ctx.beginPath()
+        ctx.moveTo(x, y)
+        ctx.lineTo(ex, ey)
+        ctx.stroke()
+      }
+      function glow(x, y, r, color, alpha) {
+        const grad = ctx.createRadialGradient(x, y, 0, x, y, r)
+        grad.addColorStop(0, color)
+        grad.addColorStop(1, color + '00')
+        ctx.save()
+        ctx.globalAlpha = alpha
+        ctx.fillStyle = grad
+        ctx.fillRect(x - r, y - r, r * 2, r * 2)
+        ctx.restore()
+      }
+      function seed(x, y, r) {
+        glow(x, y, r * 1.8, '#d79550', 0.2)
+        glow(x - r * 0.3, y + r * 0.25, r * 0.85, '#99463e', 0.13)
+        glow(x - r * 0.21, y - r * 0.28, r * 0.78, '#f9b36f', 0.13)
+        ctx.save()
+        ctx.translate(x, y)
+        // Project a Fibonacci sphere, then wrap it with broken, inclined filaments.
+        const points = [],
+          goldAngle = Math.PI * (3 - Math.sqrt(5)),
+          tilt = -0.26
+        function project(a, b, c) {
+          return [a * Math.cos(tilt) - b * Math.sin(tilt), a * Math.sin(tilt) + b * Math.cos(tilt), c]
+        }
+        for (let i = 0; i < 1150; i++) {
+          const b = 1 - (2 * (i + 0.5)) / 1150,
+            h = Math.sqrt(1 - b * b),
+            phi = i * goldAngle
+          const [px, py, pz] = project(h * Math.cos(phi), b, h * Math.sin(phi))
+          points.push({ px, py, pz, i })
+        }
+        points.sort((a, b) => a.pz - b.pz)
+        const palette = ['#ffe2a0', '#e7a14b', '#d55d50', '#ffc98d', '#d8ede2', '#b783ab']
+        for (const p of points) {
+          const shine = noise(p.i),
+            depth = (p.pz + 1) / 2
+          if (shine > 0.95 && p.pz > -0.35)
+            glow(p.px * r, p.py * r, Math.max(2, r * 0.065), '#ffbe76', 0.34 + depth * 0.28)
+          ctx.globalAlpha = (0.18 + 0.75 * depth) * (0.38 + 0.62 * shine)
+          ctx.fillStyle = palette[p.i % 9 < 5 ? p.i % 2 : p.i % 6]
+          circle(
+            p.px * r,
+            p.py * r,
+            Math.max(0.35, r * (shine > 0.956 ? 0.018 : 0.007)) * (0.72 + 0.52 * depth),
+          )
+          ctx.fill()
+        }
+        for (let k = 0; k < 7; k++) {
+          ctx.save()
+          ctx.rotate(-0.86 + k * 0.33)
+          ctx.lineWidth = Math.max(0.55, r * 0.006)
+          ctx.strokeStyle = palette[k % palette.length]
+          ctx.globalAlpha = 0.5
+          ctx.setLineDash([r * (0.09 + k * 0.017), r * 0.042, r * 0.032, r * 0.026])
+          ctx.beginPath()
+          ctx.ellipse(
+            0,
+            0,
+            r * (1.02 + k * 0.012),
+            r * (0.2 + k * 0.09),
+            0,
+            0.13 + k * 0.49,
+            TAU - 0.35 + k * 0.49,
+          )
+          ctx.stroke()
+          ctx.restore()
+        }
+        ctx.globalAlpha = 1
+        glow(0, 0, r * 0.42, '#f6ac5e', 0.66)
+        glow(0, 0, r * 0.12, '#ffe8b3', 1)
+        circle(0, 0, Math.max(1, r * 0.029))
+        ctx.fillStyle = '#fff5ce'
+        ctx.fill()
+        ctx.restore()
+      }
+      function backdrop(w, h) {
+        ctx.fillStyle = '#091213'
+        ctx.fillRect(0, 0, w, h)
+        const step = w < 420 ? 33 : 46
+        ctx.strokeStyle = '#142221'
+        ctx.lineWidth = 0.65
+        for (let i = step / 2; i < w; i += step) line(i, 0, i, h)
+        for (let i = step / 2; i < h; i += step) line(0, i, w, i)
+        for (let i = 0; i < Math.min(450, (w * h) / 720); i++) {
+          const k = noise(i + 10)
+          ctx.fillStyle = k > 0.79 ? '#49554c' : '#24342f'
+          const s = k > 0.92 ? 1.4 : 0.8
+          ctx.fillRect(noise(i + 90) * w, noise(i + 210) * h, s, s)
+        }
+        ctx.strokeStyle = '#749386'
+        ctx.lineWidth = 1
+        ;[
+          [11, 11, 1, 1],
+          [w - 11, 11, -1, 1],
+          [11, h - 11, 1, -1],
+          [w - 11, h - 11, -1, -1],
+        ].forEach(([x, y, a, b]) => {
+          line(x, y, x + a * 10, y)
+          line(x, y, x, y + b * 10)
+        })
+      }
+      const regions = {
+        sources: [0.21, 0.29],
+        memory: [0.25, 0.71],
+        activity: [0.76, 0.26],
+        outcomes: [0.77, 0.69],
+        core: [0.5, 0.48],
+      }
+      function positions(nodes, w, h) {
+        const grouped = new Map()
+        nodes.forEach((n) => {
+          const key = layerOf(n)?.id ?? 'core'
+          if (!grouped.has(key)) grouped.set(key, [])
+          grouped.get(key).push(n)
+        })
+        const points = []
+        for (const [key, group] of grouped) {
+          const [fx, fy] = layerID ? [0.5, 0.48] : regions[key]
+          const radius = layerID ? Math.min(w * 0.34, h * 0.3) : Math.min(w * 0.11, h * 0.15)
+          group.forEach((n, i) => {
+            // A record's position does not shift when another record is added or removed.
+            const hash=Array.from(n.id).reduce((value,char)=>(Math.imul(value,31)+char.charCodeAt(0))>>>0,17)
+            const scale = key==='core'?0:0.28+0.7*noise(hash+3)
+            const angle = noise(hash+11)*TAU
+            const x = w * fx + Math.cos(angle) * radius * scale,
+              y = h * fy + Math.sin(angle) * radius * scale
+            points.push({ n, first: i === 0, x, y, color: layerOf(n)?.color ?? '#ddd' })
+          })
+        }
+        return points
+      }
+      function drawEdge(a, b, lit) {
+        ctx.lineWidth = lit ? 1.25 : 0.8
+        ctx.strokeStyle = lit ? b.color + '9a' : '#788a834f'
+        const dx = b.x - a.x,
+          dy = b.y - a.y,
+          dist = Math.hypot(dx, dy)
+        if (!dist) return
+        const bend = Math.min(15, dist * 0.15),
+          cx = (a.x + b.x) / 2 - (dy / dist) * bend,
+          cy = (a.y + b.y) / 2 + (dx / dist) * bend
+        ctx.beginPath()
+        ctx.moveTo(a.x, a.y)
+        ctx.quadraticCurveTo(cx, cy, b.x, b.y)
+        ctx.stroke()
+        if (lit) {
+          const t = 0.72,
+            u = 1 - t,
+            x = u * u * a.x + 2 * t * u * cx + t * t * b.x,
+            y = u * u * a.y + 2 * t * u * cy + t * t * b.y
+          const angle = Math.atan2(u * (cy - a.y) + t * (b.y - cy), u * (cx - a.x) + t * (b.x - cx))
+          line(x, y, x - 4 * Math.cos(angle - 0.46), y - 4 * Math.sin(angle - 0.46))
+          line(x, y, x - 4 * Math.cos(angle + 0.46), y - 4 * Math.sin(angle + 0.46))
+        }
+      }
+      function drawSignal(a,b,progress) {
+        const dx=b.x-a.x,dy=b.y-a.y,dist=Math.hypot(dx,dy)
+        if(!dist)return
+        const bend=Math.min(15,dist*.15),cx=(a.x+b.x)/2-dy/dist*bend,cy=(a.y+b.y)/2+dx/dist*bend
+        ctx.save()
+        for(let trail=0;trail<5;trail++) {
+          const t=progress*1.16-trail*.025
+          if(t<0 || t>1)continue
+          const u=1-t,x=u*u*a.x+2*t*u*cx+t*t*b.x,y=u*u*a.y+2*t*u*cy+t*t*b.y
+          ctx.globalAlpha=(1-trail/6)*Math.min(1,(1-progress)*4)
+          glow(x,y,trail?4:10,'#8be6d5',trail ? 0.24 : 0.64)
+          ctx.fillStyle=trail?'#8bd7c4':'#f9e9bf'
+          circle(x,y,trail?1.1:2.2);ctx.fill()
+        }
+        ctx.restore()
+      }
+      function nodeLabel(p, w, fontSize, maxWidth) {
+        let txt = p.n.title,
+          y = p.y + (p.n.kind === 'companion' ? p.r + 9 : 12)
+        ctx.font = '500 ' + fontSize + 'px -apple-system, BlinkMacSystemFont, Arial, sans-serif'
+        const displayWidth = Math.min(maxWidth, w - 12)
+        if (ctx.measureText(txt).width > displayWidth - 10) {
+          while (txt.length && ctx.measureText(txt + '…').width > displayWidth - 10) txt = txt.slice(0, -1)
+          txt += '…'
+        }
+        const width = ctx.measureText(txt).width + 10,
+          x = Math.min(w - width - 3, Math.max(3, p.x - width / 2))
+        ctx.fillStyle = '#0a1313ed'
+        ctx.fillRect(x, y, width, 17)
+        ctx.fillStyle = p.color
+        ctx.textAlign = 'center'
+        ctx.fillText(txt, x + width / 2, y + 12)
+        ctx.textAlign = 'left'
+      }
+      // A deterministic illustration of a possible body, never a model signal.
+      // The final pose is still: animation exists only while the user grows it.
+      function drawForm() {
+        if(!formVisible())return
+        const field=$('formCanvas'),box=field.getBoundingClientRect(),w=box.width,h=box.height
+        if(w<1 || h<1)return
+        if(!formContext)formContext=field.getContext('2d')
+        const g=formContext,dpr=Math.min(2,window.devicePixelRatio||1)
+        if(field.width!==Math.round(w*dpr) || field.height!==Math.round(h*dpr)) {
+          field.width=Math.round(w*dpr);field.height=Math.round(h*dpr)
+        }
+        g.setTransform(dpr,0,0,dpr,0,0)
+        const ease=(a,b,v)=>{const t=Math.max(0,Math.min(1,(v-a)/(b-a)));return t*t*(3-2*t)}
+        const p=formState.progress,water=ease(.14,.57,p),features=ease(.59,.91,p)
+        const moving=formState.playing&&!formState.paused&&!formReducedMotion()
+        const time=p*13,unit=Math.min(w/340,(h-90)/300),cx=w*.5,cy=h*.56
+        const sky=g.createLinearGradient(0,0,w,h)
+        sky.addColorStop(0,'#0d2020');sky.addColorStop(.52,'#081819');sky.addColorStop(1,'#0a1517')
+        g.fillStyle=sky;g.fillRect(0,0,w,h)
+        const halo=g.createRadialGradient(cx,cy+8,0,cx,cy+8,Math.min(w*.53,h*.58))
+        halo.addColorStop(0,'#466c4529');halo.addColorStop(.38,'#34796b20');halo.addColorStop(1,'#153b3100')
+        g.fillStyle=halo;g.fillRect(0,0,w,h)
+        for(let i=0;i<46;i++) {
+          const x=noise(i+700)*w,y=35+noise(i+950)*(h-75)
+          g.globalAlpha=.12+noise(i+33)*.2;g.fillStyle=i%4===0?'#e8c589':'#99cabe'
+          g.beginPath();g.arc(x,y,.4+noise(i+11)*.7,0,TAU);g.fill()
+        }
+        g.globalAlpha=1
+        // Quiet ripples establish a physical stage without implying live input.
+        const floor=cy+unit*130
+        for(let i=3;i>=0;i--) {
+          const r=unit*(80+i*26+water*12)
+          g.strokeStyle=i===0?'#89bba754':'#6e9e8d'+['35','26','1b','12'][i]
+          g.lineWidth=.7;g.beginPath();g.ellipse(cx,floor,r,r*.115,0,0,TAU);g.stroke()
+        }
+        const shadow=g.createRadialGradient(cx,floor,0,cx,floor,unit*110)
+        shadow.addColorStop(0,'#96ceb92c');shadow.addColorStop(.4,'#488b6d1b');shadow.addColorStop(1,'#2f4e4200')
+        g.save();g.translate(cx,floor);g.scale(1,.15);g.fillStyle=shadow
+        g.fillRect(-unit*160,-unit*160,unit*320,unit*320);g.restore()
+        g.save();g.translate(cx,cy);g.scale(unit,unit)
+        const sway=moving?Math.sin(time*1.7)*2*water:0
+        g.translate(sway,moving?Math.sin(time*2.2)*1.5:0)
+        // Condensation follows an illustrative spiral toward the continuous Core.
+        const gatherAlpha=(1-ease(.61,.92,p))*ease(.02,.2,p)
+        for(let i=0;i<22;i++) {
+          const angle=i*2.399+time*.48,r=158-ease(.05,.65,p)*100+Math.sin(i*1.7)*15
+          const x=Math.cos(angle)*r,y=Math.sin(angle)*r*.72-7
+          g.globalAlpha=gatherAlpha*(.35+noise(i+80)*.45)
+          const bead=g.createRadialGradient(x-1,y-1,0,x,y,3+noise(i)*3)
+          bead.addColorStop(0,'#d9fff4');bead.addColorStop(.35,'#99decd');bead.addColorStop(1,'#66b6a100')
+          g.fillStyle=bead;g.beginPath();g.arc(x,y,3+noise(i)*3,0,TAU);g.fill()
+          if(moving) {g.strokeStyle='#93ccbc';g.lineWidth=.45;g.beginPath();g.moveTo(x,y);g.lineTo(x-Math.cos(angle-.5)*6,y-Math.sin(angle-.5)*5);g.stroke()}
+        }
+        g.globalAlpha=1
+        function glassOval(x,y,rx,ry,angle,alpha=1) {
+          g.save();g.globalAlpha=alpha;g.translate(x,y);g.rotate(angle)
+          const sheen=g.createLinearGradient(-rx,-ry,rx,ry)
+          sheen.addColorStop(0,'#dcfff0b8');sheen.addColorStop(.17,'#9de2cc80');sheen.addColorStop(.48,'#3f8d8548');sheen.addColorStop(.8,'#376c6254');sheen.addColorStop(1,'#a0dbc79e')
+          g.fillStyle=sheen;g.beginPath();g.ellipse(0,0,rx,ry,0,0,TAU);g.fill()
+          g.strokeStyle='#b9e6dba8';g.lineWidth=.9;g.stroke()
+          if(rx>3 && ry>3) {
+            g.strokeStyle='#e2fff3b0';g.lineWidth=1.9;g.beginPath();g.ellipse(-1,-1,rx-3,ry-3,0,3.4,5);g.stroke()
+          }
+          g.restore()
+        }
+        if(features>0) {
+          // Rounded ears, compact paws and a wide muzzle make this Sol bear-first.
+          glassOval(-65,-70,25*features,27*features,-.3,features)
+          glassOval(65,-70,25*features,27*features,.3,features)
+          g.globalAlpha=features*.65
+          g.fillStyle='#274f4769';g.beginPath();g.ellipse(-65,-70,13*features,16*features,-.3,0,TAU);g.fill()
+          g.beginPath();g.ellipse(65,-70,13*features,16*features,.3,0,TAU);g.fill();g.globalAlpha=1
+          glassOval(-60,95,27*features,20*features,-.25,features)
+          glassOval(60,95,27*features,20*features,.25,features)
+        }
+        function dropletPath() {
+          g.beginPath();g.moveTo(0,-151)
+          g.bezierCurveTo(-8,-121,-47,-103,-66,-69)
+          g.bezierCurveTo(-108,-5,-101,72,-61,103)
+          g.bezierCurveTo(-25,132,30,131,65,102)
+          g.bezierCurveTo(108,65,105,-5,66,-69)
+          g.bezierCurveTo(45,-105,10,-124,0,-151);g.closePath()
+        }
+        if(water>0) {
+          g.save();g.globalAlpha=water
+          const bodyScale=.6+water*.4
+          g.scale(bodyScale,bodyScale)
+          const body=g.createLinearGradient(-100,-100,100,95)
+          body.addColorStop(0,'#bcebd3b0');body.addColorStop(.12,'#82cbbd6b');body.addColorStop(.4,'#3d8d884f');body.addColorStop(.62,'#2a6a6757');body.addColorStop(.83,'#79c2af61');body.addColorStop(1,'#bfebd6ab')
+          dropletPath();g.fillStyle=body;g.fill();g.strokeStyle='#a4dccac2';g.lineWidth=1.25;g.stroke()
+          g.save();dropletPath();g.clip()
+          const inside=g.createRadialGradient(-20,25,3,5,20,118)
+          inside.addColorStop(0,'#e2b97624');inside.addColorStop(.35,'#b3d39e18');inside.addColorStop(.7,'#398f7620');inside.addColorStop(1,'#9ee6d73d')
+          g.fillStyle=inside;g.fillRect(-120,-160,240,300)
+          // Refraction bands are drawn into the material, not as circuit lines.
+          for(let i=0;i<6;i++) {
+            g.strokeStyle=i%2?'#d4eed214':'#8ce2ce19';g.lineWidth=1+i*.18
+            g.beginPath();g.moveTo(-115,26+i*15)
+            g.bezierCurveTo(-52,1+i*13,36,84+i*8,113,25+i*13);g.stroke()
+          }
+          for(let i=0;i<14;i++) {
+            const x=(noise(i+180)-.5)*140,y=-85+noise(i+230)*183,rr=.7+noise(i+90)*1.6
+            g.strokeStyle='#d7f2d965';g.lineWidth=.55;g.beginPath();g.arc(x,y,rr,0,TAU);g.stroke()
+          }
+          g.restore()
+          g.strokeStyle='#e7fff2b5';g.lineWidth=3;g.lineCap='round'
+          g.beginPath();g.moveTo(-12,-125);g.bezierCurveTo(-32,-106,-70,-70,-80,-22);g.stroke()
+          g.strokeStyle='#d3f5e36b';g.lineWidth=1.4
+          g.beginPath();g.moveTo(67,77);g.bezierCurveTo(89,42,89,1,76,-34);g.stroke()
+          g.strokeStyle='#daffe1a1';g.lineWidth=2
+          g.beginPath();g.moveTo(-31,111);g.bezierCurveTo(-6,120,27,118,45,109);g.stroke()
+          g.restore()
+        }
+        // The amber Core retains its center and recognizable pattern as water arrives.
+        const coreY=water*27,coreR=34-water*15
+        const coreHalo=g.createRadialGradient(0,coreY,0,0,coreY,coreR*3.7)
+        coreHalo.addColorStop(0,'#ffd891b0');coreHalo.addColorStop(.19,'#e8af5870');coreHalo.addColorStop(.45,'#d6a55c27');coreHalo.addColorStop(1,'#c78a3800')
+        g.fillStyle=coreHalo;g.beginPath();g.arc(0,coreY,coreR*3.7,0,TAU);g.fill()
+        for(let ring=0;ring<3;ring++) {
+          g.save();g.translate(0,coreY);g.rotate((ring*.83)+time*.06)
+          g.strokeStyle=['#e6bf7780','#f4d599a3','#aa804a65'][ring];g.lineWidth=.7
+          g.beginPath();g.ellipse(0,0,coreR*(1.2+ring*.12),coreR*(.55+ring*.13),0,0,TAU);g.stroke();g.restore()
+        }
+        const amber=g.createRadialGradient(-coreR*.3,coreY-coreR*.4,1,0,coreY,coreR)
+        amber.addColorStop(0,'#fff3c6');amber.addColorStop(.25,'#f6d08b');amber.addColorStop(.65,'#cc9146');amber.addColorStop(1,'#866039')
+        g.fillStyle=amber;g.beginPath();g.arc(0,coreY,coreR,0,TAU);g.fill()
+        for(let i=0;i<36;i++) {
+          const a=i*2.399,r=Math.sqrt((i+.5)/36)*coreR,x=Math.cos(a)*r,y=coreY+Math.sin(a)*r
+          g.fillStyle=i%3?'#fff0b388':'#7b532d66';g.beginPath();g.arc(x,y,.65,0,TAU);g.fill()
+          if(i>4 && i%3===0) {g.strokeStyle='#efc7843d';g.lineWidth=.4;g.beginPath();g.moveTo(x,y);g.lineTo(Math.cos(a+2.399)*r*.75,coreY+Math.sin(a+2.399)*r*.75);g.stroke()}
+        }
+        g.strokeStyle='#fbe1aead';g.lineWidth=.7;g.beginPath();g.arc(0,coreY,coreR,0,TAU);g.stroke()
+        if(features>0) {
+          g.save();g.globalAlpha=features
+          // Soft bear muzzle and close-set highlights avoid a lion-like face.
+          const muzzle=g.createRadialGradient(-7,-36,0,0,-35,36)
+          muzzle.addColorStop(0,'#d5e8cdb3');muzzle.addColorStop(.72,'#b3cdb597');muzzle.addColorStop(1,'#91b3a964')
+          g.fillStyle=muzzle;g.beginPath();g.ellipse(0,-33,34,21,0,0,TAU);g.fill()
+          g.strokeStyle='#d2e6cd80';g.lineWidth=.75;g.stroke()
+          for(const sign of [-1,1]) {
+            const x=sign*26
+            g.fillStyle='#162e2b';g.beginPath();g.ellipse(x,-57,6.3,7.4,sign*.06,0,TAU);g.fill()
+            g.fillStyle='#a7b77d';g.beginPath();g.ellipse(x,-56,3.1,4,0,0,TAU);g.fill()
+            g.fillStyle='#102321';g.beginPath();g.ellipse(x+.5,-56,1.7,3.1,0,0,TAU);g.fill()
+            g.fillStyle='#f0ffe8';g.beginPath();g.arc(x-1.8,-59,1.8,0,TAU);g.fill()
+            g.strokeStyle='#d7ece5a0';g.lineWidth=.85;g.beginPath();g.ellipse(x,-57,9,10,0,3.65,5.8);g.stroke()
+          }
+          g.fillStyle='#274038';g.beginPath();g.moveTo(-8,-39);g.quadraticCurveTo(0,-44,8,-39);g.quadraticCurveTo(7,-32,0,-30);g.quadraticCurveTo(-7,-32,-8,-39);g.fill()
+          g.strokeStyle='#294d41';g.lineWidth=1.15;g.lineCap='round'
+          g.beginPath();g.moveTo(0,-30);g.lineTo(0,-25);g.quadraticCurveTo(-5,-20,-11,-25);g.moveTo(0,-25);g.quadraticCurveTo(5,-20,11,-25);g.stroke()
+          g.strokeStyle='#eaf5dd7d';g.lineWidth=1.3;g.beginPath();g.moveTo(-4,-39);g.lineTo(1,-39);g.stroke()
+          for(const sign of [-1,1])for(let i=0;i<3;i++) {
+            g.fillStyle='#c1d4b75c';g.beginPath();g.ellipse(sign*(49+i*7),94-Math.sin(i)*2,3.2,4.4,sign*.25,0,TAU);g.fill()
+          }
+          g.restore()
+        }
+        if(formState.stage==='ready') {
+          g.strokeStyle=formState.selected==='sol-raindrop'?'#e9c98c8c':'#99c7b353'
+          g.lineWidth=.8;g.beginPath();g.ellipse(0,135,110,12,0,0,TAU);g.stroke()
+        }
+        g.restore()
+      }
+      function draw() {
+        raf = 0
+        if (canvas.hidden || document.hidden) return
+        const now=performance.now()
+        pulses=still || reduce.matches || paused ? [] : pulses.filter(p=>now-p.started<1800)
+        const box = canvas.getBoundingClientRect(),
+          w = box.width,
+          h = box.height
+        if (w < 1 || h < 1) return
+        const dpr = Math.min(2, window.devicePixelRatio || 1)
+        if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+          canvas.width = Math.round(w * dpr)
+          canvas.height = Math.round(h * dpr)
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        backdrop(w, h)
+        if (outside) {
+          const r = Math.min(w * 0.27, h * 0.3)
+          seed(w * 0.5, h * 0.44, r)
+          lastPoints = []
+          return
+        }
+        const nodes = visible(),
+          points = positions(nodes, w, h),
+          center = { x: w * 0.5, y: h * 0.48 }
+        const remaining = reduce.matches || still || paused ? 0 : Math.max(0, (flight - now) / 500)
+        const scale = zoom * (1 - 0.84 * remaining * remaining)
+        const rs = Math.min(w * (w < 460 ? 0.096 : 0.105), h * 0.184)
+        for (const p of points) {
+          p.x = (p.x - center.x) * scale + center.x + pan.x
+          p.y = (p.y - center.y) * scale + center.y + pan.y
+          p.r = p.n.kind === 'companion' ? Math.max(15, rs * scale) : p.first ? 5 : 3.5
+        }
+        for (const p of points) {
+          if (p.first && p.n.kind !== 'companion') {
+            const radius = Math.min(110, w * 0.145) * Math.min(scale, 1.5)
+            glow(p.x, p.y, radius, p.color, 0.095)
+          }
+        }
+        const pairs = new Map(points.map((p) => [p.n.id, p]))
+        data.edges.forEach((e) => {
+          const a = pairs.get(e.source),
+            b = pairs.get(e.target)
+          if (a && b) {
+            drawEdge(a,b,selected===e.source || selected===e.target)
+            const pulse=pulses.find(p=>p.kind==='link'?p.nodeIDs[0]===e.source && p.nodeIDs[1]===e.target:p.nodeIDs.includes(e.target))
+            if(pulse)drawSignal(a,b,(now-pulse.started)/1800)
+          }
+        })
+        for (const p of points) {
+          if (p.n.kind === 'companion') {
+            seed(p.x, p.y, p.r)
+          } else {
+            glow(p.x, p.y, p.first ? 22 : 11, p.color, p.first ? 0.27 : 0.19)
+            ctx.fillStyle = p.color
+            circle(p.x, p.y, p.r)
+            ctx.fill()
+            if (p.first) {
+              ctx.strokeStyle = p.color + '99'
+              ctx.lineWidth = 0.7
+              circle(p.x, p.y, p.r + 3.5)
+              ctx.stroke()
+            }
+          }
+          if (p.n.id === selected) {
+            ctx.strokeStyle = p.color
+            ctx.lineWidth = 1
+            ctx.setLineDash([4, 5])
+            circle(p.x, p.y, p.r + (p.n.kind === 'companion' ? 5 : 6))
+            ctx.stroke()
+            ctx.setLineDash([])
+          }
+          const pulse=pulses.find(event=>event.nodeIDs.includes(p.n.id))
+          if(pulse) {
+            const t=(now-pulse.started)/1800
+            ctx.save();ctx.globalAlpha=(1-t)*.8;ctx.strokeStyle='#f4d49b';ctx.lineWidth=1.1
+            circle(p.x,p.y,p.r+7+t*18);ctx.stroke();ctx.restore()
+          }
+        }
+        for (const p of points.filter((p) => p.first || p.n.id === selected))
+          nodeLabel(p, w, w < 460 ? 10 : 12, w < 460 ? 90 : 150)
+        if (!points.length) {
+          ctx.fillStyle = '#b8c9be'
+          ctx.font = '14px sans-serif'
+          ctx.textAlign = 'center'
+          ctx.fillText('No records in this layer', w / 2, h / 2)
+          ctx.textAlign = 'left'
+        }
+        lastPoints = points
+        $('in').disabled = zoom >= 4
+        $('out').disabled = zoom <= 0.65
+        if (remaining > 0) {
+          // Cross the expanding rim as the inner records resolve into their positions.
+          const shellRadius = Math.min(w * 0.27, h * 0.3) + Math.hypot(w, h) * (1 - remaining)
+          ctx.save()
+          ctx.globalAlpha = 0.48 * remaining
+          ctx.strokeStyle = '#ebbd7e'
+          ctx.lineWidth = 1
+          ctx.setLineDash([5, 9])
+          circle(center.x, center.y, shellRadius)
+          ctx.stroke()
+          ctx.restore()
+          schedule()
+        }
+        if(pulses.length)schedule()
+      }
+      function schedule() {
+        if (!raf && !document.hidden) raf = requestAnimationFrame(draw)
+      }
+      new ResizeObserver(schedule).observe(canvas.parentElement)
+      new ResizeObserver(()=>{if(formVisible())drawForm()}).observe($('formCanvas').parentElement)
+      reduce.addEventListener('change', ()=>{pulses=[];flight=0;render()})
+      document.addEventListener('visibilitychange',()=>{
+        pulses=[];flight=0
+        if(document.hidden) { cancelAnimationFrame(raf);raf=0;clearTimeout(demoTimer);demoTimer=0;pauseForm() }
+        else {if(sample && demoPlaying && !paused)queueDemo();render()}
+      })
+      let drag = null
+      canvas.addEventListener('pointerdown', (e) => {
+        if (outside || e.button !== 0) return
+        drag = { id: e.pointerId, x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y, moved: false }
+        canvas.setPointerCapture(e.pointerId)
+      })
+      canvas.addEventListener('pointermove', (e) => {
+        if (!drag || drag.id !== e.pointerId) return
+        const dx = e.clientX - drag.x,
+          dy = e.clientY - drag.y
+        if (Math.hypot(dx, dy) > 4) drag.moved = true
+        if (drag.moved) {
+          pan = { x: drag.panX + dx, y: drag.panY + dy }
+          schedule()
+        }
+      })
+      canvas.addEventListener('pointerup', (e) => {
+        if (!drag || drag.id !== e.pointerId) return
+        if (!drag.moved) {
+          const box = canvas.getBoundingClientRect(),
+            x = e.clientX - box.left,
+            y = e.clientY - box.top
+          const hits = lastPoints
+            .map((p) => ({ p, d: Math.hypot(x - p.x, y - p.y) }))
+            .filter((hit) => hit.d <= Math.max(13, hit.p.r))
+            .sort((a, b) => a.d - b.d)
+          if (hits.length) {
+            choose(hits[0].p.n.id)
+            $('rail').scrollTop = 0
+          }
+        }
+        drag = null
+      })
+      canvas.addEventListener('lostpointercapture', () => {
+        drag = null
+      })
+      // The bundled demonstration is opt-in, isolated, and permanently disabled
+      // for this page once any native graph has arrived. Its timer cannot win a race
+      // against authoritative replacement or resurrect withdrawn native records.
+      const demoTitles=['Seed baseline','Observations arrive','Context & uncertainty','Request prepared','Model receipt arrives','Answer awaits review','Candidate remains a proposal']
+      function demoSnapshot(step) {
+        const make=(id,kind,title,status,subtitle='',details=[])=>({id,kind,title,status,subtitle,details})
+        const nodes=[make('demo-seed','companion','Core Seed','Synthetic example','One companion, one continuing identity.')]
+        const edges=[], connect=(source,target,label)=>edges.push({source,target,label})
+        if(step>=1) {
+          nodes.push(make('demo-frame','source','Frame · Shot 07','Synthetic observation','Sol approaches a stone column.'),
+            make('demo-motion','source','Motion cue','Synthetic observation','A movement description supplied for this example.'),
+            make('demo-graph','source','Scene graph','Synthetic observation','Sol, column, and camera are distinct records.'))
+          for(const id of ['demo-frame','demo-motion','demo-graph'])connect('demo-seed',id,'illustrative source')
+        }
+        if(step>=2) {
+          nodes.push(make('demo-context','context','Shared scene context','Temporary · not saved','The source records are available for this illustrative request.'),
+            make('demo-uncertainty','omission','Unresolved timing','Unresolved','The frame at which Sol becomes fully hidden is not established.'))
+          for(const id of ['demo-frame','demo-motion','demo-graph'])connect(id,'demo-context','supports context')
+          connect('demo-motion','demo-uncertainty','leaves timing unresolved')
+          connect('demo-seed','demo-context','temporary context')
+        }
+        if(step>=3) {
+          nodes.push(make('demo-request','request','Scene review request',step>=5?'Complete':'Pending','Synthetic request · no provider contacted.'))
+          connect('demo-seed','demo-request','prepared request');connect('demo-context','demo-request','illustrative input')
+        }
+        if(step>=4) {
+          nodes.push(make('demo-invocation','invocation','Reasoning receipt',step>=5?'Completed':'Dispatched','An illustrative lifecycle receipt; no model runs in this replay.'))
+          connect('demo-request','demo-invocation','records invocation')
+        }
+        if(step>=5) {
+          nodes.push(make('demo-answer','answer','Sol passes behind the column','Ready for review','A draft interpretation. Exact timing remains unresolved.'))
+          connect('demo-invocation','demo-answer','illustrative outcome');connect('demo-uncertainty','demo-answer','qualifies answer')
+        }
+        if(step>=6) {
+          nodes.push(make('demo-candidate','context','Candidate memory','Awaiting explicit review','Shot 07 · draft v3. This proposal has not become a kept lesson.',[
+            {label:'Proposed content',value:'Sol passes behind the column.'},{label:'Unresolved',value:'Exact occlusion timing requires review.'},
+            {label:'Authority',value:'Synthetic proposal only · no state written'},
+          ]))
+          connect('demo-answer','demo-candidate','proposed memory');connect('demo-frame','demo-candidate','source reference');connect('demo-uncertainty','demo-candidate','open question')
+        }
+        const lane={id:'qwen',provider:'Qwen',state:step>=5?'complete':'pending',phase:step>=5?'Reply ready':step>=4?'Request in progress':'Preparing request',requestID:'synthetic-shot-07',requestStarted:step>=4,contextCurrent:true,
+          invocations:step>=4?[{id:'synthetic-reasoning-01',role:'REASONING',status:step>=5?'completed':'dispatched'}]:[]}
+        return {schemaVersion:1,origin:'synthetic',contextID:'synthetic-shot-07-v3',nodes,edges,truncatedCount:0,telemetry:{
+          memory:{keptLessonCount:0,temporaryRecordCount:step>=6?2:step>=2?1:0,graphNodeCount:nodes.length,graphEdgeCount:edges.length,truncatedCount:0},
+          harness:{state:step>=3&&step<5?'working':'idle',lanes:step>=3?[lane]:[]},
+          peer:{progress:'idle',candidateReady:false,acceptedReportCount:0,checks:[]},
+          neural:{available:false,reason:'No activation recorder is connected.'},
+        }}
+      }
+      function stopDemo() {
+        clearTimeout(demoTimer);demoTimer=0;demoPlaying=false;demoToken++
+      }
+      function queueDemo() {
+        clearTimeout(demoTimer);demoTimer=0
+        if(nativeLocked || !demoPlaying || paused || document.hidden)return
+        const token=demoToken
+        demoTimer=setTimeout(()=>{
+          demoTimer=0
+          if(token!==demoToken || nativeLocked || !demoPlaying || paused || document.hidden)return
+          demoStep=Math.min(6,demoStep+1)
+          if(demoStep===6)demoPlaying=false
+          replace(demoSnapshot(demoStep),false)
+          if(demoStep===6) {selected='demo-candidate';render()}
+          queueDemo()
+        },1600)
+      }
+      function startDemo() {
+        if(nativeLocked)return
+        stopDemo()
+        paused=false;demoStep=0;demoPlaying=true;viewName='memory';outside=false;tab='map';layerID=null
+        events=[];pulses=[];received=false;selected=null;resetCamera()
+        replace(demoSnapshot(0),false)
+        queueDemo()
+      }
+      $('demoStart').onclick=startDemo
+      $('replay').onclick=startDemo
+      render()
+      // A URL flag is a deliberate standalone preview request; the native host
+      // loads about:blank with no such flag and waits for its current projection.
+      if(new URLSearchParams(location.search).get('demo')==='1')startDemo()
+    </script>
+  </body>
+</html>
