@@ -5,13 +5,14 @@ latest request, invocation, admission and peer-inspection metadata beside it.
 Open **Seed Dive** in the workspace sidebar, or **Dive into Seed** from the
 companion's menu or KIN card.
 
-## The three views
+## The four views
 
 | View | What it can show | What its animation means |
 | --- | --- | --- |
 | Memory | Companion, source references, kept lessons, temporary context, requests, invocations, answers and omissions from Node Lab | A bounded record or relationship changed in the current projection. |
 | Harness | Existing provider lanes, request state and phase, recorded model identity, invocation outcomes, admission status, and peer-inspection metadata | A reported state changed between two received snapshots. |
 | Neural | Whether a neural activation recorder is connected | No neuron activity is drawn as measured data while the recorder is unavailable. |
+| First form | An optional raindrop interpretation of Sol, with a continuous amber Core and rounded bear features | A user-controlled visual preview. Growth is not measured learning or an identity update. |
 
 The inspector, searchable record list, type filters and directed **Path from
 seed** remain available. Source details stay attached to their existing records.
@@ -73,6 +74,31 @@ The replay is useful for design review and explanation. Its timestamps and
 events must not be reported as operational measurements. A recorded preview
 made from this mode must retain the synthetic label.
 
+## First form: Sol as a raindrop
+
+Open **First form** to explore a possible first appearance for Sol. **Grow the
+Seed** shows the amber Core gathering water and taking shape. The Core remains
+visible while the translucent body develops rounded bear ears, a broad muzzle
+and compact paws. This is a proposed visual design, not a new canon or a measured
+biological or neural process.
+
+Reaching the final stage reveals an option; it does not change the selected
+form. **Preview Sol · Raindrop** explicitly selects the local appearance, and
+**Return to Seed** resets it. The direct preview is also available without
+watching the transition. The visible **Form preview · not saved** label applies
+in both the native app and the standalone page.
+
+These controls update only presentation state in the current page. They do not
+save a form, alter the companion's identity, create a lesson, change the graph,
+or call a provider. The existing one-way native boundary is unchanged. Choosing
+a permanent companion appearance would require a separate native action.
+
+Pausing growth freezes its progress. Leaving the view or hiding the page stops
+the animation without accumulating hidden time; returning requires explicit
+resume. Native context or provenance replacement resets the preview. Reduced
+motion provides the final option immediately and renders a static form. The
+completed form settles rather than running an unbounded idle animation.
+
 ## Neural recorder integration boundary
 
 The shipped projection reports `neural.available = false`. Model names and
@@ -123,8 +149,11 @@ elevation to retry a denied preference write. Native/WebKit readback and the
 observed pulse assertion still decide the result. Local test runs and production
 never alter system accessibility settings. Reduced motion remains respected,
 including a usable Pause/Resume replay control for the timed synthetic sequence.
-After the 45-case motion-enabled population passes, CI repeats only the replay
-regression with the actual OS reduced-motion preference enabled. This is 46
-native test executions across 45 distinct cases; both variants require matching
+After the 47-case motion-enabled population passes, CI repeats only the replay
+and first-form accessibility regressions with the actual OS reduced-motion
+preference enabled. This is 49 native test executions across 47 distinct cases;
+both variants require matching
 AppKit and WebKit preference readback. The focused repeat reuses the built binary
-and does not capture another frame sequence.
+and does not capture another frame sequence. The normal-motion run retains a
+timestamped first-form capture sequence and wide/compact stills. These captures
+show the actual UI displaying a visual preview, not inference or learning.

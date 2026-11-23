@@ -27,7 +27,7 @@ EXPECTED_SUITES = {
     "CompanionGraphTests": 11,
     "SeedDiveTests": 1,
     "SeedTelemetryTests": 8,
-    "SeedDiveRenderingTests": 2,
+    "SeedDiveRenderingTests": 4,
 }
 
 
@@ -138,17 +138,18 @@ def execute(root, output, expected_head, timeout_seconds, configure_ci_motion=Fa
             report["stages"].append(result)
             report["executed_cases"] = result["executed_cases"]
         if configure_ci_motion and result["status"] == "PASS":
-            # Repeat only the concrete accessibility regression, with the real
+            # Repeat only the concrete accessibility regressions, with the real
             # OS preference enabled. Reuse the built native test binary.
             reduced_environment = dict(environment)
             reduced_environment.pop("SEED_CAPTURE_OUTPUT", None)
             reduced_environment["SEED_EXPECT_REDUCED_MOTION"] = "1"
             reduced_command = command[:-2] + ["--skip-build", "--filter",
-                "SeedDiveRenderingTests/testStandaloneReplayPausesAndNativeArrivalPermanentlyFencesIt"]
-            print("Running actual reduced-motion replay regression", flush=True)
+                "SeedDiveRenderingTests/testStandaloneReplayPausesAndNativeArrivalPermanentlyFencesIt|"
+                "SeedDiveRenderingTests/testFirstFormReducedMotionKeepsPreviewSelectable"]
+            print("Running actual reduced-motion replay and first-form regressions", flush=True)
             with ci_motion_preferences(output, True, reduced_environment, reduced=True):
                 reduced_result = run_stage("seed-reduced-motion", reduced_command, root, output,
-                    reduced_environment, {"SeedDiveRenderingTests": 1}, min(timeout_seconds, 90))
+                    reduced_environment, {"SeedDiveRenderingTests": 2}, min(timeout_seconds, 90))
                 report["stages"].append(reduced_result)
                 counts = [stage["executed_cases"] for stage in report["stages"]]
                 report["executed_cases"] = sum(counts) if all(count is not None for count in counts) else None

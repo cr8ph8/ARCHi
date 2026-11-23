@@ -182,6 +182,221 @@ final class SeedDiveRenderingTests: XCTestCase {
         XCTAssertFalse(demoCaptionVisible)
     }
 
+    @MainActor
+    func testFirstFormGrowthPausesSelectsAndResetsWithNativeContext() async throws {
+        let app = NSApplication.shared, previousPolicy = app.activationPolicy()
+        _ = app.setActivationPolicy(.regular)
+        app.finishLaunching()
+        defer { _ = app.setActivationPolicy(previousPolicy) }
+        let initial = graph(includeRequest: false)
+        let host = NSHostingView(rootView: SeedDivePage(snapshot: initial,
+            telemetry: metadata(graph: initial), still: false, failed: { XCTFail("First-form Seed delivery failed") }))
+        let window = makeWindow(size: CGSize(width: 1320, height: 820))
+        window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        show(window)
+        try await wait("First-form native baseline") {
+            guard let web = self.webView(in: host), !web.isHidden else { return false }
+            return try await self.boolean(web, "window.seedDive?.inspect().origin === 'native' && !document.hidden")
+        }
+        let web = try XCTUnwrap(webView(in: host))
+        XCTAssertFalse(web.configuration.websiteDataStore.isPersistent)
+        XCTAssertFalse(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+            "The growth qualification requires actual OS motion enabled")
+        let initialState = try await inspect(web)
+        let initialContext = try XCTUnwrap(initialState["contextID"] as? String)
+        let originalCounts = try await web.evaluateJavaScript("document.getElementById('counts').textContent") as? String
+        try await click("viewForm", in: web)
+        try await wait("First-form view is visible", web: web) {
+            try await self.boolean(web, "window.seedDive.inspect().form.visible && !window.seedDive.inspect().form.reducedMotion")
+        }
+        let provenance = try await boolean(web,
+            "document.getElementById('formProvenance').textContent.toLowerCase().includes('not saved')")
+        XCTAssertTrue(provenance)
+        try await click("formStart", in: web)
+        try await wait("Growth actually advances", web: web) {
+            try await self.boolean(web, "window.seedDive.inspect().form.playing && window.seedDive.inspect().form.progress > 0.04")
+        }
+        try await click("formPause", in: web)
+        let paused = try await formState(web)
+        XCTAssertEqual(paused["paused"] as? Bool, true)
+        XCTAssertEqual(paused["scheduled"] as? Bool, false)
+        let pausedProgress = try XCTUnwrap(paused["progress"] as? Double)
+        try await Task.sleep(for: .milliseconds(450))
+        let afterPause = try await formState(web)
+        XCTAssertEqual(try XCTUnwrap(afterPause["progress"] as? Double), pausedProgress, accuracy: 0.000_001)
+
+        try await click("formPause", in: web)
+        try await wait("Growth resumes after an explicit action", web: web) {
+            let state = try await self.formState(web)
+            return (state["progress"] as? Double ?? 0) > pausedProgress + 0.01
+        }
+        try await click("memoryView", in: web)
+        let away = try await formState(web)
+        XCTAssertEqual(away["visible"] as? Bool, false)
+        XCTAssertEqual(away["paused"] as? Bool, true)
+        XCTAssertEqual(away["scheduled"] as? Bool, false)
+        let awayProgress = try XCTUnwrap(away["progress"] as? Double)
+        try await Task.sleep(for: .milliseconds(350))
+        let stillAway = try await formState(web)
+        XCTAssertEqual(try XCTUnwrap(stillAway["progress"] as? Double), awayProgress, accuracy: 0.000_001)
+        try await click("viewForm", in: web)
+        let returned = try await formState(web)
+        XCTAssertEqual(returned["paused"] as? Bool, true,
+            "Returning to the view must not restart growth without an explicit action")
+        XCTAssertEqual(returned["scheduled"] as? Bool, false)
+
+        // Start a clean visual sequence after exercising pause and view changes.
+        // Captures show an illustrative form, never inference or saved growth.
+        try await click("formReset", in: web)
+        try await capture(web, name: "first-form-seed-wide")
+        var nextFrame = 0
+        if ProcessInfo.processInfo.environment["SEED_CAPTURE_OUTPUT"] != nil {
+            try await capture(web, name: String(format: "first-form/frame-%03d", nextFrame))
+            nextFrame += 1
+        }
+        try await click("formStart", in: web)
+        if ProcessInfo.processInfo.environment["SEED_CAPTURE_OUTPUT"] != nil {
+            // Actual monotonic capture times are written by capture(). Bound the
+            // sequence even if a broken controller never reaches its final state.
+            for _ in 0..<80 {
+                try await capture(web, name: String(format: "first-form/frame-%03d", nextFrame))
+                nextFrame += 1
+                let state = try await formState(web)
+                if state["stage"] as? String == "ready" { break }
+                try await Task.sleep(for: .milliseconds(140))
+            }
+        }
+        try await wait("Growth ends with a first-form option", web: web) {
+            try await self.boolean(web, "window.seedDive.inspect().form.stage === 'ready' && !window.seedDive.inspect().form.playing")
+        }
+        let ready = try await formState(web)
+        XCTAssertEqual(ready["selected"] as? String, "seed",
+            "Completing the animation must not choose a form on the user's behalf")
+        XCTAssertEqual(ready["scheduled"] as? Bool, false)
+        XCTAssertEqual(ready["contextID"] as? String, initialContext)
+        try await capture(web, name: "first-form-option-wide")
+        try await click("formChooseSol", in: web)
+        let selected = try await formState(web)
+        XCTAssertEqual(selected["selected"] as? String, "sol-raindrop")
+        XCTAssertEqual(selected["stage"] as? String, "ready")
+        XCTAssertEqual(selected["scheduled"] as? Bool, false)
+        try await capture(web, name: "first-form-sol-wide")
+        if ProcessInfo.processInfo.environment["SEED_CAPTURE_OUTPUT"] != nil {
+            for _ in 0..<6 {
+                try await capture(web, name: String(format: "first-form/frame-%03d", nextFrame))
+                nextFrame += 1
+                try await Task.sleep(for: .milliseconds(140))
+            }
+        }
+        let afterSelection = try await inspect(web)
+        let afterCounts = try await web.evaluateJavaScript("document.getElementById('counts').textContent") as? String
+        XCTAssertEqual(afterCounts, originalCounts, "A form preview must not create or remove graph records")
+        XCTAssertEqual(afterSelection["origin"] as? String, "native")
+        XCTAssertEqual(afterSelection["contextID"] as? String, initialContext)
+        XCTAssertEqual(afterSelection["eventCount"] as? Int, initialState["eventCount"] as? Int,
+            "The illustrative transformation must not manufacture observed native events")
+
+        window.setContentSize(CGSize(width: 680, height: 620))
+        host.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(180))
+        let widthFits = try await boolean(web,
+            "document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1")
+        XCTAssertTrue(widthFits)
+        try await capture(web, name: "first-form-sol-compact")
+
+        host.rootView = SeedDivePage(snapshot: initial, telemetry: metadata(graph: initial, generation: 2),
+            still: false, failed: { XCTFail("First-form context replacement failed") })
+        try await wait("Native context replacement clears the local form preview", web: web) {
+            let state = try await self.inspect(web)
+            guard state["contextID"] as? String != initialContext,
+                  let form = state["form"] as? [String: Any] else { return false }
+            return form["stage"] as? String == "seed" && form["selected"] as? String == "seed"
+                && form["playing"] as? Bool == false && form["scheduled"] as? Bool == false
+        }
+        let reset = try await formState(web)
+        XCTAssertEqual(reset["progress"] as? Double, 0)
+        let current = try await inspect(web)
+        XCTAssertEqual(reset["contextID"] as? String, current["contextID"] as? String)
+    }
+
+    @MainActor
+    func testFirstFormReducedMotionKeepsPreviewSelectable() async throws {
+        let app = NSApplication.shared, previousPolicy = app.activationPolicy()
+        _ = app.setActivationPolicy(.regular)
+        app.finishLaunching()
+        defer { _ = app.setActivationPolicy(previousPolicy) }
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        let web = WKWebView(frame: .zero, configuration: configuration)
+        let window = makeWindow(size: CGSize(width: 1320, height: 820))
+        window.contentView = web
+        defer { web.stopLoading(); window.contentView = nil; window.close() }
+        show(window)
+        let url = try XCTUnwrap(SeedDivePage.pageURL)
+        web.loadHTMLString(try String(contentsOf: url, encoding: .utf8), baseURL: nil)
+        try await wait("Standalone first-form page visible", web: web) {
+            try await self.boolean(web, "!!window.seedDive && !document.hidden")
+        }
+        if let expected = ProcessInfo.processInfo.environment["SEED_EXPECT_REDUCED_MOTION"] {
+            let requestedReduction = expected == "1"
+            XCTAssertEqual(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, requestedReduction)
+            let webReduction = try await boolean(web, "matchMedia('(prefers-reduced-motion: reduce)').matches")
+            XCTAssertEqual(webReduction, requestedReduction,
+                "The real WebKit preference must match this qualification variant")
+        }
+        try await click("viewForm", in: web)
+        try await click("formChooseSol", in: web)
+        let standaloneChoice = try await formState(web)
+        XCTAssertEqual(standaloneChoice["selected"] as? String, "sol-raindrop",
+            "The static preview shortcut must be usable without waiting for animation")
+        XCTAssertEqual(standaloneChoice["scheduled"] as? Bool, false)
+
+        let nativeGraph = graph(includeRequest: false)
+        var payload = try metadata(graph: nativeGraph).webPayload()
+        payload["nodes"] = nativeGraph.nodes.map { node -> [String: Any] in
+            ["id": node.id, "kind": node.kind.rawValue, "title": node.title,
+             "subtitle": node.subtitle, "status": node.status,
+             "details": node.details.map { ["label": $0.label, "value": $0.value] }]
+        }
+        payload["edges"] = nativeGraph.edges.map { ["source": $0.source, "target": $0.target, "label": $0.label] }
+        payload["truncatedCount"] = 0
+        _ = try await web.callAsyncJavaScript("window.seedDive.replace(snapshot, true); return true;",
+            arguments: ["snapshot": payload], in: nil, contentWorld: .page)
+        try await wait("Native arrival clears a standalone form choice", web: web) {
+            try await self.boolean(web, """
+                window.seedDive.inspect().nativeLocked
+                && window.seedDive.inspect().form.stage === 'seed'
+                && window.seedDive.inspect().form.selected === 'seed'
+                && window.seedDive.inspect().form.reducedMotion
+                && !window.seedDive.inspect().form.scheduled
+                """)
+        }
+        try await click("formStart", in: web)
+        let option = try await formState(web)
+        XCTAssertEqual(option["stage"] as? String, "ready",
+            "Reduced motion presents the option immediately instead of requiring a timed morph")
+        XCTAssertEqual(option["selected"] as? String, "seed")
+        XCTAssertEqual(option["playing"] as? Bool, false)
+        XCTAssertEqual(option["scheduled"] as? Bool, false)
+        try await click("formChooseSol", in: web)
+        let choice = try await formState(web)
+        XCTAssertEqual(choice["selected"] as? String, "sol-raindrop")
+        XCTAssertEqual(choice["reducedMotion"] as? Bool, true)
+        XCTAssertEqual(choice["scheduled"] as? Bool, false)
+        try await Task.sleep(for: .milliseconds(350))
+        let settled = try await formState(web)
+        XCTAssertEqual(settled["progress"] as? Double, choice["progress"] as? Double)
+        XCTAssertEqual(settled["scheduled"] as? Bool, false)
+        try await click("formReset", in: web)
+        let reset = try await formState(web)
+        XCTAssertEqual(reset["stage"] as? String, "seed")
+        XCTAssertEqual(reset["selected"] as? String, "seed")
+        XCTAssertEqual(reset["progress"] as? Double, 0)
+        XCTAssertEqual(reset["playing"] as? Bool, false)
+        XCTAssertEqual(reset["scheduled"] as? Bool, false)
+    }
+
     private func graph(includeRequest: Bool) -> CompanionGraphSnapshot {
         var nodes: [CompanionGraphNode] = [
             .init(id: "seed", title: "ARCHi", subtitle: "Synthetic test fixture", kind: .companion,
@@ -262,6 +477,12 @@ final class SeedDiveRenderingTests: XCTestCase {
     }
 
     @MainActor
+    private func formState(_ web: WKWebView) async throws -> [String: Any] {
+        let result = try await inspect(web)
+        return try XCTUnwrap(result["form"] as? [String: Any])
+    }
+
+    @MainActor
     private func click(_ id: String, in web: WKWebView) async throws {
         _ = try await web.callAsyncJavaScript("document.getElementById(id).click(); return true;",
             arguments: ["id": id], in: nil, contentWorld: .page)
@@ -335,6 +556,10 @@ final class SeedDiveRenderingTests: XCTestCase {
                   motionControlDisabled: document.getElementById('motionToggle')?.disabled ?? null,
                   motionControlText: document.getElementById('motionToggle')?.textContent ?? null,
                   counts: document.getElementById('counts')?.textContent ?? null,
+                  formProvenance: document.getElementById('formProvenance')?.textContent ?? null,
+                  formStatus: document.getElementById('formStatus')?.textContent ?? null,
+                  formCanvasWidth: document.getElementById('formCanvas')?.clientWidth ?? null,
+                  formCanvasHeight: document.getElementById('formCanvas')?.clientHeight ?? null,
                   innerWidth, innerHeight, devicePixelRatio,
                   clientWidth: document.documentElement.clientWidth,
                   scrollWidth: document.documentElement.scrollWidth

@@ -9,6 +9,7 @@ on:
       - 'script/test_seed_live_macos.py'
       - 'script/test_peer_convergence_macos.py'
       - 'scripts/seed-*.test.mjs'
+      - 'scripts/helpers/seed-page-harness.mjs'
       - 'scripts/tests/test_*_macos.py'
       - 'SOURCE_SHA256SUMS'
   workflow_dispatch:

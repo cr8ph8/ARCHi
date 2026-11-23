@@ -1,61 +1,6 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { runInNewContext } from 'node:vm'
-
-const page = readFileSync(new URL('../desktop/Sources/ARCHiDesktop/Resources/SeedDive/interior.html', import.meta.url), 'utf8')
-const scripts = [...page.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(match => match[1]).join('\n')
-
-// A deterministic DOM/canvas double tests controller lifecycle and data fences.
-// Native WKWebView tests separately cover the real browser and rendering.
-function harness() {
-  class Element {
-    constructor(tag='div') {
-      this.tagName=tag;this.children=[];this.attributes={};this.events={};this.ownText='';this.value='';this.hidden=false;this.className='';this.disabled=false
-      this.style={setProperty(){}}
-      this.classList={toggle:(value,on)=>{const values=new Set(this.className.split(' '));on?values.add(value):values.delete(value);this.className=[...values].join(' ')}}
-    }
-    set textContent(value){this.ownText=String(value);this.children=[]}
-    get textContent(){return this.ownText+this.children.map(c=>c.textContent).join('')}
-    set id(value){this.elementID=value;ids.set(value,this)}
-    get id(){return this.elementID}
-    setAttribute(k,v){this.attributes[k]=v}
-    append(...nodes){this.children.push(...nodes)}
-    replaceChildren(...nodes){this.ownText='';this.children=nodes}
-    addEventListener(k,f){(this.events[k]??=[]).push(f)}
-    querySelector(s){for(const child of this.children){if(child.tagName===s)return child;const match=child.querySelector(s);if(match)return match}return null}
-    focus(){}
-    setPointerCapture(){}
-    getBoundingClientRect(){return {x:0,y:0,left:0,top:0,width:900,height:450}}
-  }
-  const ids=new Map([...page.matchAll(/\bid="([^"]+)"/g)].map(m=>[m[1],new Element(m[1]==='field'?'canvas':'div')]))
-  const canvasCalls=[]
-  const context=new Proxy({measureText:text=>({width:String(text).length*6}),createRadialGradient:()=>({addColorStop(){}}),
-    setTransform:(...args)=>canvasCalls.push({method:'setTransform',args}),clearRect:(...args)=>canvasCalls.push({method:'clearRect',args}),
-    fillRect:(...args)=>canvasCalls.push({method:'fillRect',args})}, {get:(o,k)=>k in o?o[k]:()=>{}})
-  ids.get('field').getContext=()=>context
-  ids.get('field').width=300;ids.get('field').height=150
-  ids.get('field').parentElement=new Element()
-  const document={hidden:false,events:{},getElementById:id=>ids.get(id),createElement:tag=>new Element(tag),createTextNode:text=>{const e=new Element('text');e.textContent=text;return e},addEventListener(k,f){(this.events[k]??=[]).push(f)}}
-  const reduced={matches:false,events:[],addEventListener(_,f){this.events.push(f)}}
-  let now=0,nextID=0
-  const timers=new Map(),frames=new Map(),window={devicePixelRatio:1}
-  const environment={document,window,location:{search:''},URLSearchParams,matchMedia:()=>reduced,performance:{now:()=>now},ResizeObserver:class{observe(){}},
-    requestAnimationFrame:f=>{const id=++nextID;frames.set(id,f);return id},cancelAnimationFrame:id=>frames.delete(id),
-    setTimeout:(f,delay)=>{const id=++nextID;timers.set(id,{f,at:now+delay});return id},clearTimeout:id=>timers.delete(id)}
-  runInNewContext(scripts,environment)
-  function frame(){const batch=[...frames.values()];frames.clear();batch.forEach(f=>f(now))}
-  function advance(ms){now+=ms;for(const [id,timer] of [...timers])if(timer.at<=now){timers.delete(id);timer.f()}frame()}
-  return {window,document,reduced,ids,timers,canvasCalls,frame,advance,inspect:()=>window.seedDive.inspect(),replace:(s,still=false)=>window.seedDive.replace(s,still),
-    click:id=>ids.get(id).onclick(),hidden:value=>{document.hidden=value;document.events.visibilitychange.forEach(f=>f())},
-    reduce:value=>{reduced.matches=value;reduced.events.forEach(f=>f())}}
-}
-const node=(id,kind='source',title=id)=>({id,kind,title,status:'available',subtitle:'',details:[]})
-function snapshot(extra=[],contextID='context-1') {
-  const nodes=[node('seed','companion','Core Seed'),...extra]
-  return {origin:'native',schemaVersion:1,contextID,nodes,edges:extra.map(n=>({source:'seed',target:n.id,label:'recorded'})),truncatedCount:0,
-    telemetry:{harness:{state:'idle',lanes:[]},memory:{graphNodeCount:nodes.length,graphEdgeCount:extra.length},peer:{progress:'idle',acceptedReportCount:0,checks:[]},neural:{available:false}}}
-}
+import { harness, node, snapshot } from './helpers/seed-page-harness.mjs'
 
 test('native baseline is silent; an observed graph change pulses once and settles',()=>{
   const h=harness();h.replace(snapshot());h.advance(600)
