@@ -7,14 +7,16 @@ REVIEW=0
 INSTALL=0
 LAUNCH=1
 STAGE_ONLY=0
+MEMORY_DEMO=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --memory-demo) MEMORY_DEMO=1; STAGE_ONLY=1; LAUNCH=0 ;;
         --verify) VERIFY=1 ;;
         --review) REVIEW=1 ;;
         --install) INSTALL=1 ;;
         --build-only) LAUNCH=0 ;;
         --stage-only) STAGE_ONLY=1; LAUNCH=0 ;;
-        *) echo "Usage: $0 [--verify] [--review] [--install] [--build-only] [--stage-only]" >&2; exit 2 ;;
+        *) echo "Usage: $0 [--verify] [--review] [--install] [--build-only] [--stage-only] [--memory-demo]" >&2; exit 2 ;;
     esac
     shift
 done
@@ -27,6 +29,12 @@ if [[ "$REVIEW" == 1 ]]; then
     APP_NAME="ARCHi Development Review"
     APP_IDENTIFIER="com.quotient.archi.desktop.review"
     APP_DIR="/private/tmp/archi-desktop-review-${UID}/$APP_NAME.app"
+    PREVIOUS_EXECUTABLE=""
+fi
+if [[ "$MEMORY_DEMO" == 1 ]]; then
+    if [[ "$INSTALL" == 1 || "$REVIEW" == 1 ]]; then exit 2; fi
+    APP_NAME="ARCHi Memory Demo"
+    APP_IDENTIFIER="com.quotient.archi.desktop.memory-demo"
     PREVIOUS_EXECUTABLE=""
 fi
 TEMP_APP_EXECUTABLE="$APP_DIR/Contents/MacOS/ARCHiDesktop"

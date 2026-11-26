@@ -1,0 +1,24 @@
+name: MemoryUITests
+options:
+  deploymentTarget:
+    macOS: "14.0"
+targets:
+  MemoryUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - MemoryUITests.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.quotient.archi.memory-ui-tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_IDENTITY: "-"
+        SWIFT_VERSION: "5.0"
+schemes:
+  MemoryUITests:
+    build:
+      targets:
+        MemoryUITests: [test]
+    test:
+      targets:
+        - MemoryUITests
