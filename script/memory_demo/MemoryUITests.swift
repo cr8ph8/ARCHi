@@ -52,12 +52,19 @@ final class MemoryUITests: XCTestCase {
         control("review-open-seed").click()
         let web = app.webViews.firstMatch
         XCTAssertTrue(web.staticTexts["Local snapshot"].waitForExistence(timeout: 12), app.debugDescription)
-        web.buttons["Records"].click()
+        // WebKit exposes aria-pressed buttons as toggles on macOS.
+        let records = web.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == %@ OR label == %@ OR title == %@", "listTab", "Records", "Records"))
+            .firstMatch
+        XCTAssertTrue(records.waitForExistence(timeout: 8), web.debugDescription)
+        records.click()
         return web
     }
 
     private func record(_ title: String, in web: XCUIElement) -> XCUIElement {
-        web.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
+        web.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@ OR title BEGINSWITH %@", title, title))
+            .firstMatch
     }
 
     private func assertSeedLesson(status: String, absentTopic: String? = nil) {

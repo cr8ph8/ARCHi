@@ -61,5 +61,7 @@ jobs:
           name: seed-memory-evidence-${{ github.event.pull_request.head.sha }}
           path: |
             ${{ runner.temp }}/memory-review/
-            ${{ runner.temp }}/seed-live/
+            ${{ runner.temp }}/seed-live/*.json
+            ${{ runner.temp }}/seed-live/*.log
+            ${{ runner.temp }}/seed-live/rendered/**
           retention-days: 14
