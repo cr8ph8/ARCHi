@@ -11,3 +11,5 @@ Eight runtime PNG copies had a Blender File text chunk removed for publication: 
 MIT reuse permission is separate from a claim that Hampton authored or authenticated a derivative. The proposed Hampton Designed seal describes explicit creator endorsement and balanced game specialties; copying a seal or creating a UID does not establish that provenance. The [policy](docs/HAMPTON_DESIGNED.md) adds no restrictions to MIT permissions.
 
 Coplay's optional Unity Editor bridge is included under its own MIT notice. Unity engine/editor packages are declared dependencies with their own terms, not project-authored MIT artwork or code. No Unity/Blender installation, model weights, paid Reactor runtime, credentials or user records are bundled. See [third-party notices](THIRD_PARTY_NOTICES.md).
+
+The nine WAV files under `Resources/QwenVoice/Samples` were generated on Apple silicon with the preset speakers of [Qwen3-TTS CustomVoice](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit). The accompanying `auditions.json` records the checkpoint revision, spoken line, performance direction, seed, file hashes, timings and originating Mac run.

@@ -93,7 +93,7 @@ final class CompanionStore: ObservableObject {
     }
     @Published var preferences = CompanionPreferences() {
         didSet {
-            if preferences.quiet { stopKinLightPreview() }
+            if preferences.quiet { stopKinLightPreview(); qwenVoice.stop() }
             if preferences.quiet || !preferences.musicalCues || preferences.musicalVolume == 0 { stopHarmonyTheme() }
             if preferences != oldValue { invalidatePlacementPreview(reason: "Appearance or preferences changed. Preview again.") }
             refreshReactorReference()
@@ -102,6 +102,7 @@ final class CompanionStore: ObservableObject {
     @Published var isVisible = true {
         didSet {
             if !isVisible {
+                qwenVoice.stop()
                 desktopInterest.cancel(reason: "ARCHi hidden. Point again when ready.")
                 stopKinLightPreview()
                 stopHarmonyTheme()
@@ -128,6 +129,7 @@ final class CompanionStore: ObservableObject {
     @Published var spatialMessage = "Preview a spot without moving ARCHi."
     @Published var reply = "Ask a question or tell me what you would like help with. Sharing a document is optional."
     @Published var prompt = ""
+    let qwenVoice = QwenVoice()
     let voiceInput: VoiceInputController
     @Published var requestsRevision = false
     @Published private(set) var workingCopyNotice = "Select a passage to begin."
@@ -372,6 +374,8 @@ final class CompanionStore: ObservableObject {
         case .automatic: return local + " · no external requests"
         }
     }
+
+    var canReadAloud: Bool { !preferences.quiet && !voiceInput.isActive && !isShuttingDown }
 
     var canBeginReply: Bool { !isShuttingDown && !voiceInput.isActive && canShareDesktopInterestWithRoute
         && (route == .automatic || connectionState == .ready) }
@@ -907,6 +911,7 @@ final class CompanionStore: ObservableObject {
     }
 
     func cancelWork(reason: String = "Stopped.") {
+        if qwenVoice.active { qwenVoice.stop() }
         voiceInput.cancel()
         stopKinLightPreview()
         stopHarmonyTheme()
@@ -1309,6 +1314,7 @@ final class CompanionStore: ObservableObject {
         desktopInterest.cancel(reason: "ARCHi is closing.")
         clearLocalConversation()
         isShuttingDown = true
+        qwenVoice.stop()
         cancelWork(reason: "App is shutting down.")
         let current = Array(assistants.values)
         for provider in Array(assistants.keys) { closeConnection(provider) }
@@ -1392,6 +1398,7 @@ final class CompanionStore: ObservableObject {
     }
 
     private func cancelLocalWork(reason: String) {
+        if qwenVoice.active { qwenVoice.stop() }
         let hadLocalWork = replyOwners[.qwen] != nil
         cancelLane(.qwen, reason: reason)
         if hadLocalWork && !isWorking && route == .local { workGeneration &+= 1 }

@@ -31,7 +31,7 @@ final class ReactorWorkerConnection: ReactorWorkerPort {
         child.environment = ["PATH": "/usr/bin:/bin", "PYTHONUNBUFFERED": "1", "PYTHONDONTWRITEBYTECODE": "1"]
         child.standardInput = stdin; child.standardOutput = stdout
         child.standardError = FileHandle.nullDevice
-        let reader = ReactorLineBuffer(onLine: onLine)
+        let reader = LocalWorkerLineBuffer(onLine: onLine)
         stdout.fileHandleForReading.readabilityHandler = { handle in
             let bytes = handle.availableData
             if bytes.isEmpty { handle.readabilityHandler = nil; return }
@@ -64,7 +64,7 @@ final class ReactorWorkerConnection: ReactorWorkerPort {
     }
 }
 
-private final class ReactorLineBuffer: @unchecked Sendable {
+final class LocalWorkerLineBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var buffer = Data()
     private var invalid = false

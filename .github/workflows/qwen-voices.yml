@@ -1,0 +1,56 @@
+name: Qwen voices on Mac
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/qwen-voices.yml'
+      - 'desktop/**'
+      - 'script/qwen_voice/**'
+      - 'script/build_and_run.sh'
+permissions:
+  contents: read
+jobs:
+  desktop:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - run: swift test --package-path desktop --filter 'QwenVoiceTests|VoiceInputTests'
+      - name: Package the signed desktop app
+        run: |
+          bash script/build_and_run.sh --stage-only
+          app="/private/tmp/archi-desktop-candidate-$(id -u)/ARCHi Desktop Preview.app"
+          test -x "$app/Contents/Resources/QwenVoice/Setup.command"
+          test -f "$app/Contents/Resources/QwenVoice/speech.py"
+          for voice in Ryan Aiden Vivian Serena Dylan Eric Sohee Ono_Anna Uncle_Fu; do
+            cmp "desktop/Sources/ARCHiDesktop/Resources/QwenVoice/Samples/$voice.wav" "$app/Contents/Resources/QwenVoice/Samples/$voice.wav"
+          done
+          codesign --verify --deep --strict "$app"
+          ditto -c -k --keepParent "$app" "$RUNNER_TEMP/ARCHi-Qwen-Voices.zip"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: ARCHi-Qwen-Voices-Mac
+          path: ${{ runner.temp }}/ARCHi-Qwen-Voices.zip
+          retention-days: 14
+  audition:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install the pinned local voice model on Apple silicon
+        run: bash desktop/Sources/ARCHiDesktop/Resources/QwenVoice/Setup.command
+      - name: Render all nine voices and measure cold and warm reads
+        run: |
+          python="$HOME/Library/Application Support/ARCHi/QwenVoice/venv/bin/python"
+          "$python" -B -m unittest discover -s script/qwen_voice
+          "$python" script/qwen_voice/audition.py "$RUNNER_TEMP/voices"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: Qwen-voice-auditions
+          path: ${{ runner.temp }}/voices/
+          retention-days: 14
