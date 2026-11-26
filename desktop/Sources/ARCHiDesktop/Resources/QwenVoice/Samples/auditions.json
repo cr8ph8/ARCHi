@@ -1,0 +1,88 @@
+{
+  "text": "Aloha. Ready for another take?",
+  "instruction": "Warm and conversational.",
+  "seed": 42,
+  "model": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+  "revision": "f35faf19b0cc2160865af64ecf0f22f83d335135",
+  "mlx_audio": "0.6.8",
+  "measurement": "Host wall time through completed WAV on one Mac runner; cold includes process startup.",
+  "paired_runs": [
+    {
+      "speaker": "Ryan",
+      "cold_seconds": 39.641,
+      "warm_seconds": 13.415,
+      "same_wav": true
+    },
+    {
+      "speaker": "Aiden",
+      "cold_seconds": 21.982,
+      "warm_seconds": 5.409,
+      "same_wav": true
+    },
+    {
+      "speaker": "Vivian",
+      "cold_seconds": 17.689,
+      "warm_seconds": 5.247,
+      "same_wav": true
+    }
+  ],
+  "median_cold_seconds": 21.982,
+  "median_warm_seconds": 5.409,
+  "assets": [
+    {
+      "speaker": "Ryan",
+      "seconds": 3.2,
+      "render_seconds": 13.415,
+      "sha256": "b9b30702de0d37578862641afe9709a05ffc966e934ccdc910e549af75302abf"
+    },
+    {
+      "speaker": "Aiden",
+      "seconds": 2.72,
+      "render_seconds": 5.409,
+      "sha256": "6fa08577c676ca3b80f43eee22cb0454442ab2630bd59fa2da510a2f02ed5a8b"
+    },
+    {
+      "speaker": "Vivian",
+      "seconds": 2.72,
+      "render_seconds": 5.247,
+      "sha256": "e07b09de868925d2eb49ec19abfa4b38d79964bdb82e03e893d69b33d2ec1b37"
+    },
+    {
+      "speaker": "Serena",
+      "seconds": 3.2,
+      "render_seconds": 8.182,
+      "sha256": "330a0ab812fc4cb6f674c6495cbe7fc7f81e2c99b118872c8d57ce4290635570"
+    },
+    {
+      "speaker": "Dylan",
+      "seconds": 3.36,
+      "render_seconds": 7.999,
+      "sha256": "45611a82adeb2d81bb1c959cdfe29e84284f8d8705e7be185239d381581bc5f5"
+    },
+    {
+      "speaker": "Eric",
+      "seconds": 2.0,
+      "render_seconds": 3.477,
+      "sha256": "b62d1ac0846ca1a9bdd26c123e99b3b8cfbc418d4c04e1eb09f0b40b0d620d8e"
+    },
+    {
+      "speaker": "Sohee",
+      "seconds": 2.96,
+      "render_seconds": 7.672,
+      "sha256": "a8959cab7b2436bdb8e9d0ea7304517b10c37fec78dfe08722cc0dd0f19711d4"
+    },
+    {
+      "speaker": "Ono_Anna",
+      "seconds": 4.16,
+      "render_seconds": 8.512,
+      "sha256": "7895eed9862319a79838df4350d67b5abb919c87b71046941fd29e8b8707d2af"
+    },
+    {
+      "speaker": "Uncle_Fu",
+      "seconds": 2.4,
+      "render_seconds": 4.693,
+      "sha256": "5a45f056d91ecd1169f86526096ff31899aa110a5713d8662b711d129813205e"
+    }
+  ],
+  "source_run": "https://github.com/cr8ph8/ARCHi/actions/runs/45762060314"
+}

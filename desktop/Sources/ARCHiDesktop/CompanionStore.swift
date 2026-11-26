@@ -911,7 +911,7 @@ final class CompanionStore: ObservableObject {
     }
 
     func cancelWork(reason: String = "Stopped.") {
-        qwenVoice.stop()
+        if qwenVoice.active { qwenVoice.stop() }
         voiceInput.cancel()
         stopKinLightPreview()
         stopHarmonyTheme()
@@ -1398,7 +1398,7 @@ final class CompanionStore: ObservableObject {
     }
 
     private func cancelLocalWork(reason: String) {
-        qwenVoice.stop()
+        if qwenVoice.active { qwenVoice.stop() }
         let hadLocalWork = replyOwners[.qwen] != nil
         cancelLane(.qwen, reason: reason)
         if hadLocalWork && !isWorking && route == .local { workGeneration &+= 1 }

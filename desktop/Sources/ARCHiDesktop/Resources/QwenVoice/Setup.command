@@ -19,4 +19,4 @@ echo "Installing the local voice engine and downloading the Qwen CustomVoice mod
 "$python" -c 'import mlx_audio.tts.models.qwen3_tts, sounddevice'
 "$python" "$worker" --install
 touch "$runtime/ready-0.6.8-f35faf1"
-echo "ARCHi voices are ready. In ARCHi, open Connections and choose Preview voice."
+echo "ARCHi voices are ready. In ARCHi, open Connections and choose Preview direction."

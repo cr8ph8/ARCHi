@@ -24,6 +24,9 @@ jobs:
           app="/private/tmp/archi-desktop-candidate-$(id -u)/ARCHi Desktop Preview.app"
           test -x "$app/Contents/Resources/QwenVoice/Setup.command"
           test -f "$app/Contents/Resources/QwenVoice/speech.py"
+          for voice in Ryan Aiden Vivian Serena Dylan Eric Sohee Ono_Anna Uncle_Fu; do
+            cmp "desktop/Sources/ARCHiDesktop/Resources/QwenVoice/Samples/$voice.wav" "$app/Contents/Resources/QwenVoice/Samples/$voice.wav"
+          done
           codesign --verify --deep --strict "$app"
           ditto -c -k --keepParent "$app" "$RUNNER_TEMP/ARCHi-Qwen-Voices.zip"
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f

@@ -1,4 +1,7 @@
 import importlib.util
+import io
+import json
+import uuid
 import tempfile
 import unittest
 import wave
@@ -45,6 +48,23 @@ class VoiceWorkerTests(unittest.TestCase):
                     self.assertEqual((reader.getframerate(), reader.getsampwidth(), reader.getnchannels(),
                                       reader.getnframes()), (24000, 2, 1, 240))
                     self.assertTrue(any(reader.readframes(240)))
+
+    def test_session_reuses_model_and_acknowledges_each_finished_reading(self):
+        fixture = ModelFixture()
+        loads = []
+        def load():
+            loads.append(1)
+            return fixture
+        requests = [dict(id=str(uuid.uuid4()), text=word, instruction="Calm", voice=voice)
+                    for word, voice in [("Aloha.", "Ryan"), ("Another take.", "Vivian")]]
+        source = io.StringIO("".join(json.dumps(r) + "\n" for r in requests))
+        events = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            speech.serve(source, events, load, Path(tmp))
+            self.assertEqual(sorted(p.stem for p in Path(tmp).glob("*.wav")), sorted(r["id"] for r in requests))
+        self.assertEqual(loads, [1])
+        self.assertEqual(events.getvalue().splitlines(), [r["id"] for r in requests])
+        self.assertEqual([r["text"] for r in fixture.requests], ["Aloha.", "Another take."])
 
     def test_invalid_requests_never_invoke_model(self):
         model = ModelFixture()
