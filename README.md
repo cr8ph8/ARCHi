@@ -14,6 +14,7 @@ The exported source passed retained TypeScript checks and fresh native compilati
 | Assistance | Local Qwen through an existing Ollama installation, optional Codex, and deliberate Compare with separate provider lanes. Stop retires the owned request. |
 | Work together | Point KIN at a window, explicitly read and review a local text snapshot, then use the existing selection/explanation/revision/Apply/Undo/export flow. File import also remains available. The original app and imported original are preserved. |
 | Memory and evidence | Explicit Keep/revise/withdraw controls, current source/context binding, local receipts and a native Node Lab for inspecting recorded relationships. Reading the graph makes no model call and creates no graph database. |
+| Spoken replies | Choose a Qwen CustomVoice speaker and give performance direction in Connections. Preview a line or read a completed local Qwen reply aloud. |
 | Dictation | User-started on-device speech input, when supported and permitted, prepares a draft for review before Send. It is not continuous listening. |
 | KIN | Core Seed and supported body presentation belong to the same individual. Appearance, learned-use records, placement and authority keep their existing owners. A local UID does not authenticate a creator or prove ownership. |
 | Unity preview | Separate UI Toolkit companion/items/Relay window using bundled KIN artwork. Explicitly disconnected from saved KIN; staff, body selection and cues are session previews. No assistant client, memory store or entitlement service is added. |
@@ -68,7 +69,11 @@ Local Qwen is the default route for the captured copy. Codex or Compare requires
 
 ## Connect assistance
 
-ARCHi does not download models. For Qwen, run an existing local Ollama service with a supported installed model (qwen3.5:9b or qwen3:8b), then use the app's connection controls. Connecting is separate from sending your draft. Automatic local-first routing, explicit provider selection and Compare retain their own connection and request state.
+For text assistance, run an existing local Ollama service with a supported installed model (qwen3.5:9b or qwen3:8b), then use the app's connection controls. Connecting is separate from sending your draft. Automatic local-first routing, explicit provider selection and Compare retain their own connection and request state.
+
+For speech on Apple silicon, open **Connections → Local Qwen → Set up voices**. The setup command needs an arm64 Python 3.11–3.13. It installs MLX Audio in a dedicated environment and downloads the pinned Qwen3-TTS 1.7B CustomVoice 4-bit checkpoint. After setup, choose a speaker, enter a performance direction and click **Preview voice**. Use **Read aloud** on a completed Qwen answer. Quiet mode silences readings. Each reading loads the model locally and exits after playback or Stop.
+
+QiMovi’s [expressive speech preset](https://github.com/cr8ph8/QiMovi/blob/e71f201cdf367f7e2d2aea867469d2fd1c49a599/local/providers/filmmaking-catalog.json) pairs an explicit voice with independent performance direction using hosted Qwen Audio 3.0 TTS Flash. ARCHi applies those controls to the local [CustomVoice checkpoint](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit). Its nine speaker IDs belong to that checkpoint.
 
 Send can include the deliberately shared document copy and selected passage, as disclosed by the selected route. Selecting a short passage does not by itself remove the rest of that shared copy from the request. Oversized input is rejected rather than silently truncated. Stop, source changes and request ownership prevent stale callbacks from becoming current results.
 

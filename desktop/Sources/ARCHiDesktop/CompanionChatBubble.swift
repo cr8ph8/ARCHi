@@ -313,6 +313,9 @@ struct CompanionChatBubble: View {
                 if result.revision != nil {
                     Button("Review revision in Assistant", action: openAssistant).buttonStyle(.borderless)
                 }
+                if store.assistantProvider == .qwen, result.state == .complete, !result.text.isEmpty {
+                    QwenVoiceControls(voice: store.qwenVoice, text: result.text, enabled: store.canReadAloud)
+                }
                 LessonReplyControls(store: store, provider: store.assistantProvider)
                 if let receipt = result.receipt {
                     DisclosureGroup("Reply details") { AssistantReceiptDetails(receipt: receipt, onOpenGraph: { store.open(.nodeLab) }) }

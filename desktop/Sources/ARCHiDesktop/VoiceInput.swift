@@ -169,6 +169,7 @@ final class VoiceInputController: ObservableObject {
 extension CompanionStore {
     func beginVoiceInput(from surface: VoiceInputSurface) {
         guard !isShuttingDown, !isWorking else { return }
+        qwenVoice.stop()
         voiceInput.start(from: surface)
     }
 

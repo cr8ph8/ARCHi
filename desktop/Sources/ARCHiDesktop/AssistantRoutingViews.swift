@@ -157,6 +157,8 @@ struct AssistantProviderPanel: View {
                 .lineSpacing(3).textSelection(.enabled).padding(.top, 3)
             if provider == .qwen {
                 localModels.padding(.top, 12)
+                Divider()
+                QwenVoiceControls(voice: store.qwenVoice, text: QwenVoice.preview, enabled: store.canReadAloud, settings: true)
             } else {
                 Text("Optional external reference or alternative using your Codex login. Choose the route and Send to share the current request. The resolved model name is not reported by this adapter. Connecting does not send your draft or shared copy.")
                     .font(.system(size: 11)).foregroundStyle(.secondary).lineSpacing(3).padding(.top, 10)
@@ -237,6 +239,9 @@ private struct ComparisonReplyLane: View {
                     .fixedSize(horizontal: false, vertical: true)
                 if provider == .qwen, lane.state == .complete {
                     HamptonReplyReferences(snapshot: store.hamptonSnapshot)
+                }
+                if provider == .qwen, lane.state == .complete, !lane.text.isEmpty {
+                    QwenVoiceControls(voice: store.qwenVoice, text: lane.text, enabled: store.canReadAloud)
                 }
                 EvolutionReplyFeedback(store: store, provider: provider)
                 LessonReplyControls(store: store, provider: provider)

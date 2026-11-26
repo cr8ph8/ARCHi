@@ -338,6 +338,9 @@ private struct AssistantReplyContent: View {
             } else {
                 Text(store.reply).font(.system(size: 14)).lineSpacing(5)
                 if store.assistantProvider == .qwen { HamptonReplyReferences(snapshot: store.hamptonSnapshot) }
+                if store.assistantProvider == .qwen, let lane = store.compareResults[.qwen], lane.state == .complete, !lane.text.isEmpty {
+                    QwenVoiceControls(voice: store.qwenVoice, text: lane.text, enabled: store.canReadAloud)
+                }
                 EvolutionReplyFeedback(store: store, provider: store.assistantProvider)
                 LessonReplyControls(store: store, provider: store.assistantProvider)
                 if let receipt = store.compareResults[store.assistantProvider]?.receipt {
