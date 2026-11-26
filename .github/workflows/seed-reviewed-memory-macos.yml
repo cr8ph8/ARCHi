@@ -1,0 +1,65 @@
+name: Reviewed memory and Seed on macOS
+on:
+  pull_request:
+    branches: [codex/seed-convergence-live]
+permissions:
+  contents: read
+jobs:
+  memory:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Check independent reader and native lesson store
+        run: |
+          python3 -m unittest discover -s script/memory_demo -p 'test_*.py'
+          swift test --package-path desktop --filter LessonStoreTests
+      - name: Run Seed regressions on the same source revision
+        env:
+          EXPECTED_TEST_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          node --test scripts/seed-*.test.mjs
+          python3 -m unittest discover -s scripts/tests -p 'test_*_macos.py'
+          python3 script/test_seed_live_macos.py --expected-head "$EXPECTED_TEST_HEAD" \
+            --output "$RUNNER_TEMP/seed-live" --configure-ci-motion
+      - name: Prepare UI driver
+        run: command -v xcodegen || brew install xcodegen
+      - name: Exercise the staged app and verify its saved bytes
+        run: python3 script/memory_demo/run.py --ui-test --output "$RUNNER_TEMP/memory-review"
+      - name: Package the tested app and the independent reader
+        env:
+          EXPECTED_TEST_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          bundle="$RUNNER_TEMP/review-package/ARCHi Memory Review"
+          mkdir -p "$bundle"
+          ditto "/private/tmp/archi-desktop-candidate-$(id -u)/ARCHi Memory Demo.app" "$bundle/ARCHi Memory Demo.app"
+          cp script/memory_demo/{run.py,Start.command} "$bundle"
+          cp "$RUNNER_TEMP/memory-review/result.json" "$bundle/build.json"
+          python3 - "$bundle" <<'PYTHON'
+          import hashlib, json, os, pathlib, sys
+          bundle = pathlib.Path(sys.argv[1])
+          app = bundle / "ARCHi Memory Demo.app" / "Contents"
+          build = json.loads((bundle / "build.json").read_text())
+          assert build["status"] == "PASS" and build["source_commit"] == os.environ["EXPECTED_TEST_HEAD"]
+          assert hashlib.sha256((app / "MacOS/ARCHiDesktop").read_bytes()).hexdigest() == build["app_binary_sha256"]
+          assert (app / "Resources/SeedDive/interior.html").is_file()
+          PYTHON
+          codesign --verify --deep --strict "$bundle/ARCHi Memory Demo.app"
+          ditto -c -k --keepParent "$bundle" "$RUNNER_TEMP/ARCHi-Seed-Memory-Review.zip"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: ARCHi-Seed-Memory-Review-Mac
+          path: ${{ runner.temp }}/ARCHi-Seed-Memory-Review.zip
+          retention-days: 14
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: seed-memory-evidence-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/memory-review/
+            ${{ runner.temp }}/seed-live/
+          retention-days: 14

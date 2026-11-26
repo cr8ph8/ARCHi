@@ -6,6 +6,7 @@ import WebKit
 @MainActor
 struct SeedDiveWorkspace: View {
     @ObservedObject var store: CompanionStore
+    var showsDesktopNavigation = true
     @State private var unavailable = false
 
     var body: some View {
@@ -26,12 +27,18 @@ struct SeedDiveWorkspace: View {
                 }
             }
             HStack {
-                Button("Open Node Lab") { store.open(.nodeLab) }
+                Button("Review kept lessons") { store.open(.memory) }
+                    .accessibilityIdentifier("seed-review-lessons")
+                if showsDesktopNavigation {
+                    Button("Open Node Lab") { store.open(.nodeLab) }
+                }
                 Spacer()
                 if store.isWorking {
                     Button("Stop request", systemImage: "stop.fill") { store.cancelWork() }
                 }
-                Button("Return to companion") { store.open(.appearance) }
+                if showsDesktopNavigation {
+                    Button("Return to companion") { store.open(.appearance) }
+                }
             }.font(.caption).padding(.horizontal, 18).padding(.vertical, 9)
         }.accessibilityIdentifier("seed-dive.workspace")
     }

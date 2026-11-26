@@ -586,11 +586,14 @@ private struct MemoryWorkspace: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Button("Explore memory connections", systemImage: "point.3.connected.trianglepath.dotted") {
-                store.open(.nodeLab)
+            HStack {
+                Button("Open Seed Dive", systemImage: "circle.hexagongrid") { store.open(.seedDive) }
+                Button("Explore memory connections", systemImage: "point.3.connected.trianglepath.dotted") {
+                    store.open(.nodeLab)
+                }
+                .accessibilityIdentifier("memory.open-graph")
             }
             .buttonStyle(.bordered)
-            .accessibilityIdentifier("memory.open-graph")
             KeptLessonsCard(store: store)
             WorkspaceCard {
                 SettingsRow(title: "Temporary session context", detail: "Let local Qwen refer to useful excerpts from earlier questions during this visit.", icon: "text.bubble") {
