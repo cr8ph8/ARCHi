@@ -1,9 +1,11 @@
-"""One offline Qwen CustomVoice reading per process. The Mac app owns its lifetime."""
+"""Offline Qwen readings. A desktop session reuses its model until stopped."""
 import argparse
+from contextlib import redirect_stdout
 import json
 import os
 import re
 import sys
+import uuid
 import wave
 from pathlib import Path
 
@@ -69,11 +71,35 @@ def render(model, request, output=None):
             raise ValueError("Qwen returned no audio")
 
 
+def serve(source, events, load, output_dir=None, seed=None):
+    model = None
+    for line in source:
+        request = json.loads(line)
+        request_id = str(uuid.UUID(request.pop("id")))
+        with redirect_stdout(sys.stderr):
+            if model is None:
+                model = load()
+            if seed is not None:
+                import mlx.core as mx
+                mx.random.seed(seed)
+            path = output_dir / f"{request_id}.wav" if output_dir else None
+            render(model, request, path)
+        # The next utterance brings its own text, direction and speaker.
+        del request, line
+        events.write(request_id + "\n")
+        events.flush()
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--install", action="store_true")
-    parser.add_argument("--wav", type=Path, help="Write the reading to a WAV instead of playing it")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--install", action="store_true")
+    mode.add_argument("--wav", type=Path, help="Write a single reading to a WAV")
+    mode.add_argument("--session", action="store_true", help="Accept successive readings on stdin")
+    parser.add_argument("--audition-dir", type=Path, help="Store seeded session takes for comparison")
     args = parser.parse_args()
+    if args.audition_dir and not args.session:
+        parser.error("--audition-dir requires --session")
     if not args.install:
         os.environ["HF_HUB_OFFLINE"] = "1"
         os.environ["TRANSFORMERS_OFFLINE"] = "1"
@@ -85,11 +111,22 @@ def main():
         if not {voice.lower() for voice in VOICES} <= installed:
             raise ValueError("Voice presets missing from snapshot")
         return
-    import mlx.core as mx
-    if not mx.metal.is_available():
-        mx.set_default_device(mx.cpu)
-    from mlx_audio.tts.utils import load_model
-    render(load_model(path), json.load(sys.stdin), args.wav)
+
+    def load():
+        import mlx.core as mx
+        if not mx.metal.is_available():
+            mx.set_default_device(mx.cpu)
+        from mlx_audio.tts.utils import load_model
+        return load_model(path)
+
+    if args.session:
+        # Third-party native and Python libraries can both write to stdout.
+        # Reserve a duplicate for the completion protocol before model loading.
+        with os.fdopen(os.dup(1), "w", encoding="utf-8") as events:
+            os.dup2(2, 1)
+            serve(sys.stdin, events, load, args.audition_dir, 42 if args.audition_dir else None)
+    else:
+        render(load(), json.load(sys.stdin), args.wav)
 
 
 if __name__ == "__main__":

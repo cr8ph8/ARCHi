@@ -41,7 +41,7 @@ jobs:
           persist-credentials: false
       - name: Install the pinned local voice model on Apple silicon
         run: bash desktop/Sources/ARCHiDesktop/Resources/QwenVoice/Setup.command
-      - name: Render two readings and check the WAV samples
+      - name: Render all nine voices and measure cold and warm reads
         run: |
           python="$HOME/Library/Application Support/ARCHi/QwenVoice/venv/bin/python"
           "$python" -B -m unittest discover -s script/qwen_voice
@@ -49,5 +49,5 @@ jobs:
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: Qwen-voice-auditions
-          path: ${{ runner.temp }}/voices/*.wav
+          path: ${{ runner.temp }}/voices/
           retention-days: 14
