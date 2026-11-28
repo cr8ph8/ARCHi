@@ -39,13 +39,17 @@ final class QwenAssistant: AssistantClient, LocalRoleClient {
     static let maximumInputBytes = 24_000
     private(set) var metadata: QwenModelMetadata?
     let model: String
+    private let structuredContextTokens: Int
     private let configuration: URLSessionConfiguration
+    private var inferenceIdleTimeout: TimeInterval { min(180, max(1, configuration.timeoutIntervalForRequest)) }
     private var session: URLSession?
     private var generation: UInt64 = 0
     private var busy = false
     private let redirects = QwenRedirectPolicy()
 
-    init(model: String = defaultModel, configuration: URLSessionConfiguration = .ephemeral) {
+    init(model: String = defaultModel, configuration: URLSessionConfiguration = .ephemeral,
+         structuredContextTokens: Int = HamptonInvocationPolicy.contextTokens) {
+        self.structuredContextTokens = min(HamptonInvocationPolicy.contextTokens, max(4096, structuredContextTokens))
         self.model = model
         self.configuration = configuration.copy() as! URLSessionConfiguration
     }
@@ -140,7 +144,7 @@ final class QwenAssistant: AssistantClient, LocalRoleClient {
         if let format {
             payload["format"] = format
             payload["options"] = .object([
-                "num_ctx": .number(Double(HamptonInvocationPolicy.contextTokens)),
+                "num_ctx": .number(Double(structuredContextTokens)),
                 "num_predict": .number(Double(HamptonInvocationPolicy.outputTokens)),
                 "temperature": .number(HamptonInvocationPolicy.temperature)
             ])
@@ -220,7 +224,7 @@ final class QwenAssistant: AssistantClient, LocalRoleClient {
         config.httpAdditionalHeaders = [:]
         config.connectionProxyDictionary = ["HTTPEnable": 0, "HTTPSEnable": 0, "SOCKSEnable": 0]
         config.waitsForConnectivity = false
-        config.timeoutIntervalForRequest = 60
+        config.timeoutIntervalForRequest = inferenceIdleTimeout
         config.timeoutIntervalForResource = 180
         config.httpMaximumConnectionsPerHost = 1
         let connection = URLSession(configuration: config)
@@ -289,7 +293,8 @@ final class QwenAssistant: AssistantClient, LocalRoleClient {
 
     private func makeRequest(path: String, body: [String: JSONValue]?) throws -> URLRequest {
         let url = URL(string: "http://127.0.0.1:11434/\(path)")!
-        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
+        let timeout = path == "api/chat" ? inferenceIdleTimeout : 60
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
         request.httpMethod = body == nil ? "GET" : "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json, application/x-ndjson", forHTTPHeaderField: "Accept")
