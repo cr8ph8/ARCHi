@@ -11,3 +11,16 @@ The projection caps displayed nodes/edges and reports truncation. A periodic pre
 Source: [projection](../desktop/Sources/ARCHiDesktop/CompanionGraph.swift), [view](../desktop/Sources/ARCHiDesktop/CompanionGraphView.swift), [store integration](../desktop/Sources/ARCHiDesktop/CompanionGraphWorkspace.swift). Included domain, controlled store and native presentation tests cover source/lesson freshness, provider separation, stopped callbacks, bounded geometry and navigation. Their inclusion does not qualify this export; see [validation](ALPHA_VALIDATION.md).
 
 Node Lab is inspection and navigation. It does not execute arbitrary drawn edges, infer social relationships, import a whole vault or create an agent swarm. Full keyboard traversal, VoiceOver use and representative larger-record usefulness remain qualification work.
+
+## Following evidence
+
+Enter a query and enable **Follow links** to see up to six records. ARCHi ranks exact word matches by their rarity in the current filtered snapshot. It reserves three places for direct matches, follows recorded edges one hop, then fills available places from the remaining matches. Select a linked result to inspect the source, relationship, and destination. Turning the option off restores the existing substring search.
+
+The comparison uses seven synthetic release questions, including a stale native pass, contradictory receipts, a skipped native run alongside a portable pass, an error, and missing evidence. Each question runs against full records, keyword results, and linked results. The two compact modes share a six-record budget. Both the app and the benchmark call the same retrieval function.
+
+On a Mac with a supported local Qwen model already installed in Ollama, run:
+
+    ARCHI_RETRIEVAL_MODEL=qwen3:8b ARCHI_RETRIEVAL_REPORT="$TMPDIR/archi-retrieval.json" \
+      swift test --package-path desktop --filter GraphRetrieval
+
+The report records the model digest, selected records, exact citation and verdict scores, measured prompt/output tokens, and retrieval-through-answer latency. ERROR identifies an unsuccessful trial. Absent token counts mean unavailable accounting. A wrong verdict or citation remains visible as a failed trial. These questions exercise source selection in a small controlled corpus. Production recall and speed require a separate workload.

@@ -139,31 +139,65 @@ struct CompanionGraphView: View {
     let snapshot: CompanionGraphSnapshot
     let onOpen: (CompanionGraphTarget) -> Void
 
-    @State private var selectedID: String?
     @State private var query = ""
     @State private var kindFilter: CompanionGraphKind?
-    @State private var layout = CompanionGraphLayout.constellation
-    @State private var showsList = false
-    @State private var zoom: CGFloat = 1
-    @State private var fitRevision = 0
+    @State private var followsLinks = false
+    let initialLayout: CompanionGraphLayout
+    let initialSelectionID: String?
 
     init(snapshot: CompanionGraphSnapshot, onOpen: @escaping (CompanionGraphTarget) -> Void,
          initialLayout: CompanionGraphLayout = .constellation, initialSelectionID: String? = nil) {
         self.snapshot = snapshot
         self.onOpen = onOpen
-        _layout = State(initialValue: initialLayout)
-        _selectedID = State(initialValue: initialSelectionID)
+        self.initialLayout = initialLayout
+        self.initialSelectionID = initialSelectionID
     }
 
-    private var visibleNodes: [CompanionGraphNode] {
+    var body: some View {
         let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return snapshot.nodes.filter { node in
-            (kindFilter == nil || node.kind == kindFilter) && (search.isEmpty ||
-                ([node.title, node.subtitle, node.status, node.kind.title] + node.details.flatMap { [$0.label, $0.value] })
-                    .contains { $0.localizedStandardContains(search) })
+        let hits: [CompanionGraphRetrieval.Hit]
+        if followsLinks && !search.isEmpty {
+            hits = CompanionGraphRetrieval.search(snapshot, query: search, mode: .linked, kind: kindFilter)
+        } else {
+            hits = snapshot.nodes.filter { node in
+                (kindFilter == nil || node.kind == kindFilter) && (search.isEmpty ||
+                    CompanionGraphRetrieval.fields(node).contains { $0.localizedStandardContains(search) })
+            }.map { .init(node: $0, via: nil) }
         }
+        return CompanionGraphContent(snapshot: snapshot, hits: hits, onOpen: onOpen,
+            query: $query, kindFilter: $kindFilter, followsLinks: $followsLinks,
+            selectedID: initialSelectionID, layout: initialLayout)
+    }
+}
+
+private struct CompanionGraphContent: View {
+    let snapshot: CompanionGraphSnapshot
+    let hits: [CompanionGraphRetrieval.Hit]
+    let onOpen: (CompanionGraphTarget) -> Void
+    @Binding var query: String
+    @Binding var kindFilter: CompanionGraphKind?
+    @Binding var followsLinks: Bool
+    @State var selectedID: String?
+    @State var layout: CompanionGraphLayout
+    @State private var showsList = false
+    @State private var zoom: CGFloat = 1
+    @State private var fitRevision = 0
+
+    init(snapshot: CompanionGraphSnapshot, hits: [CompanionGraphRetrieval.Hit],
+         onOpen: @escaping (CompanionGraphTarget) -> Void, query: Binding<String>,
+         kindFilter: Binding<CompanionGraphKind?>, followsLinks: Binding<Bool>,
+         selectedID: String?, layout: CompanionGraphLayout) {
+        self.snapshot = snapshot
+        self.hits = hits
+        self.onOpen = onOpen
+        _query = query
+        _kindFilter = kindFilter
+        _followsLinks = followsLinks
+        _selectedID = State(initialValue: selectedID)
+        _layout = State(initialValue: layout)
     }
 
+    private var visibleNodes: [CompanionGraphNode] { hits.map(\.node) }
     private var visibleEdges: [CompanionGraphEdge] {
         let ids = Set(visibleNodes.map(\.id))
         return snapshot.edges.filter { ids.contains($0.source) && ids.contains($0.target) }
@@ -239,6 +273,10 @@ struct CompanionGraphView: View {
             }
             .padding(.horizontal, 11).padding(.vertical, 9)
             .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 9))
+            Toggle("Follow links", isOn: $followsLinks)
+                .toggleStyle(.button)
+                .help("Show up to six direct matches and their recorded neighbors")
+                .accessibilityIdentifier("companion-graph.follow-links")
             Picker("Node type", selection: $kindFilter) {
                 Text("All types").tag(CompanionGraphKind?.none)
                 ForEach(CompanionGraphKind.allCases) { kind in
@@ -420,6 +458,15 @@ struct CompanionGraphView: View {
                 if !node.status.isEmpty {
                     Label(node.status, systemImage: "circle.fill")
                         .font(.system(size: 10, weight: .medium)).foregroundStyle(graphColor(node.kind)).padding(.vertical, 4)
+                }
+                if let edge = hits.first(where: { $0.node.id == node.id })?.via,
+                   let source = snapshot.nodes.first(where: { $0.id == edge.source }),
+                   let target = snapshot.nodes.first(where: { $0.id == edge.target }) {
+                    Label("Followed link", systemImage: "link")
+                        .font(.caption.weight(.semibold))
+                    Text("\(source.title) → \(edge.label) → \(target.title)")
+                        .font(.caption).textSelection(.enabled)
+                        .accessibilityIdentifier("companion-graph.retrieval-reason")
                 }
                 if let target = node.target {
                     Button(openTitle(target), systemImage: "arrow.up.right") { onOpen(target) }
