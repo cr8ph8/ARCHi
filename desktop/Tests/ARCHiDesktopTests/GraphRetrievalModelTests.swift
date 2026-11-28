@@ -47,7 +47,8 @@ final class GraphRetrievalModelTests: XCTestCase {
         guard let model = env["ARCHI_RETRIEVAL_MODEL"], let output = env["ARCHI_RETRIEVAL_REPORT"] else {
             throw XCTSkip("Set ARCHI_RETRIEVAL_MODEL and ARCHI_RETRIEVAL_REPORT for the local Qwen comparison.")
         }
-        let client = QwenAssistant(model: model)
+        let contextTokens = 4096
+        let client = QwenAssistant(model: model, structuredContextTokens: contextTokens)
         defer { client.disconnect() }
         try await client.connect()
         let identity = try XCTUnwrap(client.metadata)
@@ -79,6 +80,8 @@ final class GraphRetrievalModelTests: XCTestCase {
                 var row: [String: Any] = ["case": question.alias, "mode": mode.rawValue, "selectedIDs": ids.sorted(),
                     "expectedVerdict": question.verdict, "expectedCitations": question.citations]
                 do {
+                    if client.metadata == nil { try await client.connect() }
+                    guard client.metadata == identity else { throw QwenFailure.modelChanged }
                     let result = try await client.generate(request)
                     guard result.model == identity else { throw QwenFailure.modelChanged }
                     row["promptTokens"] = result.metrics?.inputTokens
@@ -93,11 +96,12 @@ final class GraphRetrievalModelTests: XCTestCase {
                 } catch {
                     row["status"] = "ERROR"
                     row["error"] = String(describing: error)
+                    print("Retrieval trial error", question.alias, mode.rawValue, error)
                 }
                 row["endToEndMs"] = (ProcessInfo.processInfo.systemUptime - start) * 1000
                 rows.append(row)
                 let report: [String: Any] = ["schema": "archi-retrieval/v1", "model": identity.name,
-                    "digest": identity.digest, "os": ProcessInfo.processInfo.operatingSystemVersionString,
+                    "digest": identity.digest, "contextWindowTokens": contextTokens, "os": ProcessInfo.processInfo.operatingSystemVersionString,
                     "plannedTrials": GraphRetrievalFixture.questions.count * modes.count, "trials": rows]
                 try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
                     .write(to: file, options: .atomic)

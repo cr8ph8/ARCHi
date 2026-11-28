@@ -16,7 +16,7 @@ Node Lab is inspection and navigation. It does not execute arbitrary drawn edges
 
 Enter a query and enable **Follow links** to see up to six records. ARCHi ranks exact word matches by their rarity in the current filtered snapshot. It reserves three places for direct matches, follows recorded edges one hop, then fills available places from the remaining matches. Select a linked result to inspect the source, relationship, and destination. Turning the option off restores the existing substring search.
 
-The comparison uses seven synthetic release questions, including a stale native pass, contradictory receipts, a skipped native run alongside a portable pass, an error, and missing evidence. Each question runs against full records, keyword results, and linked results. The two compact modes share a six-record budget. Both the app and the benchmark call the same retrieval function.
+The comparison uses seven synthetic release questions, including a stale native pass, contradictory receipts, a skipped native run alongside a portable pass, an error, and missing evidence. The synthetic comparison uses a 4,096-token context window for each arm. The hosted Mac preloads Qwen before timing the trials. Each question runs against full records, keyword results, and linked results. The two compact modes share a six-record budget. Both the app and the benchmark call the same retrieval function.
 
 On a Mac with a supported local Qwen model already installed in Ollama, run:
 

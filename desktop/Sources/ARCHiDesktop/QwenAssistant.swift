@@ -39,13 +39,16 @@ final class QwenAssistant: AssistantClient, LocalRoleClient {
     static let maximumInputBytes = 24_000
     private(set) var metadata: QwenModelMetadata?
     let model: String
+    private let structuredContextTokens: Int
     private let configuration: URLSessionConfiguration
     private var session: URLSession?
     private var generation: UInt64 = 0
     private var busy = false
     private let redirects = QwenRedirectPolicy()
 
-    init(model: String = defaultModel, configuration: URLSessionConfiguration = .ephemeral) {
+    init(model: String = defaultModel, configuration: URLSessionConfiguration = .ephemeral,
+         structuredContextTokens: Int = HamptonInvocationPolicy.contextTokens) {
+        self.structuredContextTokens = min(HamptonInvocationPolicy.contextTokens, max(4096, structuredContextTokens))
         self.model = model
         self.configuration = configuration.copy() as! URLSessionConfiguration
     }
@@ -140,7 +143,7 @@ final class QwenAssistant: AssistantClient, LocalRoleClient {
         if let format {
             payload["format"] = format
             payload["options"] = .object([
-                "num_ctx": .number(Double(HamptonInvocationPolicy.contextTokens)),
+                "num_ctx": .number(Double(structuredContextTokens)),
                 "num_predict": .number(Double(HamptonInvocationPolicy.outputTokens)),
                 "temperature": .number(HamptonInvocationPolicy.temperature)
             ])

@@ -17,7 +17,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - name: Test graph projection, search and grading
-        run: swift test --package-path desktop --filter 'CompanionGraph|GraphRetrieval'
+        run: swift test --package-path desktop --filter 'CompanionGraph|GraphRetrieval|QwenRoleTransport'
       - name: Compare the three modes with local Qwen on this disposable Mac
         if: github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.body, '[benchmark:local-qwen]')
         env:
@@ -25,6 +25,9 @@ jobs:
           ARCHI_RETRIEVAL_MODEL: qwen3:8b
           OLLAMA_HOST: 127.0.0.1:11434
           OLLAMA_NO_CLOUD: '1'
+          OLLAMA_NUM_PARALLEL: '1'
+          OLLAMA_FLASH_ATTENTION: '1'
+          OLLAMA_KV_CACHE_TYPE: q8_0
         run: |
           command -v ollama || brew install ollama
           ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 &
@@ -35,6 +38,11 @@ jobs:
             sleep 1
           done
           ollama pull "$ARCHI_RETRIEVAL_MODEL"
+          # Load the model before timing retrieval. This request contains no benchmark question.
+          curl --fail-with-body --silent --show-error --max-time 360 \
+            -H 'Content-Type: application/json' -d '{"model":"qwen3:8b","prompt":"Hello","think":false,"stream":false,"keep_alive":"10m","options":{"num_ctx":4096,"num_predict":1}}' \
+            http://127.0.0.1:11434/api/generate > "$RUNNER_TEMP/qwen-warmup.json"
+          python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["done"]' "$RUNNER_TEMP/qwen-warmup.json"
           swift test --skip-build --package-path desktop --filter GraphRetrievalModelTests.testPairedLocalQwen
           python3 - "$ARCHI_RETRIEVAL_REPORT" <<'PY'
           import json, statistics, sys
@@ -54,6 +62,9 @@ jobs:
         if: always()
         with:
           name: graph-retrieval-${{ github.event.pull_request.head.sha }}
-          path: ${{ runner.temp }}/archi-retrieval.json
+          path: |
+            ${{ runner.temp }}/archi-retrieval.json
+            ${{ runner.temp }}/ollama.log
+            ${{ runner.temp }}/qwen-warmup.json
           if-no-files-found: ignore
           retention-days: 14
