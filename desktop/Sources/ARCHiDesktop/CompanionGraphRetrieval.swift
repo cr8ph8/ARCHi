@@ -33,11 +33,17 @@ enum CompanionGraphRetrieval {
         for (_, words) in matches {
             for word in words { frequencies[word, default: 0] += 1 }
         }
-        let ranked = matches.filter { !$0.1.isEmpty }.map { node, words in
-            (node, words.sorted().reduce(0.0) { $0 + 1.0 / Double(frequencies[$1, default: 1]) })
-        }.sorted { lhs, rhs in
-            lhs.1 == rhs.1 ? lhs.0.id < rhs.0.id : lhs.1 > rhs.1
-        }.map(\.0)
+        var scored: [(node: CompanionGraphNode, score: Double)] = []
+        for (node, words) in matches where !words.isEmpty {
+            var score = 0.0
+            for word in words.sorted() { score += 1.0 / Double(frequencies[word, default: 1]) }
+            scored.append((node, score))
+        }
+        scored.sort { lhs, rhs in
+            if lhs.score == rhs.score { return lhs.node.id < rhs.node.id }
+            return lhs.score > rhs.score
+        }
+        let ranked = scored.map { $0.node }
         if mode == .keyword { return ranked.prefix(limit).map { Hit(node: $0, via: nil) } }
 
         let anchors = ranked.prefix(max(1, limit / 2))
