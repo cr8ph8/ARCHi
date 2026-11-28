@@ -55,6 +55,7 @@ jobs:
               print(mode, "trials", len(arm), "correct verdicts", sum(r["correctVerdict"] for r in arm),
                     "exact citations", sum(r["correctCitations"] for r in arm),
                     "jointly correct", sum(r["status"] == "PASS" for r in arm),
+                    "complete correct readbacks", sum(r["receiptCorrect"] for r in arm),
                     "mean prompt tokens", round(statistics.mean(r["promptTokens"] for r in arm), 1),
                     "median end-to-end ms", round(statistics.median(r["endToEndMs"] for r in arm)))
           PY

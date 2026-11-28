@@ -48,7 +48,9 @@ final class GraphRetrievalModelTests: XCTestCase {
             throw XCTSkip("Set ARCHI_RETRIEVAL_MODEL and ARCHI_RETRIEVAL_REPORT for the local Qwen comparison.")
         }
         let contextTokens = 4096
-        let client = QwenAssistant(model: model, structuredContextTokens: contextTokens)
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 165
+        let client = QwenAssistant(model: model, configuration: config, structuredContextTokens: contextTokens)
         defer { client.disconnect() }
         try await client.connect()
         let identity = try XCTUnwrap(client.metadata)
@@ -99,6 +101,14 @@ final class GraphRetrievalModelTests: XCTestCase {
                     print("Retrieval trial error", question.alias, mode.rawValue, error)
                 }
                 row["endToEndMs"] = (ProcessInfo.processInfo.systemUptime - start) * 1000
+                // An independent readback uses the full fixture as a completeness index.
+                // It is outside the timed model trial and never changes the raw answer.
+                let readback = GraphRetrievalFixture.readback(alias: question.alias, graph: graph, visible: ids)
+                row["receiptVerdict"] = readback.verdict
+                row["receiptCitations"] = readback.citations
+                row["receiptCoverageComplete"] = readback.complete
+                row["receiptCorrect"] = readback.complete && readback.verdict == question.verdict
+                    && readback.citations == question.citations
                 rows.append(row)
                 let report: [String: Any] = ["schema": "archi-retrieval/v1", "model": identity.name,
                     "digest": identity.digest, "contextWindowTokens": contextTokens, "os": ProcessInfo.processInfo.operatingSystemVersionString,

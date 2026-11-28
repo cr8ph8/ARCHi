@@ -24,3 +24,5 @@ On a Mac with a supported local Qwen model already installed in Ollama, run:
       swift test --package-path desktop --filter GraphRetrieval
 
 The report records the model digest, selected records, exact citation and verdict scores, measured prompt/output tokens, and retrieval-through-answer latency. ERROR identifies an unsuccessful trial. Absent token counts mean unavailable accounting. A wrong verdict or citation remains visible as a failed trial. These questions exercise source selection in a small controlled corpus. Production recall and speed require a separate workload.
+
+Each trial also records a deterministic receipt readback. It uses the synthetic register to check that the selected release and every matching native receipt are visible. A missing receipt or truncated register withholds qualification. An empty set, a skipped run, or an error yields UNVERIFIED. Disagreeing pass/fail receipts yield CONFLICT. The full-register check is outside the model timing. The two verdicts stay visible side by side. This checker applies to the synthetic build schema and gives ordinary Node Lab records no qualification authority.

@@ -21,6 +21,30 @@ enum GraphRetrievalFixture {
         .init(alias: "Maple", verdict: "UNVERIFIED", citations: ["r71"])
     ]
 
+    /// Applies only to this synthetic build-register schema. Other Node Lab
+    /// records (including free-text lessons and ordinary answers) cannot qualify a build.
+    static func readback(alias: String, graph: CompanionGraphSnapshot, visible: Set<String>)
+        -> (verdict: String, citations: [String], complete: Bool) {
+        let releases = graph.nodes.filter { $0.kind == .source && $0.title == alias }
+        func revision(_ node: CompanionGraphNode) -> String? {
+            let fields = node.details.filter { $0.label == "Revision" }
+            return fields.count == 1 ? fields[0].value : nil
+        }
+        guard graph.truncatedCount == 0, releases.count == 1, let release = releases.first,
+              visible.contains(release.id), let rev = revision(release), !rev.isEmpty else {
+            return ("UNVERIFIED", [], false)
+        }
+        let matching = graph.nodes.filter { $0.kind == .answer && $0.title == "Qualification receipt"
+            && $0.subtitle == "native macOS" && revision($0) == rev }
+        let cited = matching.map(\.id).filter { visible.contains($0) }.sorted()
+        guard cited.count == matching.count else { return ("UNVERIFIED", cited, false) }
+        let statuses = Set(matching.map(\.status))
+        if statuses.contains("PASS") && statuses.contains("FAIL") { return ("CONFLICT", cited, true) }
+        if statuses == ["PASS"] { return ("PASS", cited, true) }
+        if statuses == ["FAIL"] { return ("FAIL", cited, true) }
+        return ("UNVERIFIED", cited, true)
+    }
+
     static let snapshot: CompanionGraphSnapshot = {
         var nodes: [CompanionGraphNode] = []
         var edges: [CompanionGraphEdge] = []
@@ -62,6 +86,23 @@ final class GraphRetrievalTests: XCTestCase {
             XCTAssertLessThanOrEqual(hits.count, 6)
             XCTAssertEqual(hits.count, Set(hits.map(\.node.id)).count)
         }
+    }
+
+    func testReadbackRequiresCompleteMatchingEvidenceBeforeReportingPass() {
+        let graph = GraphRetrievalFixture.snapshot
+        let all = Set(graph.nodes.map(\.id))
+        for question in GraphRetrievalFixture.questions {
+            let result = GraphRetrievalFixture.readback(alias: question.alias, graph: graph, visible: all)
+            XCTAssertTrue(result.complete)
+            XCTAssertEqual(result.verdict, question.verdict)
+            XCTAssertEqual(result.citations, question.citations)
+        }
+        let halfConflict = GraphRetrievalFixture.readback(alias: "Birch", graph: graph, visible: ["s4", "r45"])
+        XCTAssertFalse(halfConflict.complete)
+        XCTAssertEqual(halfConflict.verdict, "UNVERIFIED")
+        let truncated = CompanionGraphSnapshot(nodes: graph.nodes, edges: graph.edges, truncatedCount: 1)
+        XCTAssertFalse(GraphRetrievalFixture.readback(alias: "Juniper", graph: truncated, visible: all).complete)
+        XCTAssertFalse(GraphRetrievalFixture.readback(alias: "Juniper", graph: graph, visible: ["r17"]).complete)
     }
 
     func testDirectedReasonAndEndpointsSurviveOnlyInCurrentScope() {
